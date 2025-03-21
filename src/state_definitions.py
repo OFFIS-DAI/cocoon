@@ -398,8 +398,8 @@ class NetworkState(State):
     Class that defines the state of the network.
     """
 
-    def __init__(self, logging_option):  # TODO: maybe move some parameter to State class
-        super().__init__()  # TODO: define state, initialize from historic simulation_data
+    def __init__(self, logging_option):
+        super().__init__()
         self.logging_option = logging_option
 
         self.link_states = {}
