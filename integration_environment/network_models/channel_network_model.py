@@ -1,6 +1,6 @@
 import json
 import math
-from typing import Optional, List, Dict, Any
+from typing import List, Dict, Any
 
 import networkx as nx
 
@@ -138,7 +138,7 @@ class ChannelNetworkModel:
             propagation_delay += self.calculate_propagation_delay(
                 current_node, next_node)
 
-        return processing_delay + transmission_delay + propagation_delay
+        return round(processing_delay + transmission_delay + propagation_delay)
 
     @classmethod
     def from_dict(cls, topology_data: Dict[str, Any]) -> 'ChannelNetworkModel':

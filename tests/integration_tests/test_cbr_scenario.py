@@ -3,7 +3,7 @@ import pytest
 from mango import agent_composed_of, JSON, activate, ExternalClock
 from mango.container.factory import create_external_coupling
 
-from integration_environment.communication_models import IdealCommunication, SimpleChannelModel
+from integration_environment.communication_model_scheduler import IdealCommunicationScheduler, ChannelModelScheduler
 from integration_environment.messages import TrafficMessage
 from integration_environment.roles import ConstantBitrateSenderRole, ConstantBitrateReceiverRole
 from tests.integration_tests.utils import setup_logging, visualize_network
@@ -27,8 +27,8 @@ async def run_scenario_with_ideal_communication():
         ConstantBitrateSenderRole(receiver_addresses=[cbr_receiver_role_agent.addr]))
     container2.register(cbr_sender_role_agent)
 
-    communication_network_entity = IdealCommunication(container_mapping={'node1': container1,
-                                                                         'node2': container2})
+    communication_network_entity = IdealCommunicationScheduler(container_mapping={'node1': container1,
+                                                                                  'node2': container2})
 
     async with activate(container1, container2) as cl:
         # no more run call since everything now happens automatically within the roles
@@ -83,9 +83,9 @@ async def run_scenario_with_simple_channel_model():
         ConstantBitrateSenderRole(receiver_addresses=[cbr_receiver_role_agent.addr]))
     container2.register(cbr_sender_role_agent)
 
-    communication_network_entity = SimpleChannelModel(container_mapping={'node1': container1,
-                                                                         'node2': container2},
-                                                      topology_dict=topology)
+    communication_network_entity = ChannelModelScheduler(container_mapping={'node1': container1,
+                                                                            'node2': container2},
+                                                         topology_dict=topology)
 
     visualize_network(communication_network_entity.channel_model)
 
@@ -94,7 +94,6 @@ async def run_scenario_with_simple_channel_model():
         await communication_network_entity.scenario_finished
 
     assert len(cbr_receiver_role.received_messages) > 0
-
 
 
 @pytest.mark.asyncio

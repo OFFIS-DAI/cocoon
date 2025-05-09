@@ -1,6 +1,9 @@
 pandas~=2.2.3
-numpy~=2.0.2
+numpy~=2.2.5
 mango-agents==2.1.5
 plotly~=6.0.1
 scikit-learn~=1.6.1
-scipy~=1.13.1
+scipy~=1.15.2
+matplotlib~=3.10.3
+networkx~=3.4.2
+pytest~=8.3.5

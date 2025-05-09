@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 
 from mango.container.external_coupling import ExternalSchedulingContainer, ExternalAgentMessage
 
-from integration_environment.network_representation import ChannelNetworkModel
+from integration_environment.network_models.channel_network_model import ChannelNetworkModel
 
 
 class CommunicationScheduler(ABC):
@@ -113,7 +113,7 @@ class CommunicationScheduler(ABC):
         pass
 
 
-class IdealCommunication(CommunicationScheduler):
+class IdealCommunicationScheduler(CommunicationScheduler):
     """
     Implementation of a communication scheduler with ideal (instant) message delivery.
 
@@ -155,7 +155,7 @@ class IdealCommunication(CommunicationScheduler):
         self._next_activities = [na for na in self._next_activities if na >= self.current_time]
 
 
-class SimpleChannelModel(CommunicationScheduler):
+class ChannelModelScheduler(CommunicationScheduler):
     def __init__(self,
                  container_mapping: dict[str, ExternalSchedulingContainer],
                  topology_dict: dict = None,
