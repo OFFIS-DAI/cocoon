@@ -10,7 +10,6 @@ from matplotlib import pyplot as plt
 
 from integration_environment.communication_models import IdealCommunication, SimpleChannelModel
 from integration_environment.messages import TrafficMessage
-from integration_environment.network_representation import ChannelNetworkModel
 from integration_environment.roles import ConstantBitrateSenderRole, ConstantBitrateReceiverRole
 
 logger = logging.getLogger(__name__)
@@ -92,7 +91,7 @@ async def run_scenario_with_simple_channel_model():
                                                                          'node2': container2},
                                                       topology_dict=topology)
 
-    visualize_network(communication_network_entity.topology)
+    visualize_network(communication_network_entity.channel_model)
 
     async with activate(container1, container2) as _:
         # no more run call since everything now happens automatically within the roles

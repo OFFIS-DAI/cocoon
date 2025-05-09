@@ -162,9 +162,9 @@ class SimpleChannelModel(CommunicationScheduler):
                  topology_file_name: str = None):
         super().__init__(container_mapping)
         if topology_dict:
-            self.topology = ChannelNetworkModel.from_dict(topology_data=topology_dict)
+            self.channel_model = ChannelNetworkModel.from_dict(topology_data=topology_dict)
         elif topology_file_name:
-            self.topology = ChannelNetworkModel.from_json_file(file_path=topology_file_name)
+            self.channel_model = ChannelNetworkModel.from_json_file(file_path=topology_file_name)
         else:
             raise ValueError('Topology information must be provided in order to a initialize SimpleChannelModel. ')
 
@@ -173,9 +173,9 @@ class SimpleChannelModel(CommunicationScheduler):
                                      next_activities):
         for container_name, messages in container_messages_dict.items():
             for message in messages:
-                delay_ms = self.topology.calculate_end_to_end_delay(sender_id=container_name,
-                                                                    receiver_id=message.receiver,
-                                                                    message_size_bits=len(message.message))
+                delay_ms = self.channel_model.calculate_end_to_end_delay(sender_id=container_name,
+                                                                         receiver_id=message.receiver,
+                                                                         message_size_bits=len(message.message))
                 message_departure_time_in_ms = math.ceil(message.time * 1000) + delay_ms
                 if message.time not in self._message_buffer:
                     self._message_buffer[message_departure_time_in_ms] = []
