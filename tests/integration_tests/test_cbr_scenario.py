@@ -1,18 +1,14 @@
 import asyncio
-import logging
-import os
-
-import networkx as nx
 import pytest
 from mango import agent_composed_of, JSON, activate, ExternalClock
 from mango.container.factory import create_external_coupling
-from matplotlib import pyplot as plt
 
 from integration_environment.communication_models import IdealCommunication, SimpleChannelModel
 from integration_environment.messages import TrafficMessage
 from integration_environment.roles import ConstantBitrateSenderRole, ConstantBitrateReceiverRole
+from tests.integration_tests.utils import setup_logging, visualize_network
 
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 my_codec = JSON()
 my_codec.add_serializer(*TrafficMessage.__serializer__())
@@ -100,46 +96,8 @@ async def run_scenario_with_simple_channel_model():
     assert len(cbr_receiver_role.received_messages) > 0
 
 
-def visualize_network(topology, save_path='network_topology.png', display=False):
-    # Extract positions for visualization (using just x,y coordinates)
-    pos = {node: data['position'][:2] for node, data in topology.graph.nodes(data=True)}
-
-    # Create figure
-    plt.figure(figsize=(10, 8))
-
-    # Draw nodes and edges
-    nx.draw_networkx_nodes(topology.graph, pos, node_size=500, node_color='lightblue')
-    nx.draw_networkx_edges(topology.graph, pos, width=2, edge_color='gray')
-    nx.draw_networkx_labels(topology.graph, pos, font_size=12)
-
-    # Add edge labels (transmission rates)
-    edge_labels = {(u, v): f"{d.get('transmission_rate_bps', 0) / 1e6:.1f} Mbps"
-                   for u, v, d in topology.graph.edges(data=True)}
-    nx.draw_networkx_edge_labels(topology.graph, pos, edge_labels=edge_labels, font_size=8)
-
-    plt.title("Network Topology")
-    plt.axis('off')
-    plt.tight_layout()
-
-    # Always save the file
-    plt.savefig(save_path)
-    print(f"Network visualization saved to {os.path.abspath(save_path)}")
-
-    # Only try to display if specifically requested
-    if display:
-        try:
-            plt.show()
-        except Exception as e:
-            print(f"Warning: Could not display plot interactively: {e}")
-            print(f"The plot has been saved to {save_path} instead.")
-
-    # Close the figure to free memory
-    plt.close()
-
 
 @pytest.mark.asyncio
 def test_scenarios():
-    logging.basicConfig(filename='scenario.log', level=logging.DEBUG)
-
     asyncio.run(run_scenario_with_ideal_communication())
     asyncio.run(run_scenario_with_simple_channel_model())

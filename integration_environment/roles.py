@@ -44,9 +44,8 @@ class ConstantBitrateReceiverRole(Role):
                                        lambda content, meta: isinstance(content, TrafficMessage))
 
     def handle_cbr_message(self, content, meta):
-        logger.debug('Traffic Message received.')
+        logger.debug(f'Traffic Message received at time {self.context.current_timestamp}.')
         self.received_messages.append(content)
-        print('RECEIVED')
 
     def on_start(self):
         pass
