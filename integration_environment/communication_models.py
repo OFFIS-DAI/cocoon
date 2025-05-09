@@ -1,0 +1,184 @@
+import asyncio
+import math
+from abc import ABC, abstractmethod
+
+from mango.container.external_coupling import ExternalSchedulingContainer, ExternalAgentMessage
+
+from integration_environment.network_representation import ChannelNetworkModel
+
+
+class CommunicationScheduler(ABC):
+    """
+    Abstract class responsible for scheduling message dispatch with different communication modeling approaches.
+    """
+
+    def __init__(self,
+                 container_mapping: dict[str, ExternalSchedulingContainer],
+                 scenario_duration_ms=200 * 1000):
+        """
+        Initialize a new communication scheduler.
+
+        :param container_mapping: Dictionary mapping container names to their ExternalSchedulingContainer objects.
+        :param scenario_duration_ms: Total duration of the scenario in milliseconds. Defaults to 200 seconds.
+        """
+        self._loop = asyncio.get_running_loop()
+        self._loop.create_task(self.run_scenario())
+        self._container_mapping = container_mapping
+        self._next_activities = []
+        self.current_time = 0
+        self._duration = scenario_duration_ms
+
+        self._message_buffer = {}  # time: message
+
+        # create Future in order to wait for scenario finalization
+        self.scenario_finished = asyncio.Future()
+
+    def get_incoming_messages_for_container(self, container_name) -> list:
+        """
+        Retrieve all pending messages intended for a specific container.
+
+        This method checks the message buffer for any messages that should be delivered
+        to the specified container at the current simulation time or earlier.
+
+        :param container_name: The name of the container to get messages for.
+        :return: A list of message objects intended for the specified container.
+        """
+        container_msgs = []
+        for time, messages in self._message_buffer.items():
+            if time <= self.current_time:
+                for message in messages:
+                    if message.receiver == container_name:
+                        container_msgs.append(message.message)
+                self._message_buffer[time] = [m for m in self._message_buffer[time] if m.message not in container_msgs]
+
+        times_without_messages = [time for time, obj in self._message_buffer.items() if len(obj) == 0]
+        for time in times_without_messages:
+            del self._message_buffer[time]
+        return container_msgs
+
+    async def run_scenario(self):
+        """
+        Run the simulation scenario until completion.
+
+        This method implements the main simulation loop, advancing time and processing
+        messages between containers. The loop continues until either there are no more
+        scheduled activities or messages, or the scenario duration is reached.
+
+        Sets the scenario_finished future when complete.
+        """
+        while True:
+            container_messages_dict = {}
+            next_activities_in_current_step = []
+            for container_name, container in self._container_mapping.items():
+                incoming_messages_for_container = self.get_incoming_messages_for_container(container_name)
+                while container.inbox is None:
+                    await asyncio.sleep(1)
+
+                output = await container.step(incoming_messages=incoming_messages_for_container,
+                                              simulation_time=self.current_time)
+                container_messages_dict[container_name] = output.messages
+                next_activities_in_current_step.append(output.next_activity)
+
+            await self.process_message_output(container_messages_dict=container_messages_dict,
+                                              next_activities=next_activities_in_current_step)
+
+            if len(self._message_buffer) > 0:
+                self.current_time = min(self._message_buffer.keys())
+            elif len(self._next_activities) > 0:
+                self.current_time = min(self._next_activities)
+            else:
+                # no more activities or messages in mango -> finalize scenario
+                self.scenario_finished.set_result(True)
+                break
+
+            if self.current_time >= self._duration:
+                # simulation has reached the defined duration -> finalize scenario
+                self.scenario_finished.set_result(True)
+                break
+
+    @abstractmethod
+    async def process_message_output(self,
+                                     container_messages_dict: dict[str, list[ExternalAgentMessage]],
+                                     next_activities):
+        """
+        Process message outputs from containers and schedule their delivery.
+
+        This abstract method must be implemented by concrete subclasses to define
+        how messages are processed and scheduled according to the specific
+        communication model being simulated.
+
+        :param container_messages_dict: Dictionary mapping container names to their outgoing messages.
+        :param next_activities: List of timestamps for the next scheduled activities of containers.
+        """
+        pass
+
+
+class IdealCommunication(CommunicationScheduler):
+    """
+    Implementation of a communication scheduler with ideal (instant) message delivery.
+
+    This class models perfect communication with no delays or packet losses.
+    Messages are delivered exactly at their specified dispatch time without any
+    additional communication overhead or constraints.
+
+    This scheduler is useful for establishing a baseline for comparison with more
+    realistic communication models, or for simulations where communication effects
+    are not a concern.
+    """
+
+    def __init__(self, container_mapping: dict[str, ExternalSchedulingContainer]):
+        """
+        Initialize an ideal communication scheduler.
+        :param container_mapping: Dictionary mapping container names to their ExternalSchedulingContainer objects.
+        """
+        super().__init__(container_mapping)
+
+    async def process_message_output(self,
+                                     container_messages_dict: dict[str, list[ExternalAgentMessage]],
+                                     next_activities):
+        """
+        Process message outputs with ideal (instant) delivery scheduling.
+
+        Messages are scheduled for delivery at exactly their specified dispatch time
+        without any additional delays or modifications.
+
+        :param container_messages_dict: Dictionary mapping container names to their outgoing messages.
+        :param next_activities: List of timestamps for the next scheduled activities of containers.
+        """
+        for container_name, messages in container_messages_dict.items():
+            for message in messages:
+                message_departure_time_in_ms = math.ceil(message.time * 1000)
+                if message.time not in self._message_buffer:
+                    self._message_buffer[message_departure_time_in_ms] = []
+                self._message_buffer[message_departure_time_in_ms].append(message)
+        self._next_activities.extend([na for na in next_activities if na is not None])
+        self._next_activities = [na for na in self._next_activities if na >= self.current_time]
+
+
+class SimpleChannelModel(CommunicationScheduler):
+    def __init__(self,
+                 container_mapping: dict[str, ExternalSchedulingContainer],
+                 topology_dict: dict = None,
+                 topology_file_name: str = None):
+        super().__init__(container_mapping)
+        if topology_dict:
+            self.topology = ChannelNetworkModel.from_dict(topology_data=topology_dict)
+        elif topology_file_name:
+            self.topology = ChannelNetworkModel.from_json_file(file_path=topology_file_name)
+        else:
+            raise ValueError('Topology information must be provided in order to a initialize SimpleChannelModel. ')
+
+    async def process_message_output(self,
+                                     container_messages_dict: dict[str, list[ExternalAgentMessage]],
+                                     next_activities):
+        for container_name, messages in container_messages_dict.items():
+            for message in messages:
+                delay_ms = self.topology.calculate_end_to_end_delay(sender_id=container_name,
+                                                                    receiver_id=message.receiver,
+                                                                    message_size_bits=len(message.message))
+                message_departure_time_in_ms = math.ceil(message.time * 1000) + delay_ms
+                if message.time not in self._message_buffer:
+                    self._message_buffer[message_departure_time_in_ms] = []
+                self._message_buffer[message_departure_time_in_ms].append(message)
+        self._next_activities.extend([na for na in next_activities if na is not None])
+        self._next_activities = [na for na in self._next_activities if na >= self.current_time]
