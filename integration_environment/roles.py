@@ -23,7 +23,7 @@ class ConstantBitrateSenderRole(Role):
         pass
 
     async def send_message(self):
-        logger.debug('Send message. ')
+        logger.debug(f'Send message at time {self.context.current_timestamp}')
         for receiver in self.receiver_addresses:
             await self.context.send_message(
                 TrafficMessage(),
@@ -37,6 +37,7 @@ class ConstantBitrateSenderRole(Role):
 class ConstantBitrateReceiverRole(Role):
     def __init__(self):
         super().__init__()
+        self.received_messages = []
 
     def setup(self):
         self.context.subscribe_message(self, self.handle_cbr_message,
@@ -44,6 +45,8 @@ class ConstantBitrateReceiverRole(Role):
 
     def handle_cbr_message(self, content, meta):
         logger.debug('Traffic Message received.')
+        self.received_messages.append(content)
+        print('RECEIVED')
 
     def on_start(self):
         pass
