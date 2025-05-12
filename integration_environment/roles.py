@@ -43,7 +43,7 @@ class ResultsRecorderRole(Role):
 class ConstantBitrateSenderRole(Role):
     def __init__(self, receiver_addresses: list, frequency_ms=1000):
         super().__init__()
-        self.frequency_ms = frequency_ms
+        self.frequency_s = frequency_ms / 1000
         self.receiver_addresses = receiver_addresses
 
         self._message_counter = 0
@@ -52,10 +52,10 @@ class ConstantBitrateSenderRole(Role):
         pass
 
     def on_start(self):
-        self.context.schedule_instant_task(self.send_message())
+        pass
 
     def on_ready(self):
-        pass
+        self.context.schedule_periodic_task(self.send_message, self.frequency_s)
 
     async def send_message(self):
         logger.debug(f'Send message at time {self.context.current_timestamp}')
