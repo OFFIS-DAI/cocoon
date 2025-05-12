@@ -26,7 +26,7 @@ class CommunicationScheduler(ABC):
         self._container_mapping = container_mapping
         self._next_activities = []
         self.current_time = 0
-        self._duration = scenario_duration_ms
+        self._duration_s = scenario_duration_ms/1000
 
         self._message_buffer = {}  # time: message
 
@@ -91,7 +91,7 @@ class CommunicationScheduler(ABC):
                 self.scenario_finished.set_result(True)
                 break
 
-            if self.current_time >= self._duration:
+            if self.current_time >= self._duration_s:
                 # simulation has reached the defined duration -> finalize scenario
                 self.scenario_finished.set_result(True)
                 break
