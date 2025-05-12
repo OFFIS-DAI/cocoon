@@ -6,4 +6,4 @@ from mango import json_serializable
 @json_serializable
 @dataclass
 class TrafficMessage:
-    pass
+    msg_id: str
