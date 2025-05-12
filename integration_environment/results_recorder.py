@@ -1,9 +1,15 @@
+import datetime
+import json
 import time
+import asyncio
 from dataclasses import dataclass
 import logging
 from pathlib import Path
 
 import pandas as pd
+import psutil
+
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -28,19 +34,50 @@ class ResultsRecorder:
         self.execution_end_time = 0
         self.execution_runtime = 0
 
+        # memory monitoring - simplified
+        self.process = psutil.Process(os.getpid())
+        self.memory_measurements = []  # [(timestamp, memory_mb), ...]
+        self._memory_monitoring_task = None
+        self._stop_monitoring = False
+
     def start_scenario_recording(self):
         self.execution_start_time = time.time()
+        self._stop_monitoring = False
+        self.memory_measurements = []
+
+        # Start memory monitoring every second
+        self._memory_monitoring_task = asyncio.create_task(self._monitor_memory())
+        logger.debug("Started memory monitoring")
+
+    async def _monitor_memory(self):
+        """Monitor memory usage every second."""
+        while not self._stop_monitoring:
+            try:
+                memory_mb = self.process.memory_info().rss / 1024 / 1024
+                self.memory_measurements.append((time.time(), memory_mb))
+                await asyncio.sleep(1.0)  # Wait 1 second
+            except Exception as e:
+                logger.error(f"Error monitoring memory: {e}")
+                break
 
     def stop_scenario_recording(self):
         self.execution_end_time = time.time()
         self.execution_runtime = self.execution_end_time - self.execution_start_time
+
+        # Stop memory monitoring
+        self._stop_monitoring = True
+        if self._memory_monitoring_task:
+            self._memory_monitoring_task.cancel()
+
         logger.debug(f'Stop scenario. Execution took {self.execution_runtime} seconds.')
+        logger.debug(f'Collected {len(self.memory_measurements)} memory measurements.')
 
         self._create_summary_csv()
 
     def _create_summary_csv(self):
-        """Create a summary CSV."""
-        summary_file = self.output_dir / f"{self.scenario_configuration.scenario_id}.csv"
+        """Create a summary CSV and statistics JSON file."""
+        summary_file = self.output_dir / f"messages_{self.scenario_configuration.scenario_id}.csv"
+        statistics_file = self.output_dir / f"statistics_{self.scenario_configuration.scenario_id}.json"
 
         # Match send and receive events by msg_id
         message_delays = []
@@ -59,7 +96,40 @@ class ResultsRecorder:
                     })
                     break
         df = pd.DataFrame(message_delays)
-        df.to_csv(summary_file)
+        df.to_csv(summary_file, index=False)
+
+        # Calculate simple memory statistics
+        memory_stats = self._calculate_memory_statistics()
+
+        statistics = {
+            'scenario_id': self.scenario_configuration.scenario_id,
+            'execution_start_time': str(datetime.datetime.fromtimestamp(self.execution_start_time)),
+            'execution_end_time': str(datetime.datetime.fromtimestamp(self.execution_end_time)),
+            'execution_run_time_s': self.execution_runtime,
+            'memory_statistics': memory_stats
+        }
+
+        with open(statistics_file, 'w') as outfile:
+            json.dump(statistics, outfile, indent=2)
+
+        logger.info(f"Results saved to {summary_file} and {statistics_file}")
+
+    def _calculate_memory_statistics(self):
+        """Calculate simple memory statistics from measurements."""
+        if not self.memory_measurements:
+            return {}
+
+        memory_values = [mem_mb for _, mem_mb in self.memory_measurements]
+
+        return {
+            'initial_memory_mb': memory_values[0] if memory_values else 0,
+            'final_memory_mb': memory_values[-1] if memory_values else 0,
+            'peak_memory_mb': max(memory_values) if memory_values else 0,
+            'min_memory_mb': min(memory_values) if memory_values else 0,
+            'avg_memory_mb': sum(memory_values) / len(memory_values) if memory_values else 0,
+            'memory_change_mb': (memory_values[-1] - memory_values[0]) if len(memory_values) > 1 else 0,
+            'measurements_count': len(memory_values)
+        }
 
     def record_message_send_event(self, event):
         self.send_message_events.append(event)
