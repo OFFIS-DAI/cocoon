@@ -6,7 +6,8 @@ from mango.container.factory import create_external_coupling
 from integration_environment.communication_model_scheduler import IdealCommunicationScheduler, ChannelModelScheduler, \
     StaticDelayGraphModelScheduler
 from integration_environment.messages import TrafficMessage
-from integration_environment.roles import ConstantBitrateSenderRole, ConstantBitrateReceiverRole
+from integration_environment.results_recorder import ScenarioConfiguration, ResultsRecorder
+from integration_environment.roles import ConstantBitrateSenderRole, ConstantBitrateReceiverRole, ResultsRecorderRole
 from tests.integration_tests.utils import setup_logging, visualize_channel_model_graph, visualize_static_graph
 
 logger = setup_logging()
@@ -16,29 +17,36 @@ my_codec.add_serializer(*TrafficMessage.__serializer__())
 
 
 async def run_scenario_with_ideal_communication():
+    scenario_configuration = ScenarioConfiguration(scenario_duration_ms=10)
+    results_recorder = ResultsRecorder(scenario_configuration=scenario_configuration)
+
     clock = ExternalClock(start_time=0)
 
     container1 = create_external_coupling(addr='node1', codec=my_codec, clock=clock)
     cbr_receiver_role = ConstantBitrateReceiverRole()
-    cbr_receiver_role_agent = agent_composed_of(cbr_receiver_role)
+    cbr_receiver_role_agent = agent_composed_of(cbr_receiver_role, ResultsRecorderRole(results_recorder))
     container1.register(cbr_receiver_role_agent)
 
     container2 = create_external_coupling(addr='node2', codec=my_codec, clock=clock)
     cbr_sender_role_agent = agent_composed_of(
-        ConstantBitrateSenderRole(receiver_addresses=[cbr_receiver_role_agent.addr]))
+        ConstantBitrateSenderRole(receiver_addresses=[cbr_receiver_role_agent.addr]),
+        ResultsRecorderRole(results_recorder))
     container2.register(cbr_sender_role_agent)
 
     communication_network_entity = IdealCommunicationScheduler(container_mapping={'node1': container1,
                                                                                   'node2': container2})
 
     async with activate(container1, container2) as _:
-        # no more run call since everything now happens automatically within the roles
+        results_recorder.start_scenario_recording()
         await communication_network_entity.scenario_finished
+    results_recorder.stop_scenario_recording()
 
     assert len(cbr_receiver_role.received_messages) > 0
 
 
 async def run_scenario_with_simple_channel_model():
+    scenario_configuration = ScenarioConfiguration(scenario_duration_ms=10)
+    results_recorder = ResultsRecorder(scenario_configuration=scenario_configuration)
     topology = {
         'nodes': [
             {
@@ -76,12 +84,13 @@ async def run_scenario_with_simple_channel_model():
 
     container1 = create_external_coupling(addr='node1', codec=my_codec, clock=clock)
     cbr_receiver_role = ConstantBitrateReceiverRole()
-    cbr_receiver_role_agent = agent_composed_of(cbr_receiver_role)
+    cbr_receiver_role_agent = agent_composed_of(cbr_receiver_role, ResultsRecorderRole(results_recorder))
     container1.register(cbr_receiver_role_agent)
 
     container2 = create_external_coupling(addr='node2', codec=my_codec, clock=clock)
     cbr_sender_role_agent = agent_composed_of(
-        ConstantBitrateSenderRole(receiver_addresses=[cbr_receiver_role_agent.addr]))
+        ConstantBitrateSenderRole(receiver_addresses=[cbr_receiver_role_agent.addr]),
+        ResultsRecorderRole(results_recorder))
     container2.register(cbr_sender_role_agent)
 
     communication_network_entity = ChannelModelScheduler(container_mapping={'node1': container1,
@@ -91,13 +100,16 @@ async def run_scenario_with_simple_channel_model():
     visualize_channel_model_graph(communication_network_entity.channel_model)
 
     async with activate(container1, container2) as _:
-        # no more run call since everything now happens automatically within the roles
+        results_recorder.start_scenario_recording()
         await communication_network_entity.scenario_finished
+    results_recorder.stop_scenario_recording()
 
     assert len(cbr_receiver_role.received_messages) > 0
 
 
 async def run_scenario_with_static_graph_model():
+    scenario_configuration = ScenarioConfiguration(scenario_duration_ms=10)
+    results_recorder = ResultsRecorder(scenario_configuration=scenario_configuration)
     topology = {
         'nodes': [
             {
@@ -119,12 +131,13 @@ async def run_scenario_with_static_graph_model():
 
     container1 = create_external_coupling(addr='node1', codec=my_codec, clock=clock)
     cbr_receiver_role = ConstantBitrateReceiverRole()
-    cbr_receiver_role_agent = agent_composed_of(cbr_receiver_role)
+    cbr_receiver_role_agent = agent_composed_of(cbr_receiver_role, ResultsRecorderRole(results_recorder))
     container1.register(cbr_receiver_role_agent)
 
     container2 = create_external_coupling(addr='node2', codec=my_codec, clock=clock)
     cbr_sender_role_agent = agent_composed_of(
-        ConstantBitrateSenderRole(receiver_addresses=[cbr_receiver_role_agent.addr]))
+        ConstantBitrateSenderRole(receiver_addresses=[cbr_receiver_role_agent.addr]),
+        ResultsRecorderRole(results_recorder))
     container2.register(cbr_sender_role_agent)
 
     communication_network_entity = StaticDelayGraphModelScheduler(container_mapping={'node1': container1,
@@ -134,8 +147,9 @@ async def run_scenario_with_static_graph_model():
     visualize_static_graph(communication_network_entity.static_graph_model)
 
     async with activate(container1, container2) as _:
-        # no more run call since everything now happens automatically within the roles
+        results_recorder.start_scenario_recording()
         await communication_network_entity.scenario_finished
+    results_recorder.stop_scenario_recording()
 
     assert len(cbr_receiver_role.received_messages) > 0
 

@@ -3,8 +3,22 @@ import logging
 from mango import Role
 
 from integration_environment.messages import TrafficMessage
+from integration_environment.results_recorder import ResultsRecorder
 
 logger = logging.getLogger(__name__)
+
+
+class ResultsRecorderRole(Role):
+    def __init__(self, results_recorder: ResultsRecorder):
+        super().__init__()
+        self.results_recorder = results_recorder
+
+    def setup(self):
+        self.context.subscribe_message(self, self.handle_traffic_message,
+                                       lambda content, meta: isinstance(content, TrafficMessage))
+
+    def handle_traffic_message(self, content, meta):
+        self.results_recorder.record_message(content)
 
 
 class ConstantBitrateSenderRole(Role):

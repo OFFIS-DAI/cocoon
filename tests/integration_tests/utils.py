@@ -5,19 +5,31 @@ import networkx as nx
 from matplotlib import pyplot as plt
 
 
+def initialize_results_dir():
+    path = "results"
+    # Check whether the specified path exists or not
+    isExist = os.path.exists(path)
+    if not isExist:
+        # Create a new directory because it does not exist
+        os.makedirs(path)
+        print("The new directory is created!")
+
+
 # Configure logging once at module level
 # This ensures all loggers use this configuration
 def setup_logging():
+    initialize_results_dir()
+
     # Remove any existing handlers to avoid duplicate logs
     for handler in logging.root.handlers[:]:
         logging.root.removeHandler(handler)
 
     # Configure basic logging to file
     logging.basicConfig(
-        filename='integration_test_log.log',
+        filename='results/integration_test_log.log',
         level=logging.DEBUG,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        filemode='w'  # 'w' to overwrite the file each time
+        #filemode='w'  # 'w' to overwrite the file each time
     )
 
     # Add console handler to see logs in terminal
@@ -38,7 +50,7 @@ def setup_logging():
     return logging.getLogger(__name__)
 
 
-def visualize_channel_model_graph(topology, save_path='channel_network_topology.png', display=False):
+def visualize_channel_model_graph(topology, save_path='results/channel_network_topology.png', display=False):
     # Extract positions for visualization (using just x,y coordinates)
     pos = {node: data['position'][:2] for node, data in topology.graph.nodes(data=True)}
 
@@ -75,7 +87,7 @@ def visualize_channel_model_graph(topology, save_path='channel_network_topology.
     plt.close()
 
 
-def visualize_static_graph(topology, save_path='static_network_topology.png', **kwargs) -> None:
+def visualize_static_graph(topology, save_path='results/static_network_topology.png', **kwargs) -> None:
     """
     Visualize the network graph using matplotlib.
 
