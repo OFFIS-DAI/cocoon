@@ -147,10 +147,9 @@ class IdealCommunicationScheduler(CommunicationScheduler):
         """
         for container_name, messages in container_messages_dict.items():
             for message in messages:
-                message_departure_time_in_ms = math.ceil(message.time * 1000)
                 if message.time not in self._message_buffer:
-                    self._message_buffer[message_departure_time_in_ms] = []
-                self._message_buffer[message_departure_time_in_ms].append(message)
+                    self._message_buffer[message.time] = []
+                self._message_buffer[message.time].append(message)
         self._next_activities.extend([na for na in next_activities if na is not None])
         self._next_activities = [na for na in self._next_activities if na >= self.current_time]
 
@@ -184,9 +183,10 @@ class ChannelModelScheduler(CommunicationScheduler):
                                                                          receiver_id=message.receiver,
                                                                          message_size_bits=len(message.message))
                 message_departure_time_in_ms = math.ceil(message.time * 1000) + delay_ms
-                if message.time not in self._message_buffer:
-                    self._message_buffer[message_departure_time_in_ms] = []
-                self._message_buffer[message_departure_time_in_ms].append(message)
+                message_departure_time_in_s = message_departure_time_in_ms/1000
+                if message_departure_time_in_s not in self._message_buffer:
+                    self._message_buffer[message_departure_time_in_s] = []
+                self._message_buffer[message_departure_time_in_s].append(message)
         self._next_activities.extend([na for na in next_activities if na is not None])
         self._next_activities = [na for na in self._next_activities if na >= self.current_time]
 
@@ -242,19 +242,21 @@ class StaticDelayGraphModelScheduler(CommunicationScheduler):
 
                     # Calculate the message delivery time
                     message_delivery_time_ms = math.ceil(message.time * 1000) + delay_ms
+                    message_delivery_time_s = message_delivery_time_ms/1000
 
                     # Add message to buffer for delivery at the calculated time
-                    if message_delivery_time_ms not in self._message_buffer:
-                        self._message_buffer[message_delivery_time_ms] = []
-                    self._message_buffer[message_delivery_time_ms].append(message)
+                    if message_delivery_time_s not in self._message_buffer:
+                        self._message_buffer[message_delivery_time_s] = []
+                    self._message_buffer[message_delivery_time_s].append(message)
 
                 except ValueError as e:
                     # Log warning about missing path and deliver instantly as fallback
                     print(f"Warning: {e}. Delivering message instantly as fallback.")
                     message_delivery_time_ms = math.ceil(message.time * 1000)
-                    if message_delivery_time_ms not in self._message_buffer:
-                        self._message_buffer[message_delivery_time_ms] = []
-                    self._message_buffer[message_delivery_time_ms].append(message)
+                    message_delivery_time_s = message_delivery_time_ms / 1000
+                    if message_delivery_time_s not in self._message_buffer:
+                        self._message_buffer[message_delivery_time_s] = []
+                    self._message_buffer[message_delivery_time_s].append(message)
 
         # Update next activities
         self._next_activities.extend([na for na in next_activities if na is not None])
