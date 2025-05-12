@@ -17,7 +17,7 @@ my_codec.add_serializer(*TrafficMessage.__serializer__())
 
 
 async def run_scenario_with_ideal_communication():
-    scenario_configuration = ScenarioConfiguration(scenario_duration_ms=10)
+    scenario_configuration = ScenarioConfiguration(scenario_id='ideal')
     results_recorder = ResultsRecorder(scenario_configuration=scenario_configuration)
 
     clock = ExternalClock(start_time=0)
@@ -45,7 +45,7 @@ async def run_scenario_with_ideal_communication():
 
 
 async def run_scenario_with_simple_channel_model():
-    scenario_configuration = ScenarioConfiguration(scenario_duration_ms=10)
+    scenario_configuration = ScenarioConfiguration(scenario_id='channel')
     results_recorder = ResultsRecorder(scenario_configuration=scenario_configuration)
     topology = {
         'nodes': [
@@ -108,7 +108,7 @@ async def run_scenario_with_simple_channel_model():
 
 
 async def run_scenario_with_static_graph_model():
-    scenario_configuration = ScenarioConfiguration(scenario_duration_ms=10)
+    scenario_configuration = ScenarioConfiguration(scenario_id='static_graph')
     results_recorder = ResultsRecorder(scenario_configuration=scenario_configuration)
     topology = {
         'nodes': [
