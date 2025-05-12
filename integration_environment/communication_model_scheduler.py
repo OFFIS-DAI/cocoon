@@ -156,6 +156,13 @@ class IdealCommunicationScheduler(CommunicationScheduler):
 
 
 class ChannelModelScheduler(CommunicationScheduler):
+    """
+    Implementation of a communication scheduler with message end-to-end delays based on
+    network parameter configurations.
+
+    A channel model forms the basis for this scheduler and can be found in network_models/channel_network_model.py.
+    """
+
     def __init__(self,
                  container_mapping: dict[str, ExternalSchedulingContainer],
                  topology_dict: dict = None,
@@ -180,5 +187,75 @@ class ChannelModelScheduler(CommunicationScheduler):
                 if message.time not in self._message_buffer:
                     self._message_buffer[message_departure_time_in_ms] = []
                 self._message_buffer[message_departure_time_in_ms].append(message)
+        self._next_activities.extend([na for na in next_activities if na is not None])
+        self._next_activities = [na for na in self._next_activities if na >= self.current_time]
+
+
+class StaticDelayGraphModelScheduler(CommunicationScheduler):
+    """
+    Implementation of a communication scheduler with message end-to-end delays based on a static network configuration.
+    For this, the end-to-end delays between two nodes have to be pre-configured by the user and are then used
+    during the scenario in order to delay message dispatch.
+
+    A static graph model forms the basis for this scheduler and can be found in network_models/static_graph_model.py.
+    """
+
+    def __init__(self,
+                 container_mapping: dict[str, ExternalSchedulingContainer],
+                 topology_dict: dict = None,
+                 topology_file_name: str = None):
+        """
+        Initialize a static delay graph model scheduler.
+
+        :param container_mapping: Dictionary mapping container names to their ExternalSchedulingContainer objects.
+        :param topology_dict: Dictionary containing network topology information.
+        :param topology_file_name: Path to JSON file containing topology information.
+        """
+        super().__init__(container_mapping)
+
+        # We'll import StaticGraphModel locally to avoid circular imports
+        from integration_environment.network_models.static_graph_model import StaticGraphModel
+
+        if topology_dict:
+            self.static_graph_model = StaticGraphModel.from_dict(topology_data=topology_dict)
+        elif topology_file_name:
+            self.static_graph_model = StaticGraphModel.from_json_file(file_path=topology_file_name)
+        else:
+            raise ValueError(
+                'Topology information must be provided in order to initialize StaticDelayGraphModelScheduler.')
+
+    async def process_message_output(self,
+                                     container_messages_dict: dict[str, list[ExternalAgentMessage]],
+                                     next_activities):
+        """
+        Process message outputs with static pre-configured end-to-end delays.
+
+        :param container_messages_dict: Dictionary mapping container names to their outgoing messages.
+        :param next_activities: List of timestamps for the next scheduled activities of containers.
+        """
+        for container_name, messages in container_messages_dict.items():
+            for message in messages:
+                try:
+                    # Get the pre-configured delay for this sender-receiver pair
+                    delay_ms = self.static_graph_model.get_delay(sender_id=container_name,
+                                                                 receiver_id=message.receiver)
+
+                    # Calculate the message delivery time
+                    message_delivery_time_ms = math.ceil(message.time * 1000) + delay_ms
+
+                    # Add message to buffer for delivery at the calculated time
+                    if message_delivery_time_ms not in self._message_buffer:
+                        self._message_buffer[message_delivery_time_ms] = []
+                    self._message_buffer[message_delivery_time_ms].append(message)
+
+                except ValueError as e:
+                    # Log warning about missing path and deliver instantly as fallback
+                    print(f"Warning: {e}. Delivering message instantly as fallback.")
+                    message_delivery_time_ms = math.ceil(message.time * 1000)
+                    if message_delivery_time_ms not in self._message_buffer:
+                        self._message_buffer[message_delivery_time_ms] = []
+                    self._message_buffer[message_delivery_time_ms].append(message)
+
+        # Update next activities
         self._next_activities.extend([na for na in next_activities if na is not None])
         self._next_activities = [na for na in self._next_activities if na >= self.current_time]

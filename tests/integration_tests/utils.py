@@ -38,7 +38,7 @@ def setup_logging():
     return logging.getLogger(__name__)
 
 
-def visualize_network(topology, save_path='network_topology.png', display=False):
+def visualize_channel_model_graph(topology, save_path='channel_network_topology.png', display=False):
     # Extract positions for visualization (using just x,y coordinates)
     pos = {node: data['position'][:2] for node, data in topology.graph.nodes(data=True)}
 
@@ -73,3 +73,45 @@ def visualize_network(topology, save_path='network_topology.png', display=False)
 
     # Close the figure to free memory
     plt.close()
+
+
+def visualize_static_graph(topology, save_path='static_network_topology.png', **kwargs) -> None:
+    """
+    Visualize the network graph using matplotlib.
+
+    :param save_path: Optional path to save the visualization.
+    :param kwargs: Additional arguments for nx.draw().
+    """
+    try:
+        import matplotlib.pyplot as plt
+
+        # Set default layout and drawing parameters
+        default_kwargs = {
+            'with_labels': True,
+            'node_color': 'lightblue',
+            'node_size': 500,
+            'font_size': 10,
+            'font_weight': 'bold',
+            'edge_color': 'gray',
+            'width': 2
+        }
+        default_kwargs.update(kwargs)
+
+        plt.figure(figsize=(10, 8))
+        pos = nx.spring_layout(topology.graph)
+        nx.draw(topology.graph, pos, **default_kwargs)
+
+        # Draw edge labels with weights (delays)
+        edge_labels = {(u, v): f"{d['weight']:.1f}ms"
+                       for u, v, d in topology.graph.edges(data=True)}
+        nx.draw_networkx_edge_labels(topology.graph, pos, edge_labels, font_size=8)
+
+        plt.title("Network Topology with Delays")
+
+        if save_path:
+            plt.savefig(save_path, bbox_inches='tight', dpi=300)
+        else:
+            plt.show()
+
+    except ImportError:
+        print("Matplotlib not available. Cannot visualize the network.")
