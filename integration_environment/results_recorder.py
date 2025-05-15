@@ -4,6 +4,7 @@ import time
 import asyncio
 from dataclasses import dataclass
 import logging
+from enum import Enum
 from pathlib import Path
 
 import pandas as pd
@@ -14,9 +15,16 @@ import os
 logger = logging.getLogger(__name__)
 
 
+class PayloadSizeConfig(Enum):
+    SMALL = 8
+    MEDIUM = 100
+    LARGE = 200
+
+
 @dataclass
 class ScenarioConfiguration:
     scenario_id: str
+    payload_size: PayloadSizeConfig
 
 
 class ResultsRecorder:
@@ -89,7 +97,7 @@ class ResultsRecorder:
                         'msg_id': send_event.msg_id,
                         'sender': send_event.sender.protocol_addr,
                         'receiver': send_event.receiver.protocol_addr,
-                        'size_B': send_event.size_B,
+                        'size_B': send_event.payload_size_B,
                         'time_send_ms': send_event.time_send_ms,
                         'time_receive_ms': receive_event.time_receive_ms,
                         'delay_ms': delay_ms

@@ -7,3 +7,4 @@ from mango import json_serializable
 @dataclass
 class TrafficMessage:
     msg_id: str
+    payload: str
