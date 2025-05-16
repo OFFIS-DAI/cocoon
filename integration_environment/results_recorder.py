@@ -25,6 +25,7 @@ class PayloadSizeConfig(Enum):
 class ScenarioConfiguration:
     scenario_id: str
     payload_size: PayloadSizeConfig
+    num_devices: int
 
 
 class ResultsRecorder:
