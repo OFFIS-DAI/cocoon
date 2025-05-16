@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from mango.container.external_coupling import ExternalSchedulingContainer, ExternalAgentMessage
 
 from integration_environment.network_models.channel_network_model import ChannelNetworkModel
+from integration_environment.network_models.detailed_network_model import DetailedNetworkModel
 
 
 class CommunicationScheduler(ABC):
@@ -26,7 +27,7 @@ class CommunicationScheduler(ABC):
         self._container_mapping = container_mapping
         self._next_activities = []
         self.current_time = 0
-        self._duration_s = scenario_duration_ms/1000
+        self._duration_s = scenario_duration_ms / 1000
 
         self._message_buffer = {}  # time: message
 
@@ -183,12 +184,29 @@ class ChannelModelScheduler(CommunicationScheduler):
                                                                          receiver_id=message.receiver,
                                                                          message_size_bits=len(message.message))
                 message_departure_time_in_ms = math.ceil(message.time * 1000) + delay_ms
-                message_departure_time_in_s = message_departure_time_in_ms/1000
+                message_departure_time_in_s = message_departure_time_in_ms / 1000
                 if message_departure_time_in_s not in self._message_buffer:
                     self._message_buffer[message_departure_time_in_s] = []
                 self._message_buffer[message_departure_time_in_s].append(message)
         self._next_activities.extend([na for na in next_activities if na is not None])
         self._next_activities = [na for na in self._next_activities if na >= self.current_time]
+
+
+class DetailedModelScheduler(CommunicationScheduler):
+    def __init__(self,
+                 container_mapping: dict[str, ExternalSchedulingContainer],
+                 inet_installation_path: str,
+                 config_name: str,
+                 omnet_project_path: str):
+        super().__init__(container_mapping)
+        self.detailed_network_model = DetailedNetworkModel(inet_installation_path=inet_installation_path,
+                                                           config_name=config_name,
+                                                           omnet_project_path=omnet_project_path)
+
+    async def process_message_output(self,
+                                     container_messages_dict: dict[str, list[ExternalAgentMessage]],
+                                     next_activities):
+        self.detailed_network_model.simulate_message_dispatch(sender_message_dict=container_messages_dict)
 
 
 class StaticDelayGraphModelScheduler(CommunicationScheduler):
@@ -242,7 +260,7 @@ class StaticDelayGraphModelScheduler(CommunicationScheduler):
 
                     # Calculate the message delivery time
                     message_delivery_time_ms = math.ceil(message.time * 1000) + delay_ms
-                    message_delivery_time_s = message_delivery_time_ms/1000
+                    message_delivery_time_s = message_delivery_time_ms / 1000
 
                     # Add message to buffer for delivery at the calculated time
                     if message_delivery_time_s not in self._message_buffer:
