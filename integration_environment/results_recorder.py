@@ -2,9 +2,7 @@ import datetime
 import json
 import time
 import asyncio
-from dataclasses import dataclass
 import logging
-from enum import Enum
 from pathlib import Path
 
 import pandas as pd
@@ -12,20 +10,9 @@ import psutil
 
 import os
 
+from integration_environment.scenario_configuration import ScenarioConfiguration
+
 logger = logging.getLogger(__name__)
-
-
-class PayloadSizeConfig(Enum):
-    SMALL = 8
-    MEDIUM = 100
-    LARGE = 200
-
-
-@dataclass
-class ScenarioConfiguration:
-    scenario_id: str
-    payload_size: PayloadSizeConfig
-    num_devices: int
 
 
 class ResultsRecorder:

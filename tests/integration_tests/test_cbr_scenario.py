@@ -6,8 +6,9 @@ from mango.container.factory import create_external_coupling
 from integration_environment.communication_model_scheduler import IdealCommunicationScheduler, ChannelModelScheduler, \
     StaticDelayGraphModelScheduler
 from integration_environment.messages import TrafficMessage
-from integration_environment.results_recorder import ScenarioConfiguration, ResultsRecorder, PayloadSizeConfig
+from integration_environment.results_recorder import ResultsRecorder
 from integration_environment.roles import ConstantBitrateSenderRole, ConstantBitrateReceiverRole, ResultsRecorderRole
+from integration_environment.scenario_configuration import ScenarioConfiguration, PayloadSizeConfig
 from tests.integration_tests.utils import setup_logging, visualize_channel_model_graph, visualize_static_graph
 
 logger = setup_logging()
