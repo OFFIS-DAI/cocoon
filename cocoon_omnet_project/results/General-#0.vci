@@ -1,0 +1,661 @@
+file 29294 1747651909                                           
+version 3
+run General-0-20250519-12:51:45-45754
+attr configname General
+attr datetime 20250519-12:51:45
+attr datetimef 20250519-125145
+attr experiment General
+attr inifile omnetpp.ini
+attr iterationvars ""
+attr iterationvarsd ""
+attr iterationvarsf ""
+attr measurement ""
+attr network networks.SimpleNetwork
+attr processid 45754
+attr repetition 0
+attr replication #0
+attr resultdir results
+attr runnumber 0
+attr seedset 0
+config image-path ../../../cocoon_omnet_workspace/inet4.5/images
+config scheduler-class MangoScheduler
+config network networks.SimpleNetwork
+config ned-path .
+config **.client.numApps 1
+config **.client.app[*].typename TcpSessionApp
+config **.client.app[*].active true
+config **.client.app[*].localAddress "\"\""
+config **.client.app[*].localPort -1
+config **.client.app[*].connectAddress "\"server\""
+config **.client.app[*].connectPort 1000
+config **.client.app[*].tOpen 1.0s
+config **.client.app[*].tSend 1.1s
+config **.client.app[*].sendBytes 1MiB
+config **.client.app[*].sendScript "\"\""
+config **.client.app[*].tClose 0s
+config **.server.numApps 1
+config **.server.app[*].typename TcpEchoApp
+config **.server.app[0].localAddress "\"\""
+config **.server.app[0].localPort 1000
+config **.server.app[0].echoFactor 2.0
+config **.server.app[0].echoDelay 0s
+config **.eth[*].duplexMode true
+config **.ppp[*].queue.typename DropTailQueue
+config **.ppp[*].queue.packetCapacity 10
+config **.eth[*].queue.typename EthernetQosQueue
+config **.eth[*].queue.dataQueue.typename DropTailQueue
+config **.eth[*].queue.dataQueue.packetCapacity 10
+config **.switch*.bridging.typename MacRelayUnit
+
+vector 0 SimpleNetwork.client.udp passedUpPk:vector(count) ETV
+attr interpolationmode none
+attr recordingmode vector(count)
+attr source packetSentToUpper
+attr title "packets passed up, count"
+vector 1 SimpleNetwork.client.udp droppedPkWrongPort:vector(count) ETV
+attr interpolationmode none
+attr recordingmode vector(count)
+attr source packetDropReasonIsNoPortFound(packetDropped)
+attr title "packets dropped (wrong port), count"
+vector 2 SimpleNetwork.client.udp droppedPkBadChecksum:vector(count) ETV
+attr interpolationmode none
+attr recordingmode vector(count)
+attr source packetDropReasonIsIncorrectlyReceived(packetDropped)
+attr title "packets dropped (checksum error), count"
+vector 3 SimpleNetwork.host1.udp passedUpPk:vector(count) ETV
+attr interpolationmode none
+attr recordingmode vector(count)
+attr source packetSentToUpper
+attr title "packets passed up, count"
+vector 4 SimpleNetwork.host1.udp droppedPkWrongPort:vector(count) ETV
+attr interpolationmode none
+attr recordingmode vector(count)
+attr source packetDropReasonIsNoPortFound(packetDropped)
+attr title "packets dropped (wrong port), count"
+vector 5 SimpleNetwork.host1.udp droppedPkBadChecksum:vector(count) ETV
+attr interpolationmode none
+attr recordingmode vector(count)
+attr source packetDropReasonIsIncorrectlyReceived(packetDropped)
+attr title "packets dropped (checksum error), count"
+vector 6 SimpleNetwork.host2.udp passedUpPk:vector(count) ETV
+attr interpolationmode none
+attr recordingmode vector(count)
+attr source packetSentToUpper
+attr title "packets passed up, count"
+vector 7 SimpleNetwork.host2.udp droppedPkWrongPort:vector(count) ETV
+attr interpolationmode none
+attr recordingmode vector(count)
+attr source packetDropReasonIsNoPortFound(packetDropped)
+attr title "packets dropped (wrong port), count"
+vector 8 SimpleNetwork.host2.udp droppedPkBadChecksum:vector(count) ETV
+attr interpolationmode none
+attr recordingmode vector(count)
+attr source packetDropReasonIsIncorrectlyReceived(packetDropped)
+attr title "packets dropped (checksum error), count"
+vector 9 SimpleNetwork.net.ppp[0].ppp transmissionState:vector ETV
+attr interpolationmode sample-hold
+attr recordingmode vector
+attr source transmissionStateChanged
+attr title "tx state"
+vector 10 SimpleNetwork.net.ppp[1].ppp transmissionState:vector ETV
+attr interpolationmode sample-hold
+attr recordingmode vector
+attr source transmissionStateChanged
+attr title "tx state"
+vector 11 SimpleNetwork.router.ppp[0].ppp transmissionState:vector ETV
+attr interpolationmode sample-hold
+attr recordingmode vector
+attr source transmissionStateChanged
+attr title "tx state"
+vector 12 SimpleNetwork.server.ppp[0].ppp transmissionState:vector ETV
+attr interpolationmode sample-hold
+attr recordingmode vector
+attr source transmissionStateChanged
+attr title "tx state"
+vector 13 SimpleNetwork.server.udp passedUpPk:vector(count) ETV
+attr interpolationmode none
+attr recordingmode vector(count)
+attr source packetSentToUpper
+attr title "packets passed up, count"
+vector 14 SimpleNetwork.server.udp droppedPkWrongPort:vector(count) ETV
+attr interpolationmode none
+attr recordingmode vector(count)
+attr source packetDropReasonIsNoPortFound(packetDropped)
+attr title "packets dropped (wrong port), count"
+vector 15 SimpleNetwork.server.udp droppedPkBadChecksum:vector(count) ETV
+attr interpolationmode none
+attr recordingmode vector(count)
+attr source packetDropReasonIsIncorrectlyReceived(packetDropped)
+attr title "packets dropped (checksum error), count"
+vector 16 SimpleNetwork.client.tcp.conn-6 tcpRcvQueueBytes:vector ETV
+attr interpolationmode sample-hold
+attr recordingmode vector
+vector 17 SimpleNetwork.client.tcp.conn-6 rcvAdv:vector ETV
+attr interpolationmode sample-hold
+attr recordingmode vector
+vector 18 SimpleNetwork.client.tcp.conn-6 rcvWnd:vector ETV
+attr interpolationmode sample-hold
+attr recordingmode vector
+vector 19 SimpleNetwork.client.tcp.conn-6 sndAck:vector ETV
+attr interpolationmode sample-hold
+attr recordingmode vector
+vector 20 SimpleNetwork.client.ipv4.arp arpRequestSent:vector(packetBytes) ETV
+attr recordingmode vector(packetBytes)
+attr source arpRequestSent
+attr title "ARP request sent, packetBytes"
+vector 21 SimpleNetwork.client.ethernet encapPk:vector(packetBytes) ETV
+attr interpolationmode none
+attr recordingmode vector(packetBytes)
+attr source encapPk
+attr title "packets encapsulated, packetBytes"
+vector 22 SimpleNetwork.client.eth[0].queue.classifier packetLengths:vector ETV
+attr interpolationmode none
+attr recordingmode vector
+attr source packetLength(packetPushed)
+attr title "packet lengths"
+attr unit b
+vector 23 SimpleNetwork.client.eth[0].queue.classifier dataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPushed)
+attr title "data rate"
+attr unit bps
+vector 24 SimpleNetwork.client.eth[0].queue.dataQueue incomingPacketLengths:vector ETV
+attr interpolationmode none
+attr recordingmode vector
+attr source packetLength(packetPushStarted)
+attr title "incoming packet lengths"
+attr unit b
+vector 25 SimpleNetwork.client.eth[0].queue.dataQueue incomingDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPushStarted)
+attr title "incoming datarate"
+attr unit bps
+vector 26 SimpleNetwork.client.eth[0].queue.dataQueue queueingTime:vector ETV
+attr interpolationmode none
+attr recordingmode vector
+attr source queueingTime(packetPulled)
+attr title "queueing times"
+attr unit s
+vector 27 SimpleNetwork.client.eth[0].queue.dataQueue outgoingPacketLengths:vector ETV
+attr interpolationmode none
+attr recordingmode vector
+attr source packetLength(packetPulled)
+attr title "outgoing packet lengths"
+attr unit b
+vector 28 SimpleNetwork.client.eth[0].queue.dataQueue outgoingDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPulled)
+attr title "outgoing datarate"
+attr unit bps
+vector 29 SimpleNetwork.client.eth[0].queue.scheduler packetLengths:vector ETV
+attr interpolationmode none
+attr recordingmode vector
+attr source packetLength(packetPulled)
+attr title "packet lengths"
+attr unit b
+vector 30 SimpleNetwork.client.eth[0].queue.scheduler dataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPulled)
+attr title "data rate"
+attr unit bps
+vector 31 SimpleNetwork.client.eth[0].queue queueingTime:vector ETV
+attr interpolationmode none
+attr recordingmode vector
+attr source queueingTime(localSignal(packetPulled))
+attr title "queueing times"
+attr unit s
+vector 32 SimpleNetwork.client.eth[0].queue outgoingPacketLengths:vector ETV
+attr interpolationmode none
+attr recordingmode vector
+attr source packetLength(localSignal(packetPulled))
+attr title "outgoing packet lengths"
+attr unit b
+vector 33 SimpleNetwork.client.eth[0].queue outgoingDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(localSignal(packetPulled))
+attr title "outgoing datarate"
+attr unit bps
+vector 34 SimpleNetwork.client.eth[0].mac packetReceivedFromUpper:vector(packetBytes) ETV
+attr interpolationmode none
+attr recordingmode vector(packetBytes)
+attr source packetReceivedFromUpper
+attr title "packet bytes from higher layer, packetBytes"
+vector 35 SimpleNetwork.client.eth[0].queue.dataQueue queueLength:vector ETV
+attr autoWarmupFilter false
+attr interpolationmode sample-hold
+attr recordingmode vector
+attr source "warmup(atomic(constant0(packetPushEnded) + count(packetPushStarted) - count(packetPulled) - count(packetRemoved) - count(packetDropped)))"
+attr title "queue length"
+attr unit pk
+vector 36 SimpleNetwork.client.eth[0].queue.dataQueue queueBitLength:vector ETV
+attr autoWarmupFilter false
+attr interpolationmode sample-hold
+attr recordingmode vector
+attr source "warmup(atomic(constant0(packetPushEnded) + sum(packetLength(packetPushStarted)) - sum(packetLength(packetPulled)) - sum(packetLength(packetRemoved)) - sum(packetLength(packetDropped))))"
+attr title "queue bit length"
+attr unit b
+0	9616 8 0 0 0 0 1 0 0 0 0
+1	9624 8 0 0 0 0 1 0 0 0 0
+2	9632 8 0 0 0 0 1 0 0 0 0
+3	9640 8 0 0 0 0 1 0 0 0 0
+4	9648 8 0 0 0 0 1 0 0 0 0
+5	9656 8 0 0 0 0 1 0 0 0 0
+6	9664 8 0 0 0 0 1 0 0 0 0
+7	9672 8 0 0 0 0 1 0 0 0 0
+8	9680 8 0 0 0 0 1 0 0 0 0
+9	9688 8 0 0 0 0 1 0 0 0 0
+10	9696 9 0 0 0 0 1 0 0 0 0
+11	9705 9 0 0 0 0 1 0 0 0 0
+12	9714 9 0 0 0 0 1 0 0 0 0
+13	9723 9 0 0 0 0 1 0 0 0 0
+14	9732 9 0 0 0 0 1 0 0 0 0
+15	9741 9 0 0 0 0 1 0 0 0 0
+16	9750 9 3 3 1 1 1 0 0 0 0
+17	9759 12 3 3 1 1 1 7504 7504 7504 56310016
+18	9771 12 3 3 1 1 1 7504 7504 7504 56310016
+19	9783 9 3 3 1 1 1 0 0 0 0
+20	9792 10 4 4 1 1 1 28 28 28 784
+21	9802 10 5 5 1 1 1 28 28 28 784
+22	9812 11 6 6 1 1 1 368 368 368 135424
+23	9823 108 6 6 0.1 1 10 0 0 0 0
+24	9931 11 6 6 1 1 1 368 368 368 135424
+25	9942 108 6 6 0.1 1 10 0 0 0 0
+26	10050 9 6 6 1 1 1 0 0 0 0
+27	10059 11 6 6 1 1 1 368 368 368 135424
+28	10070 108 6 6 0.1 1 10 0 0 0 0
+29	10178 11 6 6 1 1 1 368 368 368 135424
+30	10189 108 6 6 0.1 1 10 0 0 0 0
+31	10297 9 6 6 1 1 1 0 0 0 0
+32	10306 11 6 6 1 1 1 368 368 368 135424
+33	10317 108 6 6 0.1 1 10 0 0 0 0
+34	10425 10 6 6 1 1 1 46 46 46 2116
+35	10435 9 6 6 1 1 1 0 0 0 0
+36	10444 9 6 6 1 1 1 0 0 0 0
+vector 37 SimpleNetwork.client.eth[0].queue.pauseQueue outgoingDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPulled)
+attr title "outgoing datarate"
+attr unit bps
+vector 38 SimpleNetwork.client.eth[0].queue.pauseQueue incomingDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPushStarted)
+attr title "incoming datarate"
+attr unit bps
+vector 39 SimpleNetwork.host1.eth[0].queue.classifier dataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPushed)
+attr title "data rate"
+attr unit bps
+vector 40 SimpleNetwork.host1.eth[0].queue.pauseQueue outgoingDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPulled)
+attr title "outgoing datarate"
+attr unit bps
+vector 41 SimpleNetwork.host1.eth[0].queue.pauseQueue incomingDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPushStarted)
+attr title "incoming datarate"
+attr unit bps
+vector 42 SimpleNetwork.host1.eth[0].queue.dataQueue outgoingDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPulled)
+attr title "outgoing datarate"
+attr unit bps
+vector 43 SimpleNetwork.host1.eth[0].queue.dataQueue incomingDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPushStarted)
+attr title "incoming datarate"
+attr unit bps
+vector 44 SimpleNetwork.host1.eth[0].queue.scheduler dataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPulled)
+attr title "data rate"
+attr unit bps
+vector 45 SimpleNetwork.host2.eth[0].queue.classifier dataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPushed)
+attr title "data rate"
+attr unit bps
+vector 46 SimpleNetwork.host2.eth[0].queue.pauseQueue outgoingDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPulled)
+attr title "outgoing datarate"
+attr unit bps
+vector 47 SimpleNetwork.host2.eth[0].queue.pauseQueue incomingDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPushStarted)
+attr title "incoming datarate"
+attr unit bps
+vector 48 SimpleNetwork.host2.eth[0].queue.dataQueue outgoingDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPulled)
+attr title "outgoing datarate"
+attr unit bps
+vector 49 SimpleNetwork.host2.eth[0].queue.dataQueue incomingDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPushStarted)
+attr title "incoming datarate"
+attr unit bps
+vector 50 SimpleNetwork.host2.eth[0].queue.scheduler dataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPulled)
+attr title "data rate"
+attr unit bps
+vector 51 SimpleNetwork.switch.ieee8021q.qTagHeaderChecker droppedDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetDropped)
+attr title "dropped data rate"
+attr unit bps
+vector 52 SimpleNetwork.switch.ieee8021r.rTagHeaderChecker droppedDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetDropped)
+attr title "dropped data rate"
+attr unit bps
+vector 53 SimpleNetwork.switch.eth[0].queue.classifier dataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPushed)
+attr title "data rate"
+attr unit bps
+vector 54 SimpleNetwork.switch.eth[0].queue.pauseQueue outgoingDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPulled)
+attr title "outgoing datarate"
+attr unit bps
+vector 55 SimpleNetwork.switch.eth[0].queue.pauseQueue incomingDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPushStarted)
+attr title "incoming datarate"
+attr unit bps
+vector 56 SimpleNetwork.switch.eth[0].queue.dataQueue outgoingDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPulled)
+attr title "outgoing datarate"
+attr unit bps
+vector 57 SimpleNetwork.switch.eth[0].queue.dataQueue incomingDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPushStarted)
+attr title "incoming datarate"
+attr unit bps
+vector 58 SimpleNetwork.switch.eth[0].queue.scheduler dataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPulled)
+attr title "data rate"
+attr unit bps
+vector 59 SimpleNetwork.switch.eth[1].queue.classifier dataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPushed)
+attr title "data rate"
+attr unit bps
+vector 60 SimpleNetwork.switch.eth[1].queue.pauseQueue outgoingDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPulled)
+attr title "outgoing datarate"
+attr unit bps
+vector 61 SimpleNetwork.switch.eth[1].queue.pauseQueue incomingDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPushStarted)
+attr title "incoming datarate"
+attr unit bps
+vector 62 SimpleNetwork.switch.eth[1].queue.dataQueue outgoingDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPulled)
+attr title "outgoing datarate"
+attr unit bps
+vector 63 SimpleNetwork.switch.eth[1].queue.dataQueue incomingDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPushStarted)
+attr title "incoming datarate"
+attr unit bps
+vector 64 SimpleNetwork.switch.eth[1].queue.scheduler dataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPulled)
+attr title "data rate"
+attr unit bps
+vector 65 SimpleNetwork.switch.eth[2].queue.classifier dataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPushed)
+attr title "data rate"
+attr unit bps
+vector 66 SimpleNetwork.switch.eth[2].queue.pauseQueue outgoingDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPulled)
+attr title "outgoing datarate"
+attr unit bps
+vector 67 SimpleNetwork.switch.eth[2].queue.pauseQueue incomingDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPushStarted)
+attr title "incoming datarate"
+attr unit bps
+vector 68 SimpleNetwork.switch.eth[2].queue.dataQueue outgoingDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPulled)
+attr title "outgoing datarate"
+attr unit bps
+vector 69 SimpleNetwork.switch.eth[2].queue.dataQueue incomingDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPushStarted)
+attr title "incoming datarate"
+attr unit bps
+vector 70 SimpleNetwork.switch.eth[2].queue.scheduler dataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPulled)
+attr title "data rate"
+attr unit bps
+vector 71 SimpleNetwork.switch.eth[3].queue.classifier dataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPushed)
+attr title "data rate"
+attr unit bps
+vector 72 SimpleNetwork.switch.eth[3].queue.pauseQueue outgoingDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPulled)
+attr title "outgoing datarate"
+attr unit bps
+vector 73 SimpleNetwork.switch.eth[3].queue.pauseQueue incomingDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPushStarted)
+attr title "incoming datarate"
+attr unit bps
+vector 74 SimpleNetwork.switch.eth[3].queue.dataQueue outgoingDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPulled)
+attr title "outgoing datarate"
+attr unit bps
+vector 75 SimpleNetwork.switch.eth[3].queue.dataQueue incomingDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPushStarted)
+attr title "incoming datarate"
+attr unit bps
+vector 76 SimpleNetwork.switch.eth[3].queue.scheduler dataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPulled)
+attr title "data rate"
+attr unit bps
+vector 77 SimpleNetwork.net.ppp[0].queue outgoingDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPulled)
+attr title "outgoing datarate"
+attr unit bps
+vector 78 SimpleNetwork.net.ppp[0].queue incomingDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPushStarted)
+attr title "incoming datarate"
+attr unit bps
+vector 79 SimpleNetwork.net.ppp[1].queue outgoingDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPulled)
+attr title "outgoing datarate"
+attr unit bps
+vector 80 SimpleNetwork.net.ppp[1].queue incomingDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPushStarted)
+attr title "incoming datarate"
+attr unit bps
+vector 81 SimpleNetwork.router.ppp[0].queue outgoingDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPulled)
+attr title "outgoing datarate"
+attr unit bps
+vector 82 SimpleNetwork.router.ppp[0].queue incomingDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPushStarted)
+attr title "incoming datarate"
+attr unit bps
+vector 83 SimpleNetwork.router.eth[0].queue.classifier dataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPushed)
+attr title "data rate"
+attr unit bps
+vector 84 SimpleNetwork.router.eth[0].queue.pauseQueue outgoingDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPulled)
+attr title "outgoing datarate"
+attr unit bps
+vector 85 SimpleNetwork.router.eth[0].queue.pauseQueue incomingDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPushStarted)
+attr title "incoming datarate"
+attr unit bps
+vector 86 SimpleNetwork.router.eth[0].queue.dataQueue outgoingDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPulled)
+attr title "outgoing datarate"
+attr unit bps
+vector 87 SimpleNetwork.router.eth[0].queue.dataQueue incomingDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPushStarted)
+attr title "incoming datarate"
+attr unit bps
+vector 88 SimpleNetwork.router.eth[0].queue.scheduler dataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPulled)
+attr title "data rate"
+attr unit bps
+vector 89 SimpleNetwork.server.ppp[0].queue outgoingDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPulled)
+attr title "outgoing datarate"
+attr unit bps
+vector 90 SimpleNetwork.server.ppp[0].queue incomingDataRate:vector ETV
+attr interpolationmode linear
+attr recordingmode vector
+attr source throughput(packetPushStarted)
+attr title "incoming datarate"
+attr unit bps
+23	22133 35 6 6 1.000002743819 1.000002743819 1 134119633.9846 134119633.9846 134119633.9846 1.7988076220164e+16
+25	22168 35 6 6 1.000002743819 1.000002743819 1 134119633.9846 134119633.9846 134119633.9846 1.7988076220164e+16
+28	22203 35 6 6 1.000002743819 1.000002743819 1 134119633.9846 134119633.9846 134119633.9846 1.7988076220164e+16
+30	22238 35 6 6 1.000002743819 1.000002743819 1 134119633.9846 134119633.9846 134119633.9846 1.7988076220164e+16
+37	22273 130 6 6 0.1 1.000002743819 11 0 0 0 0
+38	22403 130 6 6 0.1 1.000002743819 11 0 0 0 0
+39	22533 130 6 6 0.1 1.000002743819 11 0 0 0 0
+40	22663 130 6 6 0.1 1.000002743819 11 0 0 0 0
+41	22793 130 6 6 0.1 1.000002743819 11 0 0 0 0
+42	22923 130 6 6 0.1 1.000002743819 11 0 0 0 0
+43	23053 130 6 6 0.1 1.000002743819 11 0 0 0 0
+44	23183 130 6 6 0.1 1.000002743819 11 0 0 0 0
+45	23313 130 6 6 0.1 1.000002743819 11 0 0 0 0
+46	23443 130 6 6 0.1 1.000002743819 11 0 0 0 0
+47	23573 130 6 6 0.1 1.000002743819 11 0 0 0 0
+48	23703 130 6 6 0.1 1.000002743819 11 0 0 0 0
+49	23833 130 6 6 0.1 1.000002743819 11 0 0 0 0
+50	23963 130 6 6 0.1 1.000002743819 11 0 0 0 0
+51	24093 130 6 6 0.1 1.000002743819 11 0 0 0 0
+52	24223 130 6 6 0.1 1.000002743819 11 0 0 0 0
+53	24353 130 6 6 0.1 1.000002743819 11 0 0 0 0
+54	24483 130 6 6 0.1 1.000002743819 11 0 0 0 0
+55	24613 130 6 6 0.1 1.000002743819 11 0 0 0 0
+56	24743 130 6 6 0.1 1.000002743819 11 0 0 0 0
+57	24873 130 6 6 0.1 1.000002743819 11 0 0 0 0
+58	25003 130 6 6 0.1 1.000002743819 11 0 0 0 0
+59	25133 130 6 6 0.1 1.000002743819 11 0 0 0 0
+60	25263 130 6 6 0.1 1.000002743819 11 0 0 0 0
+61	25393 130 6 6 0.1 1.000002743819 11 0 0 0 0
+62	25523 130 6 6 0.1 1.000002743819 11 0 0 0 0
+63	25653 130 6 6 0.1 1.000002743819 11 0 0 0 0
+64	25783 130 6 6 0.1 1.000002743819 11 0 0 0 0
+65	25913 130 6 6 0.1 1.000002743819 11 0 0 0 0
+66	26043 130 6 6 0.1 1.000002743819 11 0 0 0 0
+67	26173 130 6 6 0.1 1.000002743819 11 0 0 0 0
+68	26303 130 6 6 0.1 1.000002743819 11 0 0 0 0
+69	26433 130 6 6 0.1 1.000002743819 11 0 0 0 0
+70	26563 130 6 6 0.1 1.000002743819 11 0 0 0 0
+71	26693 130 6 6 0.1 1.000002743819 11 0 0 0 0
+72	26823 130 6 6 0.1 1.000002743819 11 0 0 0 0
+73	26953 130 6 6 0.1 1.000002743819 11 0 0 0 0
+74	27083 130 6 6 0.1 1.000002743819 11 0 0 0 0
+75	27213 130 6 6 0.1 1.000002743819 11 0 0 0 0
+76	27343 130 6 6 0.1 1.000002743819 11 0 0 0 0
+77	27473 130 6 6 0.1 1.000002743819 11 0 0 0 0
+78	27603 130 6 6 0.1 1.000002743819 11 0 0 0 0
+79	27733 130 6 6 0.1 1.000002743819 11 0 0 0 0
+80	27863 130 6 6 0.1 1.000002743819 11 0 0 0 0
+81	27993 130 6 6 0.1 1.000002743819 11 0 0 0 0
+82	28123 130 6 6 0.1 1.000002743819 11 0 0 0 0
+83	28253 130 6 6 0.1 1.000002743819 11 0 0 0 0
+84	28383 130 6 6 0.1 1.000002743819 11 0 0 0 0
+85	28513 130 6 6 0.1 1.000002743819 11 0 0 0 0
+86	28643 130 6 6 0.1 1.000002743819 11 0 0 0 0
+87	28773 130 6 6 0.1 1.000002743819 11 0 0 0 0
+88	28903 130 6 6 0.1 1.000002743819 11 0 0 0 0
+89	29033 130 6 6 0.1 1.000002743819 11 0 0 0 0
+90	29163 130 6 6 0.1 1.000002743819 11 0 0 0 0
+

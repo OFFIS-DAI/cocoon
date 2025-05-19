@@ -1,4 +1,5 @@
-package omnet_project.networks;
+package networks;
+
 import inet.networklayer.configurator.ipv4.Ipv4NetworkConfigurator;
 import inet.node.ethernet.EthernetSwitch;
 import inet.node.inet.Router;
