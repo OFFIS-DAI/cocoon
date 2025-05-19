@@ -1,8 +1,11 @@
+import socket
+import threading
+import time
+import queue
 import logging
 import os
 import subprocess
-import time
-from typing import Optional
+from typing import Optional, List
 
 from mango.container.external_coupling import ExternalAgentMessage
 
@@ -14,7 +17,10 @@ class OmnetConnection:
                  inet_installation_path: str,
                  config_name: str,
                  omnet_project_path: str,
-                 ini_file_name: str = 'omnetpp.ini'):
+                 ini_file_name: str = 'omnetpp.ini',
+                 socket_host: str = "127.0.0.1",
+                 socket_port: int = 8345,
+                 socket_timeout: int = 30):
         """
         Initialize the OMNeT++ connection
 
@@ -23,6 +29,9 @@ class OmnetConnection:
             config_name: Name of the configuration to run
             omnet_project_path: Path to the simulations directory inside the project
             ini_file_name: Name of the ini file (default: omnetpp.ini)
+            socket_host: Host address for TCP socket connection (default: 127.0.0.1)
+            socket_port: Port number for TCP socket connection (default: 8345)
+            socket_timeout: Socket connection timeout in seconds (default: 30)
         """
         self.inet_installation_path = inet_installation_path
         self.config_name = config_name
@@ -33,6 +42,15 @@ class OmnetConnection:
         self.omnet_process = None
         self.running = False
 
+        # Socket communication
+        self.socket_host = socket_host
+        self.socket_port = socket_port
+        self.socket_timeout = socket_timeout
+        self.socket = None
+        self.listener_thread = None
+        self.socket_running = False
+        self.message_queue = queue.Queue()
+
     def initialize(self):
         """Initialize the connection and start OMNeT++ simulation"""
         try:
@@ -42,23 +60,28 @@ class OmnetConnection:
             # Then start OMNeT++ simulation (from the simulations directory)
             self.omnet_process = self.start_omnet_simulation()
             self.running = True
+
+            # Connect to the OMNeT++ simulation via socket
+            if not self.connect_socket():
+                raise Exception("Failed to establish socket connection with OMNeT++")
+
         except Exception as e:
             logger.error(f'Error during OMNeT++ initialization: {e}')
+            self.cleanup()
             raise
 
     def build_omnet_project(self):
-        """Build the OMNeT++ project from the root directory"""
+        """Build the OMNeT++ project from the root directory using explicit compilation steps"""
         try:
             print("Building OMNeT++ project...")
-            # Print current directory for debugging
 
-            # Now build the project
-            build_command = "make"
+            # Now run the normal build
+            build_command = "make LDFLAGS='-pthread' LIBS='-lpthread'"
             build_process = subprocess.run(
                 build_command,
                 shell=True,
-                cwd=self.omnet_project_path,  # Use the parent directory with Makefile
-                check=True,  # Raise exception if build fails
+                cwd=self.omnet_project_path,
+                check=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE
             )
@@ -114,6 +137,197 @@ class OmnetConnection:
         except Exception as e:
             print(f"Error starting OMNeT++ simulation: {e}")
             raise
+
+    def connect_socket(self) -> bool:
+        """
+        Connect to the OMNeT++ simulator via TCP socket
+
+        Returns:
+            True if connection successful, False otherwise
+        """
+        try:
+            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.socket.settimeout(self.socket_timeout)
+
+            logger.info(f"Connecting to OMNeT++ simulator at {self.socket_host}:{self.socket_port}")
+            self.socket.connect((self.socket_host, self.socket_port))
+            logger.info("Connected to OMNeT++ simulator")
+
+            # Start listener thread
+            self.socket_running = True
+            self.listener_thread = threading.Thread(target=self._listen_for_messages)
+            self.listener_thread.daemon = True
+            self.listener_thread.start()
+
+            # Wait for initialization message
+            init_msg = self.receive_message(timeout=self.socket_timeout)
+            if init_msg != "INIT":
+                logger.error(f"Expected INIT message, received: {init_msg}")
+                self.disconnect_socket()
+                return False
+
+            return True
+        except socket.timeout:
+            logger.error(f"Connection timed out after {self.socket_timeout} seconds")
+            return False
+        except ConnectionRefusedError:
+            logger.error(
+                f"Connection refused. Is the OMNeT++ simulator ready and listening on {self.socket_host}:{self.socket_port}?")
+            return False
+        except Exception as e:
+            logger.error(f"Error connecting to OMNeT++ simulator: {e}")
+            return False
+
+    def disconnect_socket(self) -> None:
+        """
+        Disconnect from the OMNeT++ simulator socket
+        """
+        self.socket_running = False
+
+        if self.socket:
+            try:
+                self.socket.close()
+            except Exception as e:
+                logger.error(f"Error closing socket: {e}")
+            finally:
+                self.socket = None
+
+        if self.listener_thread and self.listener_thread.is_alive():
+            self.listener_thread.join(timeout=2.0)
+
+        logger.info("Disconnected from OMNeT++ simulator socket")
+
+    def _listen_for_messages(self) -> None:
+        """
+        Background thread to listen for incoming messages from OMNeT++
+        """
+        if not self.socket:
+            logger.error("Cannot listen for messages: Socket not connected")
+            return
+
+        self.socket.settimeout(0.1)  # Short timeout for non-blocking checks
+
+        while self.socket_running:
+            try:
+                buffer = bytearray(4096)
+                bytes_read = self.socket.recv_into(buffer)
+
+                if bytes_read > 0:
+                    message = buffer[:bytes_read].decode('utf-8')
+                    logger.debug(f"Received message: {message}")
+
+                    # Handle termination message
+                    if message == "TERM":
+                        logger.info("Received termination message from OMNeT++")
+                        self.socket_running = False
+                        break
+
+                    # Add message to queue
+                    self.message_queue.put(message)
+                elif bytes_read == 0:
+                    logger.info("OMNeT++ simulator closed the connection")
+                    self.socket_running = False
+                    break
+            except socket.timeout:
+                # This is expected with the non-blocking socket
+                pass
+            except Exception as e:
+                if self.socket_running:  # Only log if we're supposed to be running
+                    logger.error(f"Error receiving message: {e}")
+                    self.socket_running = False
+                    break
+
+            time.sleep(0.01)  # Small sleep to prevent CPU spinning
+
+    def send_message(self, message: str) -> bool:
+        """
+        Send a message to the OMNeT++ simulator
+
+        Args:
+            message: Message to send
+
+        Returns:
+            True if message was sent successfully, False otherwise
+        """
+        if not self.socket:
+            logger.error("Cannot send message: Socket not connected")
+            return False
+
+        try:
+            self.socket.sendall(message.encode('utf-8'))
+            logger.debug(f"Sent message: {message}")
+            return True
+        except Exception as e:
+            logger.error(f"Error sending message: {e}")
+            return False
+
+    def receive_message(self, timeout: Optional[float] = None) -> Optional[str]:
+        """
+        Receive a message from the OMNeT++ simulator
+
+        Args:
+            timeout: Time to wait for a message (None = wait forever)
+
+        Returns:
+            Message string or None if timeout or error
+        """
+        try:
+            return self.message_queue.get(block=True, timeout=timeout)
+        except queue.Empty:
+            return None
+
+    def has_messages(self) -> bool:
+        """
+        Check if there are any messages in the queue
+
+        Returns:
+            True if there are messages, False otherwise
+        """
+        return not self.message_queue.empty()
+
+    def get_all_messages(self) -> List[str]:
+        """
+        Get all available messages from the queue
+
+        Returns:
+            List of message strings
+        """
+        messages = []
+        while self.has_messages():
+            messages.append(self.receive_message(timeout=0.01))
+        return messages
+
+    def cleanup(self):
+        """Clean up resources when shutting down"""
+        # First disconnect the socket
+        self.disconnect_socket()
+
+        # Then terminate the OMNeT++ process if it's running
+        if self.omnet_process and self.running:
+            try:
+                # Send SIGTERM to the process group to kill all child processes
+                os.killpg(os.getpgid(self.omnet_process.pid), subprocess.signal.SIGTERM)
+
+                # Wait for process to terminate
+                self.omnet_process.wait(timeout=5)
+            except:
+                # If it doesn't terminate, try SIGKILL
+                try:
+                    os.killpg(os.getpgid(self.omnet_process.pid), subprocess.signal.SIGKILL)
+                except:
+                    pass
+
+            self.running = False
+            self.omnet_process = None
+
+    def __enter__(self):
+        """Context manager entry"""
+        self.initialize()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit"""
+        self.cleanup()
 
 
 class DetailedNetworkModel:

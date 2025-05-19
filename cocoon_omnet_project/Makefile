@@ -2,7 +2,7 @@
 # OMNeT++/OMNEST Makefile for cocoon_omnet_project
 #
 # This file was generated with the command:
-#  opp_makemake -f --deep -O out -KINET4_5_PROJ=/home/malin/cocoon_omnet_workspace/inet4.5 -DINET_IMPORT -I. -I$$\(INET4_5_PROJ\)/src -L$$\(INET4_5_PROJ\)/src -lINET$$\(D\)
+#  opp_makemake -f --deep -O out -KINET4_5_PROJ=/home/malin/cocoon_omnet_workspace/inet4.5 -DINET_IMPORT -I. -I$$\(INET4_5_PROJ\)/src -L$$\(INET4_5_PROJ\)/src -lINET$$\(D\) -- -lpthread
 #
 
 # Name of target to be created (-o option)
@@ -22,7 +22,7 @@ USERIF_LIBS = $(ALL_ENV_LIBS) # that is, $(QTENV_LIBS) $(CMDENV_LIBS)
 INCLUDE_PATH = -I. -I$(INET4_5_PROJ)/src
 
 # Additional object and library files to link with
-EXTRA_OBJS =
+EXTRA_OBJS = -lpthread
 
 # Additional libraries (-L, -l options)
 LIBS = $(LDFLAG_LIBPATH)$(INET4_5_PROJ)/src  -lINET$(D)

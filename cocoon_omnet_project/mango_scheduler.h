@@ -1,34 +1,64 @@
 /*
  * mango_scheduler.h
- *
- *  Created on: May 16, 2025
- *      Author: malin
  */
-
-#ifndef MODULES_MANGO_SCHEDULER_H_
-#define MODULES_MANGO_SCHEDULER_H_
+#ifndef __MANGO_SCHEDULER_H
+#define __MANGO_SCHEDULER_H
 
 #include <omnetpp.h>
+#include <iostream>
+#include <string>
+#include <cstring>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <queue>
 
 using namespace omnetpp;
 
-class MangoScheduler : public cScheduler{
-public:
-    MangoScheduler();
+class MangoScheduler : public cScheduler
+{
+  private:
+    // Socket related members
+    int serverSocket = -1;
+    int clientSocket = -1;
+    std::thread* listenerThread = nullptr;
+    bool running = false;
 
+    // Message queue and synchronization
+    std::queue<std::string> messageQueue;
+    std::mutex queueMutex;
+    std::condition_variable queueCondition;
+
+    // Socket configuration
+    const int PORT = 8345;
+    const char* HOST = "127.0.0.1";
+
+    // Helper methods for socket operations
+    void setupServerSocket();
+    void listenForMessages();
+
+  public:
+    MangoScheduler();
     virtual ~MangoScheduler();
 
-    // Overridden scheduler methods
-    virtual std::string str() const override;
+    // cScheduler methods
     virtual void startRun() override;
     virtual void endRun() override;
-    virtual cEvent* guessNextEvent() override;
-    virtual cEvent* takeNextEvent() override;
-    virtual void putBackEvent(cEvent* event) override;
+    virtual cEvent *guessNextEvent() override;
+    virtual cEvent *takeNextEvent() override;
+    virtual void putBackEvent(cEvent *event) override;
 
+    // Socket communication methods
+    void sendMessage(const std::string& message);
+    std::string receiveMessage(bool blocking = true);
+    bool hasMessage();
+
+    virtual std::string str() const override;
 };
 
-
-
-
-#endif /* MODULES_MANGO_SCHEDULER_H_ */
+#endif // __MANGO_SCHEDULER_H
