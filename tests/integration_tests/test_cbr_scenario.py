@@ -184,7 +184,7 @@ async def run_scenario_with_detailed_communication_simulation():
                                                                              'node2': container2},
                                                           inet_installation_path='/home/malin/cocoon_omnet_workspace/inet4.5/src',
                                                           config_name='General',
-                                                          omnet_project_path='/home/malin/cocoon_omnet_workspace/mango_omnet_project/simulations/')
+                                                          omnet_project_path='/home/malin/PycharmProjects/cocoon_DAI/omnet_project/')
 
     async with activate(container1, container2) as _:
         results_recorder.start_scenario_recording()
