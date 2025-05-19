@@ -77,14 +77,14 @@ class OmnetConnection:
     def start_omnet_simulation(self):
         """Start OMNeT++ simulation process from the simulations directory"""
         # Build the command
-        command = (f'./run '
+        command = (f'./cocoon_omnet_project -m '
                    f'-u Cmdenv '
                    f'-n {self.inet_installation_path} '
                    f'-f {self.ini_file_name} '
-                   f'-c {self.config_name}')
+                   f'-c {self.config_name} ')
 
         try:
-            omnet_ini_path = self.omnet_project_path + 'simulations'
+            omnet_ini_path = self.omnet_project_path
 
             print(f"Starting OMNeT++ simulation with command: {command}")
             print(f"Working directory: {omnet_ini_path}")
@@ -99,11 +99,16 @@ class OmnetConnection:
             if omnet_process.poll() is not None:
                 # Process has already terminated
                 stdout, stderr = omnet_process.communicate()
-                error_msg = f"OMNeT++ process failed to start.\nStdout: {stdout.decode('utf-8') if stdout else None}\nStderr: {stderr.decode('utf-8') if stderr else None}"
+                error_msg = (f"OMNeT++ process failed to start.\nStdout: {stdout.decode('utf-8') if stdout else None}"
+                             f"\nStderr: {stderr.decode('utf-8') if stderr else None}")
                 print(error_msg)
                 raise Exception(error_msg)
 
             print(f"OMNeT++ simulation started with PID: {omnet_process.pid}")
+
+            # Give the simulator time to initialize and start listening for connections
+            time.sleep(5)
+
             return omnet_process
 
         except Exception as e:
