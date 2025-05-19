@@ -23,10 +23,10 @@ network SimpleNetwork
         client: StandardHost {
             @display("p=250,100;i=device/laptop");
         }
-        host1: StandardHost {
+        node0: StandardHost {
             @display("p=250,200;i=device/pc");
         }
-        host2: StandardHost {
+        node1: StandardHost {
             @display("p=250,300;i=device/pc");
         }
         switch: EthernetSwitch {
@@ -46,8 +46,8 @@ network SimpleNetwork
         }
     connections:
         client.ethg++ <--> ethline <--> switch.ethg++;
-        switch.ethg++ <--> ethline <--> host1.ethg++;
-        switch.ethg++ <--> ethline <--> host2.ethg++;
+        switch.ethg++ <--> ethline <--> node0.ethg++;
+        switch.ethg++ <--> ethline <--> node1.ethg++;
         router.ethg++ <--> ethline <--> switch.ethg++;
         router.pppg++ <--> fiberline <--> net.pppg++;
         server.pppg++ <--> fiberline <--> net.pppg++;

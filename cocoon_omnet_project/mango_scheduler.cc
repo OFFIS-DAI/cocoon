@@ -1,11 +1,41 @@
 /*
  * mango_scheduler.cc
  */
-// Force pthread linkage
 extern "C" {
-    #include <pthread.h>
+#include <pthread.h>
 }
 #include "mango_scheduler.h"
+
+#include <json.hpp> // Add this at the top after other includes
+using json = nlohmann::json;
+
+// Forward declare a NetworkMessage class for our simulation messages
+class MangoMessage : public cMessage {
+private:
+    std::string messageId;
+    std::string senderId;
+    std::string receiverId;
+    int64_t messageSize;
+    simtime_t creationTime;
+
+public:
+    MangoMessage(const char* name = nullptr) : cMessage(name) {}
+
+    void setMessageId(const std::string& id) { messageId = id; }
+    std::string getMessageId() const { return messageId; }
+
+    void setSenderId(const std::string& id) { senderId = id; }
+    std::string getSenderId() const { return senderId; }
+
+    void setReceiverId(const std::string& id) { receiverId = id; }
+    std::string getReceiverId() const { return receiverId; }
+
+    void setMessageSize(int64_t size) { messageSize = size; }
+    int64_t getMessageSize() const { return messageSize; }
+
+    void setCreationTime(simtime_t time) { creationTime = time; }
+    simtime_t getCreationTime() const { return creationTime; }
+};
 
 Register_Class(MangoScheduler);
 
@@ -94,6 +124,7 @@ void MangoScheduler::setupServerSocket() {
     listenerThread = new std::thread(&MangoScheduler::listenForMessages, this);
 }
 
+
 void MangoScheduler::listenForMessages() {
     char buffer[4096];
 
@@ -103,8 +134,12 @@ void MangoScheduler::listenForMessages() {
 
         if (bytesRead > 0) {
             std::string message(buffer, bytesRead);
+            std::cout << "Received message from Python: " << message << std::endl;
 
-            // Add message to queue
+            // Process the message immediately
+            processMessage(message);
+
+            // Add message to queue for other components that might need it
             {
                 std::lock_guard<std::mutex> lock(queueMutex);
                 messageQueue.push(message);
@@ -112,8 +147,6 @@ void MangoScheduler::listenForMessages() {
 
             // Notify waiting threads
             queueCondition.notify_one();
-
-            std::cout << "Received message from Python: " << message << std::endl;
         }
         else if (bytesRead == 0) {
             std::cout << "Python client disconnected" << std::endl;
@@ -129,6 +162,86 @@ void MangoScheduler::listenForMessages() {
 
         // Sleep to prevent busy waiting
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+}
+
+void MangoScheduler::processMessage(const std::string& message) {
+    try {
+        // Split the message into type and payload
+        size_t delimiterPos = message.find('|');
+        if (delimiterPos == std::string::npos) {
+            std::cerr << "Invalid message format: " << message << std::endl;
+            return;
+        }
+
+        std::string type = message.substr(0, delimiterPos);
+        std::string payload = message.substr(delimiterPos + 1);
+
+        if (type == "MESSAGE") {
+            // Parse the JSON payload
+            json data = json::parse(payload);
+
+            // Extract the fields
+            std::string sender = data["sender"];
+            std::string receiver = data["receiver"];
+            int64_t size_B = data["size_B"];
+            double time_send_ms = data["time_send_ms"];
+            std::string msg_id = data["msg_id"];
+            double max_advance = data["max_advance"];
+
+            // Update max time advance
+            maxTimeAdvance = max_advance;
+
+            // Log the extracted information
+            std::cout << "Processing message: " << std::endl;
+            std::cout << "  Sender: " << sender << std::endl;
+            std::cout << "  Receiver: " << receiver << std::endl;
+            std::cout << "  Size: " << size_B << " bytes" << std::endl;
+            std::cout << "  Send time: " << time_send_ms << " ms" << std::endl;
+            std::cout << "  Message ID: " << msg_id << std::endl;
+            std::cout << "  Max advance: " << max_advance << std::endl;
+
+            // Create and schedule a network message
+            MangoMessage* mangoMsg = new MangoMessage("MangoMessage");
+            mangoMsg->setMessageId(msg_id);
+            mangoMsg->setSenderId(sender);
+            mangoMsg->setReceiverId(receiver);
+            mangoMsg->setMessageSize(size_B);
+            mangoMsg->setCreationTime(time_send_ms);
+
+            // Find modules (in a real implementation, you would look up the actual modules)
+            cModule* senderModule = getSimulation()->getModuleByPath(sender.c_str());
+            cModule* receiverModule = getSimulation()->getModuleByPath(receiver.c_str());
+
+            if (senderModule && receiverModule) {
+                mangoMsg->setArrival(senderModule->getId(), -1, time_send_ms);
+                getSimulation()->getFES()->insert(mangoMsg);
+
+                std::cout << "Scheduled message " << msg_id << " at time "
+                          << time_send_ms << std::endl;
+
+                // Send a confirmation back to Python
+                sendMessage("SCHEDULED|" + msg_id);
+            }
+            else {
+                std::cerr << "Error: Could not find sender or receiver module." << std::endl;
+                std::cerr << "Sender path: " << sender << std::endl;
+                std::cerr << "Receiver path: " << receiver << std::endl;
+
+                // Send an error message back to Python
+                sendMessage("ERROR|Could not find sender or receiver module");
+
+                // Clean up the message
+                delete mangoMsg;
+            }
+        }
+        else {
+            std::cout << "Unhandled message type: " << type << std::endl;
+        }
+    }
+    catch (const std::exception& e) {
+        std::cerr << "Error processing message: " << e.what() << std::endl;
+        sendMessage("ERROR|" + std::string(e.what()));
     }
 }
 

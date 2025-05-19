@@ -22,7 +22,7 @@ using namespace omnetpp;
 
 class MangoScheduler : public cScheduler
 {
-  private:
+private:
     // Socket related members
     int serverSocket = -1;
     int clientSocket = -1;
@@ -42,7 +42,13 @@ class MangoScheduler : public cScheduler
     void setupServerSocket();
     void listenForMessages();
 
-  public:
+    // For tracking messages and time bounds
+    simtime_t maxTimeAdvance = SIMTIME_MAX;
+
+    // Add the message processing method
+    void processMessage(const std::string& message);
+
+public:
     MangoScheduler();
     virtual ~MangoScheduler();
 
