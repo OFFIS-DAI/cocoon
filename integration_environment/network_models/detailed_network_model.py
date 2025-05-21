@@ -1,3 +1,4 @@
+import json
 import socket
 import threading
 import time
@@ -5,7 +6,7 @@ import queue
 import logging
 import os
 import subprocess
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 
 from mango.container.external_coupling import ExternalAgentMessage
 
@@ -51,6 +52,9 @@ class OmnetConnection:
         self.socket_running = False
         self.message_queue = queue.Queue()
 
+        # Flag to track if termination was acknowledged
+        self.termination_acknowledged = False
+
     def initialize(self):
         """Initialize the connection and start OMNeT++ simulation"""
         try:
@@ -71,12 +75,12 @@ class OmnetConnection:
             raise
 
     def build_omnet_project(self):
-        """Build the OMNeT++ project from the root directory using explicit compilation steps"""
+        """Build the OMNeT++ project from the root directory"""
         try:
             print("Building OMNeT++ project...")
 
             # Now run the normal build
-            build_command = "make LDFLAGS='-pthread' LIBS='-lpthread'"
+            build_command = "make MODE=release all"
             build_process = subprocess.run(
                 build_command,
                 shell=True,
@@ -216,11 +220,16 @@ class OmnetConnection:
                     message = buffer[:bytes_read].decode('utf-8')
                     logger.debug(f"Received message: {message}")
 
-                    # Handle termination message
+                    # Handle termination acknowledgment message
                     if message == "TERM":
                         logger.info("Received termination message from OMNeT++")
                         self.socket_running = False
                         break
+
+                    # Check for termination acknowledgment
+                    if message.startswith("TERM_ACK"):
+                        logger.info("Received termination acknowledgment from OMNeT++")
+                        self.termination_acknowledged = True
 
                     # Add message to queue
                     self.message_queue.put(message)
@@ -240,15 +249,6 @@ class OmnetConnection:
             time.sleep(0.01)  # Small sleep to prevent CPU spinning
 
     def send_message(self, message: str) -> bool:
-        """
-        Send a message to the OMNeT++ simulator
-
-        Args:
-            message: Message to send
-
-        Returns:
-            True if message was sent successfully, False otherwise
-        """
         if not self.socket:
             logger.error("Cannot send message: Socket not connected")
             return False
@@ -262,19 +262,62 @@ class OmnetConnection:
             return False
 
     def receive_message(self, timeout: Optional[float] = None) -> Optional[str]:
-        """
-        Receive a message from the OMNeT++ simulator
-
-        Args:
-            timeout: Time to wait for a message (None = wait forever)
-
-        Returns:
-            Message string or None if timeout or error
-        """
         try:
             return self.message_queue.get(block=True, timeout=timeout)
         except queue.Empty:
             return None
+
+    def send_message_to_omnet(self, sender: str, receiver: str,
+                              msg_size_B: int, time_send_ms: float,
+                              msg_id: str, max_advance: int) -> str:
+        payload = {
+            "sender": sender,
+            "receiver": receiver,
+            "size_B": msg_size_B,
+            "time_send_ms": time_send_ms,
+            "msg_id": msg_id,
+            "max_advance": max_advance
+        }
+
+        message = f"MESSAGE|{json.dumps(payload)}"
+        success = self.send_message(message)
+
+        if not success:
+            logger.error(f"Failed to send dispatch message: {message}")
+
+        return msg_id
+
+    def send_termination_signal(self) -> bool:
+        """
+        Send termination signal to OMNeT++ and wait for acknowledgment
+
+        Returns:
+            True if termination was acknowledged, False otherwise
+        """
+        # Reset the flag first
+        self.termination_acknowledged = False
+
+        # Send the termination signal
+        success = self.send_message("TERMINATE|")
+        if not success:
+            logger.error("Failed to send termination signal to OMNeT++")
+            return False
+
+        logger.info("Termination signal sent to OMNeT++, waiting for acknowledgment...")
+
+        # Wait for acknowledgment (up to 10 seconds)
+        max_wait = 10  # seconds
+        start_time = time.time()
+
+        while not self.termination_acknowledged and (time.time() - start_time) < max_wait:
+            time.sleep(0.1)
+
+        if self.termination_acknowledged:
+            logger.info("OMNeT++ acknowledged termination signal")
+            return True
+        else:
+            logger.warning("OMNeT++ did not acknowledge termination signal within timeout")
+            return False
 
     def has_messages(self) -> bool:
         """
@@ -299,7 +342,14 @@ class OmnetConnection:
 
     def cleanup(self):
         """Clean up resources when shutting down"""
-        # First disconnect the socket
+        # First send termination signal if we're still connected
+        if self.socket and self.socket_running:
+            logger.info("Sending termination signal before cleanup")
+            self.send_termination_signal()
+            # Give a short delay for the simulator to process the termination
+            time.sleep(1)
+
+        # Then disconnect the socket
         self.disconnect_socket()
 
         # Then terminate the OMNeT++ process if it's running
@@ -340,5 +390,20 @@ class DetailedNetworkModel:
                                                 omnet_project_path=omnet_project_path)
         self.omnet_connection.initialize()
 
+    def terminate_simulation(self):
+        """
+        Send termination signal to OMNeT++ simulation
+        """
+        if self.omnet_connection:
+            return self.omnet_connection.send_termination_signal()
+        return False
+
     def simulate_message_dispatch(self, sender_message_dict: dict[str, list[ExternalAgentMessage]]):
         pass
+
+    def cleanup(self):
+        """
+        Clean up resources when finished with the simulation
+        """
+        if self.omnet_connection:
+            self.omnet_connection.cleanup()

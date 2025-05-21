@@ -17,6 +17,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <queue>
+#include <chrono>
 
 using namespace omnetpp;
 
@@ -34,6 +35,8 @@ private:
     std::mutex queueMutex;
     std::condition_variable queueCondition;
 
+    std::list<omnetpp::cModule*> modules = {};
+
     // Socket configuration
     const int PORT = 8345;
     const char* HOST = "127.0.0.1";
@@ -41,12 +44,17 @@ private:
     // Helper methods for socket operations
     void setupServerSocket();
     void listenForMessages();
+    void cleanup();
 
     // For tracking messages and time bounds
     simtime_t maxTimeAdvance = SIMTIME_MAX;
 
+    // Flag to track if termination message from Python was received
+    bool terminationReceived = false;
+
     // Add the message processing method
     void processMessage(const std::string& message);
+    cModule *getReceiverModule(std::string module_name);
 
 public:
     MangoScheduler();
@@ -58,6 +66,8 @@ public:
     virtual cEvent *guessNextEvent() override;
     virtual cEvent *takeNextEvent() override;
     virtual void putBackEvent(cEvent *event) override;
+
+    void registerApp(cModule *mod);
 
     // Socket communication methods
     void sendMessage(const std::string& message);

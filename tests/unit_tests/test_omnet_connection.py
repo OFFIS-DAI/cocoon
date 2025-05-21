@@ -1,3 +1,4 @@
+import time
 import unittest
 import logging
 
@@ -9,35 +10,33 @@ logging.basicConfig(level=logging.DEBUG)
 class TestOmnetSocketConnection(unittest.TestCase):
     """Test the OMNeT++ socket connection"""
 
-    def test_socket_connection(self):
-        """Test establishing a socket connection to OMNeT++"""
+    def test_message_dispatch(self):
         # Create a connection
         connection = OmnetConnection(inet_installation_path='/home/malin/cocoon_omnet_workspace/inet4.5/src',
                                      config_name='General',
                                      omnet_project_path='/home/malin/PycharmProjects/cocoon_DAI/cocoon_omnet_project/')
+        # Start OMNeT++ and connect socket
+        connection.initialize()
+
+        time.sleep(1)
 
         try:
-            # Initialize (starts OMNeT++ and connects to socket)
-            connection.initialize()
-
-            # Send a test message
-            self.assertTrue(connection.send_message("TEST_MESSAGE"),
-                            "Failed to send test message")
-
-            # Wait for event messages (simulation events)
-            received_event = False
-            for _ in range(10):  # Try for up to 10 seconds
-                message = connection.receive_message(timeout=1)
-                if message and message.startswith("EVENT:"):
-                    received_event = True
-                    print(f"Received event message: {message}")
-                    break
-
-            self.assertTrue(received_event,
-                            "Did not receive any EVENT message from OMNeT++")
+            # Send several messages to simulate
+            self.assertTrue(
+                connection.send_message_to_omnet(
+                    sender="node0",
+                    receiver="node1",
+                    msg_size_B=1024,
+                    time_send_ms=10,
+                    msg_id='msg0',
+                    max_advance=15
+                ))
+            time.sleep(10)
+            print(connection.get_all_messages())
+            self.assertTrue(connection.send_termination_signal())
 
         finally:
-            # Clean up resources
+            # Clean up
             connection.cleanup()
 
 

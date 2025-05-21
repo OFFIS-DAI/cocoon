@@ -3,11 +3,23 @@
  */
 extern "C" {
 #include <pthread.h>
+#include <signal.h>
 }
 #include "mango_scheduler.h"
 
-#include <json.hpp> // Add this at the top after other includes
+#include <json.hpp>
 using json = nlohmann::json;
+
+// Signal handler flag to detect interruptions
+volatile sig_atomic_t sigintReceived = 0;
+
+// Signal handler for SIGINT
+void handleSignal(int signal) {
+    if (signal == SIGINT) {
+        sigintReceived = 1;
+        std::cout << "SIGINT received, preparing for graceful shutdown..." << std::endl;
+    }
+}
 
 // Forward declare a NetworkMessage class for our simulation messages
 class MangoMessage : public cMessage {
@@ -42,11 +54,22 @@ Register_Class(MangoScheduler);
 MangoScheduler::MangoScheduler()
 {
     std::cout << "MangoScheduler initialized." << std::endl;
+    terminationReceived = false;
+
+    // Set up signal handler for graceful interruption
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = handleSignal;
+    sigaction(SIGINT, &sa, NULL);
 }
 
 MangoScheduler::~MangoScheduler()
 {
     // Clean up resources if they haven't been cleaned up yet
+    cleanup();
+}
+
+void MangoScheduler::cleanup() {
     if (running) {
         running = false;
         if (listenerThread && listenerThread->joinable()) {
@@ -65,6 +88,30 @@ MangoScheduler::~MangoScheduler()
         close(serverSocket);
         serverSocket = -1;
     }
+}
+
+void MangoScheduler::registerApp(cModule *mod) {
+    std::cout << "App registered: " << mod->getFullPath() << std::endl;
+    modules.push_back(mod);
+}
+
+cModule *MangoScheduler::getReceiverModule(std::string module_name) {
+    // Get corresponding module to server name
+    cModule *matchingModule = nullptr;
+
+    std::cout << "Looking for module: " << module_name << std::endl;
+    std::cout << "Available modules: " << modules.size() << std::endl;
+
+    for (auto const& module : modules) {
+        std::string moduleNameCheck = std::string(module->getParentModule()->getName());
+        std::cout << "Checking module: " << moduleNameCheck << std::endl;
+        if (moduleNameCheck.compare(module_name) == 0) {
+            matchingModule = module;
+            std::cout << "Found matching module: " << module->getFullPath() << std::endl;
+            break;
+        }
+    }
+    return (matchingModule);
 }
 
 std::string MangoScheduler::str() const
@@ -107,63 +154,128 @@ void MangoScheduler::setupServerSocket() {
 
     std::cout << "Server socket set up, waiting for Python client to connect on port " << PORT << std::endl;
 
-    // Accept connection (blocking)
-    struct sockaddr_in clientAddr;
-    socklen_t clientAddrLen = sizeof(clientAddr);
-    clientSocket = accept(serverSocket, (struct sockaddr *)&clientAddr, &clientAddrLen);
+    // Set socket as non-blocking
+    int flags = fcntl(serverSocket, F_GETFL, 0);
+    fcntl(serverSocket, F_SETFL, flags | O_NONBLOCK);
 
-    if (clientSocket < 0) {
-        close(serverSocket);
-        throw cRuntimeError("Failed to accept client connection");
+    // Wait for connection with timeout
+    int timeout = 30; // seconds
+    time_t startTime = time(NULL);
+
+    while (!sigintReceived && time(NULL) - startTime < timeout) {
+        // Check for incoming connections (non-blocking)
+        struct sockaddr_in clientAddr;
+        socklen_t clientAddrLen = sizeof(clientAddr);
+        clientSocket = accept(serverSocket, (struct sockaddr *)&clientAddr, &clientAddrLen);
+
+        if (clientSocket >= 0) {
+            // Set client socket to non-blocking
+            flags = fcntl(clientSocket, F_GETFL, 0);
+            fcntl(clientSocket, F_SETFL, flags | O_NONBLOCK);
+
+            std::cout << "Python client connected" << std::endl;
+
+            // Start listener thread for incoming messages
+            running = true;
+            listenerThread = new std::thread(&MangoScheduler::listenForMessages, this);
+
+            // Successfully connected
+            return;
+        }
+
+        // Short delay before retrying
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+        if (sigintReceived) {
+            std::cout << "Received interrupt while waiting for client connection" << std::endl;
+            break;
+        }
     }
 
-    std::cout << "Python client connected" << std::endl;
-
-    // Start listener thread for incoming messages
-    running = true;
-    listenerThread = new std::thread(&MangoScheduler::listenForMessages, this);
+    if (clientSocket < 0) {
+        if (time(NULL) - startTime >= timeout) {
+            std::cout << "Timeout waiting for Python client connection" << std::endl;
+        }
+        close(serverSocket);
+        serverSocket = -1;
+        throw cRuntimeError("Failed to accept client connection");
+    }
 }
-
 
 void MangoScheduler::listenForMessages() {
     char buffer[4096];
 
-    while (running) {
+    // Set a smaller receive timeout to be more responsive to shutdown
+    struct timeval tv;
+    tv.tv_sec = 0;
+    tv.tv_usec = 100000; // 100ms
+    setsockopt(clientSocket, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof tv);
+
+    while (running && !sigintReceived) {
         memset(buffer, 0, sizeof(buffer));
-        ssize_t bytesRead = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
 
-        if (bytesRead > 0) {
-            std::string message(buffer, bytesRead);
-            std::cout << "Received message from Python: " << message << std::endl;
+        // Check if socket is ready to read
+        fd_set readfds;
+        FD_ZERO(&readfds);
+        FD_SET(clientSocket, &readfds);
 
-            // Process the message immediately
-            processMessage(message);
+        struct timeval timeout;
+        timeout.tv_sec = 0;
+        timeout.tv_usec = 50000; // 50ms
 
-            // Add message to queue for other components that might need it
-            {
-                std::lock_guard<std::mutex> lock(queueMutex);
-                messageQueue.push(message);
-            }
+        int activity = select(clientSocket + 1, &readfds, NULL, NULL, &timeout);
 
-            // Notify waiting threads
-            queueCondition.notify_one();
-        }
-        else if (bytesRead == 0) {
-            std::cout << "Python client disconnected" << std::endl;
+        if (activity < 0 && errno != EINTR) {
+            std::cerr << "Error in select: " << strerror(errno) << std::endl;
             break;
         }
-        else {
-            // Error occurred, check if we should continue
-            if (errno != EAGAIN && errno != EWOULDBLOCK) {
-                std::cerr << "Error reading from socket: " << strerror(errno) << std::endl;
+
+        if (activity > 0 && FD_ISSET(clientSocket, &readfds)) {
+            ssize_t bytesRead = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
+
+            if (bytesRead > 0) {
+                std::string message(buffer, bytesRead);
+                std::cout << "Received message from Python: " << message << std::endl;
+
+                // Process the message immediately
+                processMessage(message);
+
+                // Add message to queue for other components that might need it
+                {
+                    std::lock_guard<std::mutex> lock(queueMutex);
+                    messageQueue.push(message);
+                }
+
+                // Notify waiting threads
+                queueCondition.notify_one();
+            }
+            else if (bytesRead == 0) {
+                std::cout << "Python client disconnected" << std::endl;
                 break;
+            }
+            else {
+                // Error occurred, check if we should continue
+                if (errno != EAGAIN && errno != EWOULDBLOCK) {
+                    std::cerr << "Error reading from socket: " << strerror(errno) << std::endl;
+                    break;
+                }
             }
         }
 
-        // Sleep to prevent busy waiting
+        // Check for interruption
+        if (sigintReceived) {
+            std::cout << "Listener thread detected interruption signal" << std::endl;
+            break;
+        }
+
+        // Short sleep to prevent busy waiting
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
+
+    std::cout << "Listener thread exiting" << std::endl;
 }
+
+// Updated processMessage method for MangoScheduler to ensure modules are up
 
 void MangoScheduler::processMessage(const std::string& message) {
     try {
@@ -201,39 +313,66 @@ void MangoScheduler::processMessage(const std::string& message) {
             std::cout << "  Message ID: " << msg_id << std::endl;
             std::cout << "  Max advance: " << max_advance << std::endl;
 
-            // Create and schedule a network message
-            MangoMessage* mangoMsg = new MangoMessage("MangoMessage");
-            mangoMsg->setMessageId(msg_id);
-            mangoMsg->setSenderId(sender);
-            mangoMsg->setReceiverId(receiver);
-            mangoMsg->setMessageSize(size_B);
-            mangoMsg->setCreationTime(time_send_ms);
+            // Find modules
+            cModule* senderModule = getReceiverModule(sender);
 
-            // Find modules (in a real implementation, you would look up the actual modules)
-            cModule* senderModule = getSimulation()->getModuleByPath(sender.c_str());
-            cModule* receiverModule = getSimulation()->getModuleByPath(receiver.c_str());
+            if (senderModule) {
+                std::cout << "sender module: " << senderModule->getFullPath() << std::endl;
 
-            if (senderModule && receiverModule) {
-                mangoMsg->setArrival(senderModule->getId(), -1, time_send_ms);
+                // Check if the module is up by checking for NodeStatus
+                cModule* senderNode = senderModule->getParentModule();
+                cModule* statusModule = senderNode->getSubmodule("status");
+                bool isUp = true;
+
+                if (statusModule) {
+                    std::string statusString = statusModule->par("state").stringValue();
+                    isUp = (statusString == "UP");
+                    std::cout << "Module status: " << statusString << std::endl;
+                }
+
+                if (!isUp) {
+                    std::cerr << "Warning: Sender module is not UP, message may be dropped." << std::endl;
+                    // Still try to send the message - the module will handle it appropriately
+                }
+
+                // Create and schedule a network message
+                MangoMessage* mangoMsg = new MangoMessage("MangoMessage");
+                mangoMsg->setMessageId(msg_id);
+                mangoMsg->setSenderId(sender);
+                mangoMsg->setReceiverId(receiver);
+                mangoMsg->setMessageSize(size_B);
+
+                // Calculate absolute simulation time for the event
+                simtime_t eventTime = simTime() + SimTime(time_send_ms, SIMTIME_MS);
+                mangoMsg->setCreationTime(eventTime);
+
+                // Schedule the message to the sender module
+                mangoMsg->setSchedulingPriority(1); // Higher priority
+                mangoMsg->setArrival(senderModule->getId(), -1, eventTime);
+
+                // Insert into future event set
                 getSimulation()->getFES()->insert(mangoMsg);
 
-                std::cout << "Scheduled message " << msg_id << " at time "
-                          << time_send_ms << std::endl;
+                std::cout << "Scheduled message " << msg_id << " at time (seconds) "
+                          << eventTime.str() << std::endl;
 
                 // Send a confirmation back to Python
                 sendMessage("SCHEDULED|" + msg_id);
             }
             else {
-                std::cerr << "Error: Could not find sender or receiver module." << std::endl;
-                std::cerr << "Sender path: " << sender << std::endl;
-                std::cerr << "Receiver path: " << receiver << std::endl;
+                std::cerr << "Error: Could not find sender module: " << sender << std::endl;
 
                 // Send an error message back to Python
-                sendMessage("ERROR|Could not find sender or receiver module");
-
-                // Clean up the message
-                delete mangoMsg;
+                sendMessage("ERROR|Could not find sender module: " + sender);
             }
+        }
+        else if (type == "TERMINATE") {
+            // Set termination flag when TERMINATE message received
+            std::cout << "Received termination signal from Python client." << std::endl;
+            terminationReceived = true;
+
+            // Send acknowledgment back to Python
+            sendMessage("TERM_ACK|Acknowledged termination request");
         }
         else {
             std::cout << "Unhandled message type: " << type << std::endl;
@@ -247,7 +386,37 @@ void MangoScheduler::processMessage(const std::string& message) {
 
 void MangoScheduler::sendMessage(const std::string& message) {
     if (clientSocket >= 0) {
-        send(clientSocket, message.c_str(), message.length(), 0);
+        // Use select to check if the socket is writable
+        fd_set writefds;
+        FD_ZERO(&writefds);
+        FD_SET(clientSocket, &writefds);
+
+        struct timeval timeout;
+        timeout.tv_sec = 1;  // 1 second timeout
+        timeout.tv_usec = 0;
+
+        int result = select(clientSocket + 1, NULL, &writefds, NULL, &timeout);
+
+        if (result > 0 && FD_ISSET(clientSocket, &writefds)) {
+            // Socket is ready for writing
+            ssize_t bytesSent = send(clientSocket, message.c_str(), message.length(), 0);
+
+            if (bytesSent < 0) {
+                std::cerr << "Error sending message: " << strerror(errno) << std::endl;
+            }
+            else if (bytesSent < (ssize_t)message.length()) {
+                std::cerr << "Warning: Only sent " << bytesSent << " of " << message.length() << " bytes" << std::endl;
+            }
+        }
+        else if (result < 0) {
+            std::cerr << "Error in select for sending: " << strerror(errno) << std::endl;
+        }
+        else {
+            std::cerr << "Socket not ready for writing" << std::endl;
+        }
+    }
+    else {
+        std::cerr << "Cannot send message: Socket not connected" << std::endl;
     }
 }
 
@@ -255,10 +424,17 @@ std::string MangoScheduler::receiveMessage(bool blocking) {
     std::unique_lock<std::mutex> lock(queueMutex);
 
     if (blocking) {
-        // Wait until a message is available
-        queueCondition.wait(lock, [this]{ return !messageQueue.empty(); });
+        // Wait until a message is available or interrupted
+        queueCondition.wait_for(lock, std::chrono::seconds(1), [this]{
+            return !messageQueue.empty() || sigintReceived;
+        });
+
+        if (sigintReceived) {
+            return "";
+        }
     }
-    else if (messageQueue.empty()) {
+
+    if (messageQueue.empty()) {
         return "";
     }
 
@@ -274,36 +450,30 @@ bool MangoScheduler::hasMessage() {
 
 void MangoScheduler::startRun() {
     std::cout << "Starting MangoScheduler run, setting up socket connection..." << std::endl;
-    setupServerSocket();
 
-    // Send initialization message to Python client
-    sendMessage("INIT");
+    try {
+        setupServerSocket();
+
+        // Send initialization message to Python client
+        sendMessage("INIT");
+    }
+    catch (const std::exception& e) {
+        std::cerr << "Error during startRun: " << e.what() << std::endl;
+        cleanup();
+        throw;
+    }
 }
 
 void MangoScheduler::endRun() {
     std::cout << "Ending MangoScheduler run, cleaning up..." << std::endl;
 
     // Send termination message to Python client
-    sendMessage("TERM");
-
-    // Stop listener thread
-    running = false;
-    if (listenerThread && listenerThread->joinable()) {
-        listenerThread->join();
-        delete listenerThread;
-        listenerThread = nullptr;
-    }
-
-    // Close sockets
     if (clientSocket >= 0) {
-        close(clientSocket);
-        clientSocket = -1;
+        sendMessage("TERM");
     }
 
-    if (serverSocket >= 0) {
-        close(serverSocket);
-        serverSocket = -1;
-    }
+    // Clean up resources
+    cleanup();
 }
 
 cEvent* MangoScheduler::guessNextEvent() {
@@ -311,17 +481,53 @@ cEvent* MangoScheduler::guessNextEvent() {
 }
 
 cEvent* MangoScheduler::takeNextEvent() {
-    cEvent* event = sim->getFES()->peekFirst();
-    if (!event)
-        throw cTerminationException(E_ENDEDOK);
+    // First check if we've been interrupted
+    if (sigintReceived) {
+        std::cout << "Simulation interrupted by signal, ending gracefully" << std::endl;
+        throw cTerminationException(SA_INTERRUPT);
+    }
 
-    // Remove and return the event
+    // Look for the next event in the FES
+    cEvent* event = sim->getFES()->peekFirst();
+
+    if (!event) {
+        // No events in FES - but we should wait for Python messages if not terminated
+        if (!terminationReceived) {
+            std::cout << "No more events but waiting for Python messages..." << std::endl;
+
+            // Wait for a short time to allow messages to arrive
+            // This will also check for interruptions periodically
+            for (int i = 0; i < 10 && !terminationReceived && !sigintReceived; i++) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+                // Check for new events after waiting
+                event = sim->getFES()->peekFirst();
+                if (event) {
+                    break; // Found an event, process it
+                }
+            }
+
+            // If interrupted during wait, end simulation
+            if (sigintReceived) {
+                std::cout << "Simulation interrupted while waiting for events" << std::endl;
+                throw cTerminationException(SA_INTERRUPT);
+            }
+
+            // If still no events, return nullptr to continue polling
+            if (!event) {
+                return nullptr;
+            }
+        }
+        else {
+            // We've received termination signal and there are no more events
+            std::cout << "No more events and termination received, ending simulation" << std::endl;
+            throw cTerminationException(E_ENDEDOK);
+        }
+    }
+
+    // We have an event - remove it from FES and return it
     cEvent* tmp = sim->getFES()->removeFirst();
     ASSERT(tmp == event);
-
-    // Notify Python about event processing
-    std::string eventInfo = "EVENT:" + std::to_string(event->getArrivalTime().dbl());
-    sendMessage(eventInfo);
 
     return event;
 }
