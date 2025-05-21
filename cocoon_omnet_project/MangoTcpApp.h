@@ -55,17 +55,13 @@ protected:
     // Map of connection times to ports
     std::map<int, std::list<int>> connectToTimeToPort;
 
-    // Current message ID counter
-    int curMsgId = 0;
-
 protected:
     // Initialize the application
     virtual void initialize(int stage) override;
     int numInitStages() const override { return inet::NUM_INIT_STAGES; }
 
     // Message handling
-    virtual void handleMessageWhenUp(cMessage *msg) override;
-    virtual void handleTimer(cMessage *msg);
+    virtual void handleTimer(cMessage *msg) {};
     virtual void handleMessage(cMessage *msg) override;
 
     // Socket event handlers
@@ -75,9 +71,9 @@ protected:
     virtual void socketFailure(inet::TcpSocket *socket, int code) override;
 
     // Lifecycle methods
-    virtual void handleStartOperation(inet::LifecycleOperation *operation) override;
-    virtual void handleStopOperation(inet::LifecycleOperation *operation) override;
-    virtual void handleCrashOperation(inet::LifecycleOperation *operation) override;
+    virtual void handleStartOperation(inet::LifecycleOperation *operation) override {};
+    virtual void handleStopOperation(inet::LifecycleOperation *operation) override {};
+    virtual void handleCrashOperation(inet::LifecycleOperation *operation) override {};
 
     // Connection and sending methods
     virtual void connect() override;

@@ -76,52 +76,6 @@ void MangoTcpApp::initialize(int stage) {
 
 }
 
-void MangoTcpApp::handleMessageWhenUp(cMessage *msg) {
-    std::cout << "received message in TCP App: " << msg << endl;
-    if (typeid(*msg) == typeid(Timer)) {
-        // Timer message for scheduled events
-        handleTimer(msg);
-    }
-    else if (msg->arrivedOn("socketIn")) {
-        // Message from socket (network)
-        socket.processMessage(msg);
-    }
-    else {
-        // TODO: handle message from scheduler.
-        std::cout << "received message from scheduler." << endl;
-    }
-}
-
-void MangoTcpApp::handleTimer(cMessage *msg) {
-    std::cout << "handle timer in TCP app" << endl;
-    if (msg != nullptr && typeid(*msg) == typeid(Timer)) {
-        Timer *timer = dynamic_cast<Timer*>(msg);
-
-        switch (timer->getTimerType()) {
-            case 0:  // Connect timer
-                connect();
-                break;
-
-            case 1:  // Send data timer
-                sendData(timer->getReceiverPort());
-                break;
-
-            case 2:  // Close connection timer
-                close();
-                break;
-
-            default:
-                EV_WARN << moduleName << ": Unknown timer type " << timer->getTimerType() << std::endl;
-                break;
-        }
-    }
-    else {
-        EV_ERROR << moduleName << ": Called handleTimer with non-Timer object" << std::endl;
-    }
-
-    delete msg;
-}
-
 void MangoTcpApp::connect() {
     std::cout << moduleName << " in connect" << endl;
     int currentSimTime = simTime().inUnit(SIMTIME_MS);
@@ -262,20 +216,7 @@ void MangoTcpApp::socketDataArrived(inet::TcpSocket *socket, inet::Packet *msg, 
     socket->close();
 }
 
-void MangoTcpApp::socketClosed(inet::TcpSocket *socket) {
-    TcpAppBase::socketClosed(socket);
 
-    if (operationalState == State::STOPPING_OPERATION && !this->socket.isOpen())
-        startActiveOperationExtraTimeOrFinish(par("stopOperationExtraTime"));
-}
-
-void MangoTcpApp::socketFailure(inet::TcpSocket *socket, int code) {
-    TcpAppBase::socketFailure(socket, code);
-
-    // Handle any cleanup needed after failure
-    EV_ERROR << moduleName << " (" << simTime().inUnit(SIMTIME_MS)
-             << "): Socket failure with code " << code << std::endl;
-}
 
 void MangoTcpApp::sendData(int receiverPort) {
     if (clientSockets.find(receiverPort) == clientSockets.end()) {
@@ -505,40 +446,16 @@ void MangoTcpApp::handleMessage(cMessage *msg) {
     }
 }
 
+void MangoTcpApp::socketClosed(inet::TcpSocket *socket) {
+    TcpAppBase::socketClosed(socket);
 
-void MangoTcpApp::handleStartOperation(inet::LifecycleOperation *operation) {
-    std::cout << moduleName << " in handle start operation" << endl;
-    const char *localAddress = par("localAddress");
-    int localPort = par("localPort");
-
-    serverSocket.setOutputGate(gate("socketOut"));
-    serverSocket.setCallback(this);
-
-    serverSocket.bind(
-        localAddress[0] ? inet::L3Address(localAddress) : inet::L3Address(),
-        localPort);
-    serverSocket.listen();
-
-    // Schedule initial connect timer if needed
-    if (!connectToTimeToPort.empty()) {
-        Timer *timer = new Timer();
-        timer->setTimerType(0);  // Connect timer
-        scheduleAt(simTime(), timer);
-    }
+    if (operationalState == State::STOPPING_OPERATION && !this->socket.isOpen())
+        startActiveOperationExtraTimeOrFinish(par("stopOperationExtraTime"));
 }
 
-void MangoTcpApp::handleStopOperation(inet::LifecycleOperation *operation) {
-    std::cout << moduleName << " in handle stop operation" << endl;
-    if (socket.isOpen())
-        close();
-
-    delayActiveOperationFinish(par("stopOperationTimeout"));
+void MangoTcpApp::socketFailure(inet::TcpSocket *socket, int code) {
+    TcpAppBase::socketFailure(socket, code);
 }
-
-void MangoTcpApp::handleCrashOperation(inet::LifecycleOperation *operation) {
-    // Nothing special needed for crash
-}
-
 
 void MangoTcpApp::finish() {
     std::cout << moduleName << " (" << simTime().inUnit(SIMTIME_MS)
