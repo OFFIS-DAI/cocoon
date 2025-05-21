@@ -16,7 +16,7 @@ network SimpleNetwork
         }
         channel ethline extends DatarateChannel
         {
-            delay = 50ns;
+            delay = 10ms;
             datarate = 100Mbps;
         }
     submodules:
