@@ -1,4 +1,5 @@
 import json
+import signal
 import socket
 import threading
 import time
@@ -288,36 +289,39 @@ class OmnetConnection:
         return msg_id
 
     def send_termination_signal(self) -> bool:
-        """
-        Send termination signal to OMNeT++ and wait for acknowledgment
-
-        Returns:
-            True if termination was acknowledged, False otherwise
-        """
-        # Reset the flag first
+        # Reset flag
         self.termination_acknowledged = False
 
-        # Send the termination signal
+        # Send signal
         success = self.send_message("TERMINATE|")
-        if not success:
-            logger.error("Failed to send termination signal to OMNeT++")
-            return False
 
-        logger.info("Termination signal sent to OMNeT++, waiting for acknowledgment...")
-
-        # Wait for acknowledgment (up to 10 seconds)
+        # Poll for acknowledgment with timeout
         max_wait = 10  # seconds
         start_time = time.time()
 
-        while not self.termination_acknowledged and (time.time() - start_time) < max_wait:
-            time.sleep(0.1)
+        # First check any pending messages
+        for msg in self.get_all_messages():
+            if msg.startswith("TERM_ACK"):
+                self.termination_acknowledged = True
+                return True
 
-        if self.termination_acknowledged:
-            logger.info("OMNeT++ acknowledged termination signal")
-            return True
-        else:
-            logger.warning("OMNeT++ did not acknowledge termination signal within timeout")
-            return False
+        # Then poll for new messages
+        while not self.termination_acknowledged and (time.time() - start_time) < max_wait:
+            time.sleep(0.5)
+            for msg in self.get_all_messages():
+                if msg.startswith("TERM_ACK"):
+                    self.termination_acknowledged = True
+                    return True
+
+        # Fallback: force termination if needed
+        if not self.termination_acknowledged:
+            try:
+                os.killpg(os.getpgid(self.omnet_process.pid), signal.SIGTERM)
+                return True  # We did terminate it one way or another
+            except Exception as e:
+                logger.error(f"Error forcibly terminating OMNeT++: {e}")
+
+        return self.termination_acknowledged
 
     def has_messages(self) -> bool:
         """
