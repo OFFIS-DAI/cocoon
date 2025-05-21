@@ -67,13 +67,15 @@ class CommunicationScheduler(ABC):
 
         Sets the scenario_finished future when complete.
         """
+        for container_name, container in self._container_mapping.items():
+            while container.inbox is None:
+                await asyncio.sleep(1)
+
         while True:
             container_messages_dict = {}
             next_activities_in_current_step = []
             for container_name, container in self._container_mapping.items():
                 incoming_messages_for_container = self.get_incoming_messages_for_container(container_name)
-                while container.inbox is None:
-                    await asyncio.sleep(1)
 
                 output = await container.step(incoming_messages=incoming_messages_for_container,
                                               simulation_time=self.current_time)
