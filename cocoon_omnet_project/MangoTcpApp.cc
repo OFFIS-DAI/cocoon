@@ -359,19 +359,16 @@ void MangoTcpApp::handleMessage(cMessage *msg) {
             }
 
             // Record statistics
-            int delay = simTime().inUnit(SIMTIME_MS) - packet->getSendingTime().inUnit(SIMTIME_MS);
             int bytes = packet->getByteLength();
             numMessagesReceived++;
 
-            std::cout << "Received packet " << msgId << ", size: " << bytes
-                    << " bytes, delay: " << delay << " ms" << std::endl;
+            std::cout << "Received packet " << msgId << ", size: " << bytes << " bytes" << std::endl;
 
             // Create JSON payload for the scheduler
             json responsePayload = {
                     {"msg_id", msgId},
                     {"receiver", moduleName},
                     {"size_B", bytes},
-                    {"delay_ms", delay},
                     {"time_received", simTime().inUnit(SIMTIME_MS)}
             };
 
@@ -417,8 +414,6 @@ void MangoTcpApp::handleMessage(cMessage *msg) {
             strstr(msg->getName(), "DATA") ||
             strstr(msg->getName(), "SOCK")) {
 
-        std::cout << "Handling socket message directly: " << msg->getName() << std::endl;
-
         // Process socket message
         if (socket.belongsToSocket(msg)) {
             // It's for the main socket
@@ -450,8 +445,6 @@ void MangoTcpApp::handleMessage(cMessage *msg) {
     }
     // Also handle Timer messages directly
     else if (msg != nullptr && (strcmp(msg->getName(), "ConnectTimer") == 0 || dynamic_cast<Timer*>(msg) != nullptr)) {
-        std::cout << "Handling timer message directly: " << msg->getName() << std::endl;
-
         Timer *timer = dynamic_cast<Timer*>(msg);
         if (timer != nullptr) {
             switch (timer->getTimerType()) {
