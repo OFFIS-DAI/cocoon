@@ -330,10 +330,7 @@ void MangoTcpApp::handleMessage(cMessage *msg) {
     if (strcmp(msg->getName(), "MangoMessage") == 0) {
         std::cout << "Received MangoMessage, handling directly" << std::endl;
 
-        // Get the message fields directly using methods
-        cObject *msgObj = msg;
-
-        // These method calls must match the methods in your MangoMessage class
+        // Get the message fields directly
         std::string msgId = check_and_cast<MangoMessage *>(msg)->getMessageId();
         std::string senderId = check_and_cast<MangoMessage *>(msg)->getSenderId();
         std::string receiverId = check_and_cast<MangoMessage *>(msg)->getReceiverId();
@@ -345,51 +342,169 @@ void MangoTcpApp::handleMessage(cMessage *msg) {
         std::cout << "  Size: " << msgSize << " bytes" << std::endl;
 
         if (getParentModule()->getFullName() == senderId) {
-            // We are the sender, establish connection to receiver
+            // We are the sender - let's handle everything directly here
+            std::cout << "I am the sender, will connect directly to " << receiverId << std::endl;
+
+            // Set up direct connection to receiver
             const char *localAddress = par("localAddress");
             int localPort = par("localPort");
-            int connectPort = 1000; // Default port
+            int connectPort = 8346; // Port for the receiver
 
-            // Store mapping for connection
-            portToName[connectPort] = receiverId;
+            // Create a socket for connection
+            inet::TcpSocket clientSocket;
+            clientSocket.setOutputGate(gate("socketOut"));
+            clientSocket.setCallback(this);
 
-            // Schedule connection now
-            int currentTime = simTime().inUnit(SIMTIME_MS);
-            if (connectToTimeToPort.find(currentTime) == connectToTimeToPort.end()) {
-                connectToTimeToPort[currentTime] = std::list<int>();
+            try {
+                clientSocket.bind(
+                    localAddress[0] ? inet::L3Address(localAddress) : inet::L3Address(),
+                    localPort);
             }
-            connectToTimeToPort[currentTime].push_back(connectPort);
-
-            // Create a packet to queue for sending
-            inet::Packet *packet = new inet::Packet(("MangoTcp-" + msgId).c_str());
-            packet->insertAtBack(inet::makeShared<inet::ByteCountChunk>(inet::B(msgSize)));
-
-            // Store the packet for later sending
-            if (messageMap.find(connectPort) == messageMap.end()) {
-                messageMap[connectPort] = std::map<int, inet::Packet*>();
+            catch (...) {
+                std::cout << "Socket already bound" << std::endl;
             }
-            messageMap[connectPort][currentTime] = packet;
 
-            // Schedule connection timer
-            Timer *timer = new Timer("ConnectTimer");
-            timer->setTimerType(0);  // Connect timer
-            scheduleAt(simTime(), timer);
+            // Renew socket for new connection
+            clientSocket.renewSocket();
 
-            std::cout << "Scheduled connection to " << receiverId << std::endl;
+            // Set socket parameters
+            int timeToLive = par("timeToLive");
+            if (timeToLive != -1)
+                clientSocket.setTimeToLive(timeToLive);
+
+            int dscp = par("dscp");
+            if (dscp != -1)
+                clientSocket.setDscp(dscp);
+
+            int tos = par("tos");
+            if (tos != -1)
+                clientSocket.setTos(tos);
+
+            // Resolve destination address and connect
+            inet::L3Address destination;
+            try {
+                std::cout << "Resolving address for " << receiverId << std::endl;
+                inet::L3AddressResolver().tryResolve(receiverId.c_str(), destination);
+
+                if (destination.isUnspecified()) {
+                    std::cout << "Cannot resolve address for " << receiverId << std::endl;
+                }
+                else {
+                    std::cout << "Connecting to " << receiverId << " (" << destination.str() << ":" << connectPort << ")" << std::endl;
+
+                    // Store socket
+                    clientSockets[connectPort] = clientSocket;
+
+                    // Store mapping
+                    portToName[connectPort] = receiverId;
+
+                    // Connect
+                    clientSocket.connect(destination, connectPort);
+
+                    // Create packet
+                    inet::Packet *packet = new inet::Packet(("MangoTcp-" + msgId).c_str());
+                    packet->insertAtBack(inet::makeShared<inet::ByteCountChunk>(inet::B(msgSize)));
+
+                    // Send immediately
+                    std::cout << "Sending packet directly" << std::endl;
+                    clientSocket.send(packet);
+
+                    numMessagesSent++;
+                }
+            }
+            catch (std::exception& e) {
+                std::cout << "Error connecting: " << e.what() << std::endl;
+            }
         }
         else if (getParentModule()->getFullName() == receiverId) {
-            // We are the receiver - just log that we expect incoming connection
+            // We are the receiver
             std::cout << "I am the receiver, expecting TCP packets from " << senderId << std::endl;
         }
 
         // Delete the MangoMessage
         delete msg;
     }
+    // Handle socket notifications directly - like "ESTABLISHED"
+    else if (msg->arrivedOn("socketIn") ||
+             strstr(msg->getName(), "ESTAB") ||
+             strstr(msg->getName(), "CONN") ||
+             strstr(msg->getName(), "DATA") ||
+             strstr(msg->getName(), "SOCK")) {
+
+        std::cout << "Handling socket message directly: " << msg->getName() << std::endl;
+
+        // Process socket message
+        if (socket.belongsToSocket(msg)) {
+            // It's for the main socket
+            socket.processMessage(msg);
+        }
+        else {
+            // Check if it belongs to one of our client sockets
+            bool processed = false;
+            for (auto& socketPair : clientSockets) {
+                if (socketPair.second.belongsToSocket(msg)) {
+                    socketPair.second.processMessage(msg);
+                    processed = true;
+                    break;
+                }
+            }
+
+            // If server socket
+            if (!processed && serverSocket.belongsToSocket(msg)) {
+                serverSocket.processMessage(msg);
+                processed = true;
+            }
+
+            // If not processed by any socket, delete it
+            if (!processed) {
+                std::cout << "Socket message not processed by any socket, deleting: " << msg->getName() << std::endl;
+                delete msg;
+            }
+        }
+    }
+    // Also handle Timer messages directly
+    else if (msg != nullptr && (strcmp(msg->getName(), "ConnectTimer") == 0 || dynamic_cast<Timer*>(msg) != nullptr)) {
+        std::cout << "Handling timer message directly: " << msg->getName() << std::endl;
+
+        Timer *timer = dynamic_cast<Timer*>(msg);
+        if (timer != nullptr) {
+            switch (timer->getTimerType()) {
+                case 0:  // Connect timer
+                    connect();
+                    break;
+                case 1:  // Send data timer
+                    sendData(timer->getReceiverPort());
+                    break;
+                case 2:  // Close connection timer
+                    close();
+                    break;
+                default:
+                    std::cout << "Unknown timer type: " << timer->getTimerType() << std::endl;
+                    break;
+            }
+        } else {
+            // It's a ConnectTimer but not a Timer class
+            connect();
+        }
+
+        delete msg;
+    }
     else {
-        // For all other messages, use the standard ApplicationBase handler
-        ApplicationBase::handleMessage(msg);
+        // For all other messages, use the standard ApplicationBase handler with a try/catch
+        try {
+            ApplicationBase::handleMessage(msg);
+        } catch (const std::exception& e) {
+            // If there's an exception (like module is down), handle it here
+            std::cout << "Exception in ApplicationBase::handleMessage: " << e.what() << std::endl;
+            delete msg;
+        } catch (...) {
+            // Catch any other exceptions
+            std::cout << "Unknown exception in ApplicationBase::handleMessage" << std::endl;
+            delete msg;
+        }
     }
 }
+
 
 void MangoTcpApp::handleStartOperation(inet::LifecycleOperation *operation) {
     std::cout << moduleName << " in handle start operation" << endl;

@@ -8,7 +8,7 @@ extern "C" {
 #include "mango_scheduler.h"
 
 #include <json.hpp>
-using json = nlohmann::json;
+using json = nlohmann::json;// Forward declare a NetworkMessage class for our simulation messages
 
 // Signal handler flag to detect interruptions
 volatile sig_atomic_t sigintReceived = 0;
@@ -20,34 +20,6 @@ void handleSignal(int signal) {
         std::cout << "SIGINT received, preparing for graceful shutdown..." << std::endl;
     }
 }
-
-// Forward declare a NetworkMessage class for our simulation messages
-class MangoMessage : public cMessage {
-private:
-    std::string messageId;
-    std::string senderId;
-    std::string receiverId;
-    int64_t messageSize;
-    simtime_t creationTime;
-
-public:
-    MangoMessage(const char* name = nullptr) : cMessage(name) {}
-
-    void setMessageId(const std::string& id) { messageId = id; }
-    std::string getMessageId() const { return messageId; }
-
-    void setSenderId(const std::string& id) { senderId = id; }
-    std::string getSenderId() const { return senderId; }
-
-    void setReceiverId(const std::string& id) { receiverId = id; }
-    std::string getReceiverId() const { return receiverId; }
-
-    void setMessageSize(int64_t size) { messageSize = size; }
-    int64_t getMessageSize() const { return messageSize; }
-
-    void setCreationTime(simtime_t time) { creationTime = time; }
-    simtime_t getCreationTime() const { return creationTime; }
-};
 
 Register_Class(MangoScheduler);
 
@@ -318,22 +290,6 @@ void MangoScheduler::processMessage(const std::string& message) {
 
             if (senderModule) {
                 std::cout << "sender module: " << senderModule->getFullPath() << std::endl;
-
-                // Check if the module is up by checking for NodeStatus
-                cModule* senderNode = senderModule->getParentModule();
-                cModule* statusModule = senderNode->getSubmodule("status");
-                bool isUp = true;
-
-                if (statusModule) {
-                    std::string statusString = statusModule->par("state").stringValue();
-                    isUp = (statusString == "UP");
-                    std::cout << "Module status: " << statusString << std::endl;
-                }
-
-                if (!isUp) {
-                    std::cerr << "Warning: Sender module is not UP, message may be dropped." << std::endl;
-                    // Still try to send the message - the module will handle it appropriately
-                }
 
                 // Create and schedule a network message
                 MangoMessage* mangoMsg = new MangoMessage("MangoMessage");

@@ -21,6 +21,35 @@
 
 using namespace omnetpp;
 
+// Forward declare a NetworkMessage class for our simulation messages
+class MangoMessage : public cMessage {
+private:
+    std::string messageId;
+    std::string senderId;
+    std::string receiverId;
+    int64_t messageSize;
+    simtime_t creationTime;
+
+public:
+    MangoMessage(const char* name = nullptr) : cMessage(name) {}
+
+    void setMessageId(const std::string& id) { messageId = id; }
+    std::string getMessageId() const { return messageId; }
+
+    void setSenderId(const std::string& id) { senderId = id; }
+    std::string getSenderId() const { return senderId; }
+
+    void setReceiverId(const std::string& id) { receiverId = id; }
+    std::string getReceiverId() const { return receiverId; }
+
+    void setMessageSize(int64_t size) { messageSize = size; }
+    int64_t getMessageSize() const { return messageSize; }
+
+    void setCreationTime(simtime_t time) { creationTime = time; }
+    simtime_t getCreationTime() const { return creationTime; }
+};
+
+
 class MangoScheduler : public cScheduler
 {
 private:
