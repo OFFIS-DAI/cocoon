@@ -66,6 +66,7 @@ protected:
     // Message handling
     virtual void handleMessageWhenUp(cMessage *msg) override;
     virtual void handleTimer(cMessage *msg);
+    virtual void handleMessage(cMessage *msg) override;
 
     // Socket event handlers
     virtual void socketEstablished(inet::TcpSocket *socket) override;
