@@ -53,6 +53,10 @@ class OmnetConnection:
         self.socket_running = False
         self.message_queue = queue.Queue()
 
+        # Remember sent/received message ids
+        self.message_ids_sent = []
+        self.message_ids_received = []
+
         # Flag to track if termination was acknowledged
         self.termination_acknowledged = False
 
@@ -268,25 +272,16 @@ class OmnetConnection:
         except queue.Empty:
             return None
 
-    def send_message_to_omnet(self, sender: str, receiver: str,
-                              msg_size_B: int, time_send_ms: float,
-                              msg_id: str, max_advance: int) -> str:
-        payload = {
-            "sender": sender,
-            "receiver": receiver,
-            "size_B": msg_size_B,
-            "time_send_ms": time_send_ms,
-            "msg_id": msg_id,
-            "max_advance": max_advance
-        }
-
+    def send_message_to_omnet(self, payload: Dict, msg_ids: List[str]) -> bool:
         message = f"MESSAGE|{json.dumps(payload)}"
         success = self.send_message(message)
 
         if not success:
             logger.error(f"Failed to send dispatch message: {message}")
-
-        return msg_id
+            return False
+        else:
+            self.message_ids_sent.extend(msg_ids)
+            return True
 
     def send_termination_signal(self) -> bool:
         # Reset flag
@@ -392,6 +387,8 @@ class DetailedNetworkModel:
         self.omnet_connection = OmnetConnection(inet_installation_path=inet_installation_path,
                                                 config_name=config_name,
                                                 omnet_project_path=omnet_project_path)
+        self.msg_id_to_msg = {}
+
         self.omnet_connection.initialize()
 
     def terminate_simulation(self):
@@ -402,8 +399,79 @@ class DetailedNetworkModel:
             return self.omnet_connection.send_termination_signal()
         return False
 
-    def simulate_message_dispatch(self, sender_message_dict: dict[str, list[ExternalAgentMessage]]):
-        pass
+    async def simulate_message_dispatch(self, sender_message_dict: dict[str, list[ExternalAgentMessage]],
+                                        max_advance_ms: int):
+        message_list = []
+        msg_ids = []
+        for sender, messages in sender_message_dict.items():
+            for message in messages:
+                min_id = min(self.msg_id_to_msg.keys()) if len(self.msg_id_to_msg) > 0 else 0
+                message_list.append({
+                    'sender': sender,
+                    'receiver': message.receiver,
+                    'size_B': len(message.message),
+                    'time_send_ms': round(message.time * 1000),  # convert to ms
+                    'msg_id': f'msg_{min_id+1}'
+                })
+                self.msg_id_to_msg[min_id+1] = message
+                msg_ids.append(f'msg_{min_id+1}')
+        payload = {
+            "messages": message_list,
+            "max_advance": max_advance_ms
+        }
+        self.omnet_connection.send_message_to_omnet(payload=payload, msg_ids=msg_ids)
+
+    def waiting_for_messages_from_omnet(self) -> bool:
+        print(f'Waiting for messages? Sent: {self.omnet_connection.message_ids_sent},'
+              f'Received: {self.omnet_connection.message_ids_received}')
+        messages_sent_but_not_received = [m for m in self.omnet_connection.message_ids_sent
+                                          if m not in self.omnet_connection.message_ids_received]
+        return len(messages_sent_but_not_received) != 0
+
+    async def get_received_messages_from_omnet_connection(self) -> Dict[int, List[ExternalAgentMessage]]:
+        all_messages = self.omnet_connection.get_all_messages()
+        time_receive_to_message = {}
+
+        for message in all_messages:
+            try:
+                # Skip non-data messages (INIT, TERM, etc.)
+                if '|' not in message:
+                    continue
+
+                # Split message type and payload
+                msg_type, payload = message.split('|', 1)
+
+                # Process different message types
+                if msg_type == 'SCHEDULED':
+                    # These are acknowledgment messages, not delivered messages
+                    logger.debug('Scheduled the following messages: ', payload)
+
+                elif msg_type == 'RECEIVED':
+                    # This would be the actual received message from OMNeT++
+                    # Parse the delivered message data
+                    import json
+                    data = json.loads(payload)
+
+                    delivery_time = data.get('time_received', 0) / 1000  # Convert to seconds
+                    msg_id = data.get('msg_id')
+
+                    # Track that this message was received
+                    if msg_id:
+                        if len(msg_id.split('_')) == 2:
+                            # Get ExternalAgentMessage
+                            external_msg = self.msg_id_to_msg[int(msg_id.split('_')[1])]
+                            if delivery_time not in time_receive_to_message.keys():
+                                time_receive_to_message[delivery_time] = []
+                            time_receive_to_message[delivery_time].append(external_msg)
+
+                        self.omnet_connection.message_ids_received.append(msg_id)
+
+            except Exception as e:
+                logger.error(f"Error processing message from OMNeT++: {e}")
+                logger.debug(f"Problematic message: {message}")
+                continue
+
+        return time_receive_to_message
 
     def cleanup(self):
         """

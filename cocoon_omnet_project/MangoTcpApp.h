@@ -56,6 +56,9 @@ protected:
     std::map<int, std::list<int>> connectToTimeToPort;
 
 protected:
+    // Store receives message sizes
+    std::map<std::string, int> messageSizeMap;
+
     // Initialize the application
     virtual void initialize(int stage) override;
     int numInitStages() const override { return inet::NUM_INIT_STAGES; }
@@ -66,6 +69,7 @@ protected:
 
     // Socket event handlers
     virtual void socketEstablished(inet::TcpSocket *socket) override;
+    // Override socketDataArrived
     virtual void socketDataArrived(inet::TcpSocket *socket, inet::Packet *msg, bool urgent) override {};
     virtual void socketClosed(inet::TcpSocket *socket) override;
     virtual void socketFailure(inet::TcpSocket *socket, int code) override;

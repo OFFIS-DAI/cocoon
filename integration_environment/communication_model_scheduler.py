@@ -89,8 +89,8 @@ class CommunicationScheduler(ABC):
                 self.current_time = min(self._message_buffer.keys())
             elif len(self._next_activities) > 0:
                 self.current_time = min(self._next_activities)
-            else:
-                # no more activities or messages in mango -> finalize scenario
+            elif not self._waiting_for_messages():
+                # no more activities or messages in mango or external simulation -> finalize scenario
                 self.scenario_finished.set_result(True)
                 break
 
@@ -98,6 +98,9 @@ class CommunicationScheduler(ABC):
                 # simulation has reached the defined duration -> finalize scenario
                 self.scenario_finished.set_result(True)
                 break
+
+    def _waiting_for_messages(self):
+        return False
 
     @abstractmethod
     async def process_message_output(self,
@@ -208,7 +211,27 @@ class DetailedModelScheduler(CommunicationScheduler):
     async def process_message_output(self,
                                      container_messages_dict: dict[str, list[ExternalAgentMessage]],
                                      next_activities):
-        self.detailed_network_model.simulate_message_dispatch(sender_message_dict=container_messages_dict)
+        max_advance = self._get_max_advance_in_ms(next_activities)
+        await self.detailed_network_model.simulate_message_dispatch(sender_message_dict=container_messages_dict,
+                                                                    max_advance_ms=max_advance)
+        if self.detailed_network_model.waiting_for_messages_from_omnet():
+            message_buffer = await self.detailed_network_model.get_received_messages_from_omnet_connection()
+            for time_s, messages in message_buffer.items():
+                if time_s not in self._message_buffer:
+                    self._message_buffer[time_s] = []
+                self._message_buffer[time_s].extend(messages)
+
+    def _get_max_advance_in_ms(self, next_activities):
+        """
+        Gets max advance value in ms.
+        @param: next_activities: next activities from containers in seconds.
+        """
+        next_activities = [na for na in next_activities if na]  # get next activity values
+        max_advance = min(next_activities) * 1000 if len(next_activities) > 0 else self._duration_s * 1000
+        return max_advance
+
+    def _waiting_for_messages(self):
+        return self.detailed_network_model.waiting_for_messages_from_omnet()
 
 
 class StaticDelayGraphModelScheduler(CommunicationScheduler):

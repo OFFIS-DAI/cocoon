@@ -247,8 +247,7 @@ void MangoScheduler::listenForMessages() {
     std::cout << "Listener thread exiting" << std::endl;
 }
 
-// Updated processMessage method for MangoScheduler to ensure modules are up
-
+// Updated processMessage method to handle multiple messages in one payload
 void MangoScheduler::processMessage(const std::string& message) {
     try {
         // Split the message into type and payload
@@ -265,61 +264,78 @@ void MangoScheduler::processMessage(const std::string& message) {
             // Parse the JSON payload
             json data = json::parse(payload);
 
-            // Extract the fields
-            std::string sender = data["sender"];
-            std::string receiver = data["receiver"];
-            int64_t size_B = data["size_B"];
-            double time_send_ms = data["time_send_ms"];
-            std::string msg_id = data["msg_id"];
+            // Extract max_advance (shared for all messages in this batch)
             double max_advance = data["max_advance"];
+            maxTimeAdvance = max_advance / 1000; // Convert from ms to seconds
 
-            // Update max time advance
-            maxTimeAdvance = max_advance;
+            std::cout << "Processing message batch with max advance: " << max_advance << " ms" << std::endl;
 
-            // Log the extracted information
-            std::cout << "Processing message: " << std::endl;
-            std::cout << "  Sender: " << sender << std::endl;
-            std::cout << "  Receiver: " << receiver << std::endl;
-            std::cout << "  Size: " << size_B << " bytes" << std::endl;
-            std::cout << "  Send time: " << time_send_ms << " ms" << std::endl;
-            std::cout << "  Message ID: " << msg_id << std::endl;
-            std::cout << "  Max advance: " << max_advance << std::endl;
+            // Extract the messages array
+            json messages = data["messages"];
+            std::vector<std::string> scheduled_msg_ids;
+            std::vector<std::string> error_msg_ids;
 
-            // Find modules
-            cModule* senderModule = getReceiverModule(sender);
+            // Process each message in the batch
+            for (const auto& msg : messages) {
+                std::string sender = msg["sender"];
+                std::string receiver = msg["receiver"];
+                int64_t size_B = msg["size_B"];
 
-            if (senderModule) {
-                std::cout << "sender module: " << senderModule->getFullPath() << std::endl;
+                double time_send_ms = msg["time_send_ms"];
+                std::string msg_id = msg["msg_id"];
 
-                // Create and schedule a network message
-                MangoMessage* mangoMsg = new MangoMessage("MangoMessage");
-                mangoMsg->setMessageId(msg_id);
-                mangoMsg->setSenderId(sender);
-                mangoMsg->setReceiverId(receiver);
-                mangoMsg->setMessageSize(size_B);
+                // Log the extracted information
+                std::cout << "Processing individual message: " << std::endl;
+                std::cout << "  Sender: " << sender << std::endl;
+                std::cout << "  Receiver: " << receiver << std::endl;
+                std::cout << "  Size: " << size_B << " bytes" << std::endl;
+                std::cout << "  Send time: " << time_send_ms << " ms" << std::endl;
+                std::cout << "  Message ID: " << msg_id << std::endl;
 
-                // Calculate absolute simulation time for the event
-                simtime_t eventTime = simTime() + SimTime(time_send_ms, SIMTIME_MS);
-                mangoMsg->setCreationTime(eventTime);
+                // Find sender module
+                cModule* senderModule = getReceiverModule(sender);
 
-                // Schedule the message to the sender module
-                mangoMsg->setSchedulingPriority(1); // Higher priority
-                mangoMsg->setArrival(senderModule->getId(), -1, eventTime);
+                if (senderModule) {
+                    std::cout << "sender module: " << senderModule->getFullPath() << std::endl;
 
-                // Insert into future event set
-                getSimulation()->getFES()->insert(mangoMsg);
+                    // Create and schedule a network message
+                    MangoMessage* mangoMsg = new MangoMessage("MangoMessage");
+                    mangoMsg->setMessageId(msg_id);
+                    mangoMsg->setSenderId(sender);
+                    mangoMsg->setReceiverId(receiver);
+                    mangoMsg->setMessageSize(size_B);
 
-                std::cout << "Scheduled message " << msg_id << " at time (seconds) "
-                          << eventTime.str() << std::endl;
+                    // Calculate absolute simulation time for the event
+                    simtime_t eventTime = simTime() + SimTime(time_send_ms, SIMTIME_MS);
+                    mangoMsg->setCreationTime(eventTime);
 
-                // Send a confirmation back to Python
-                sendMessage("SCHEDULED|" + msg_id);
+                    // Schedule the message to the sender module
+                    mangoMsg->setSchedulingPriority(1); // Higher priority
+                    mangoMsg->setArrival(senderModule->getId(), -1, eventTime);
+
+                    // Insert into future event set
+                    getSimulation()->getFES()->insert(mangoMsg);
+
+                    std::cout << "Scheduled message " << msg_id << " at time (seconds) "
+                            << eventTime.str() << std::endl;
+
+                    scheduled_msg_ids.push_back(msg_id);
+                }
+                else {
+                    std::cerr << "Error: Could not find sender module: " << sender << std::endl;
+                    error_msg_ids.push_back(msg_id);
+                }
             }
-            else {
-                std::cerr << "Error: Could not find sender module: " << sender << std::endl;
 
-                // Send an error message back to Python
-                sendMessage("ERROR|Could not find sender module: " + sender);
+            // Send batch response back to Python
+            json response;
+            response["scheduled"] = scheduled_msg_ids;
+            response["errors"] = error_msg_ids;
+
+            if (error_msg_ids.empty()) {
+                sendMessage("SCHEDULED|" + response.dump());
+            } else {
+                sendMessage("PARTIAL|" + response.dump());
             }
         }
         else if (type == "TERMINATE") {
