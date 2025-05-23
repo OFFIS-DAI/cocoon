@@ -254,10 +254,12 @@ void MangoTcpApp::handleMessage(cMessage *msg) {
         std::string senderId = check_and_cast<MangoMessage *>(msg)->getSenderId();
         std::string receiverId = check_and_cast<MangoMessage *>(msg)->getReceiverId();
         int64_t msgSize = check_and_cast<MangoMessage *>(msg)->getMessageSize();
+        int receiverPort = check_and_cast<MangoMessage *>(msg)->getReceiverPort();
+
 
         std::cout << "  Message ID: " << msgId << std::endl;
         std::cout << "  Sender: " << senderId << std::endl;
-        std::cout << "  Receiver: " << receiverId << std::endl;
+        std::cout << "  Receiver: " << receiverId << " with port number: " << receiverPort << std::endl;
         std::cout << "  Size: " << msgSize << " bytes" << std::endl;
 
         if (getParentModule()->getFullName() == senderId) {
@@ -265,7 +267,6 @@ void MangoTcpApp::handleMessage(cMessage *msg) {
             // Set up direct connection to receiver
             const char *localAddress = par("localAddress");
             int localPort = par("localPort");
-            int connectPort = 8345; // Port for the receiver
 
             // Create a socket for connection
             inet::TcpSocket clientSocket;
@@ -307,16 +308,16 @@ void MangoTcpApp::handleMessage(cMessage *msg) {
                     std::cout << "Cannot resolve address for " << receiverId << std::endl;
                 }
                 else {
-                    std::cout << "Connecting to " << receiverId << " (" << destination.str() << ":" << connectPort << ")" << std::endl;
+                    std::cout << "Connecting to " << receiverId << " (" << destination.str() << ":" << receiverPort << ")" << std::endl;
 
                     // Store socket
-                    clientSockets[connectPort] = clientSocket;
+                    clientSockets[receiverPort] = clientSocket;
 
                     // Store mapping
-                    portToName[connectPort] = receiverId;
+                    portToName[receiverPort] = receiverId;
 
                     // Connect
-                    clientSocket.connect(destination, connectPort);
+                    clientSocket.connect(destination, receiverPort);
 
                     // Create packet
                     auto data = inet::makeShared<inet::ByteCountChunk>(inet::B(msgSize));

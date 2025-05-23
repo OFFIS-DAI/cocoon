@@ -29,6 +29,7 @@ private:
     std::string receiverId;
     int64_t messageSize;
     simtime_t creationTime;
+    int receiverPort;
 
 public:
     MangoMessage(const char* name = nullptr) : cMessage(name) {}
@@ -47,6 +48,9 @@ public:
 
     void setCreationTime(simtime_t time) { creationTime = time; }
     simtime_t getCreationTime() const { return creationTime; }
+
+    void setReceiverPort(int port) { receiverPort = port; }
+      int getReceiverPort() const { return receiverPort; }
 };
 
 

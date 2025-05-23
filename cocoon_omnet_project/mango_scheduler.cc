@@ -80,6 +80,7 @@ cModule *MangoScheduler::getReceiverModule(std::string module_name) {
         if (moduleNameCheck.compare(module_name) == 0) {
             matchingModule = module;
             std::cout << "Found matching module: " << module->getFullPath() << std::endl;
+
             break;
         }
     }
@@ -294,6 +295,15 @@ void MangoScheduler::processMessage(const std::string& message) {
 
                 // Find sender module
                 cModule* senderModule = getReceiverModule(sender);
+                cModule* receiverModule = getReceiverModule(receiver);
+                int receiverPort = 8345; // default
+
+                // Try to get the localPort parameter from the receiver's TCP app
+                cPar& portPar = receiverModule->par("localPort");
+                if (portPar.isSet()) {
+                    receiverPort = portPar.intValue();
+                    std::cout << "Found receiver port: " << receiverPort << std::endl;
+                }
 
                 if (senderModule) {
                     std::cout << "sender module: " << senderModule->getFullPath() << std::endl;
@@ -304,6 +314,7 @@ void MangoScheduler::processMessage(const std::string& message) {
                     mangoMsg->setSenderId(sender);
                     mangoMsg->setReceiverId(receiver);
                     mangoMsg->setMessageSize(size_B);
+                    mangoMsg->setReceiverPort(receiverPort);
 
                     // Calculate absolute simulation time for the event
                     simtime_t eventTime = simTime() + SimTime(time_send_ms, SIMTIME_MS);
