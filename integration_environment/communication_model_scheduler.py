@@ -212,8 +212,10 @@ class DetailedModelScheduler(CommunicationScheduler):
                                      container_messages_dict: dict[str, list[ExternalAgentMessage]],
                                      next_activities):
         max_advance = self._get_max_advance_in_ms(next_activities)
-        await self.detailed_network_model.simulate_message_dispatch(sender_message_dict=container_messages_dict,
-                                                                    max_advance_ms=max_advance)
+        if sum([len(values) for values in container_messages_dict.values()]) > 0:
+            await self.detailed_network_model.simulate_message_dispatch(sender_message_dict=container_messages_dict,
+                                                                        max_advance_ms=max_advance)
+
         if self.detailed_network_model.waiting_for_messages_from_omnet():
             message_buffer = await self.detailed_network_model.get_received_messages_from_omnet_connection()
             for time_s, messages in message_buffer.items():

@@ -422,8 +422,6 @@ class DetailedNetworkModel:
         self.omnet_connection.send_message_to_omnet(payload=payload, msg_ids=msg_ids)
 
     def waiting_for_messages_from_omnet(self) -> bool:
-        print(f'Waiting for messages? Sent: {self.omnet_connection.message_ids_sent},'
-              f'Received: {self.omnet_connection.message_ids_received}')
         messages_sent_but_not_received = [m for m in self.omnet_connection.message_ids_sent
                                           if m not in self.omnet_connection.message_ids_received]
         return len(messages_sent_but_not_received) != 0
@@ -444,7 +442,7 @@ class DetailedNetworkModel:
                 # Process different message types
                 if msg_type == 'SCHEDULED':
                     # These are acknowledgment messages, not delivered messages
-                    logger.debug('Scheduled the following messages: ', payload)
+                    logger.debug(f'Scheduled messages: {payload}.')
 
                 elif msg_type == 'RECEIVED':
                     # This would be the actual received message from OMNeT++
