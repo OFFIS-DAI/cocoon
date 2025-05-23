@@ -2,9 +2,10 @@ import time
 import unittest
 import logging
 
-from integration_environment.network_models.detailed_network_model import OmnetConnection
+from integration_environment.network_models.detailed_network_model import OmnetConnection, DetailedNetworkModel
 
 logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 
 class TestOmnetSocketConnection(unittest.TestCase):
@@ -19,18 +20,25 @@ class TestOmnetSocketConnection(unittest.TestCase):
         connection.initialize()
 
         time.sleep(1)
+        message_list = []
+        msg_ids = []
+        message_list.append({
+            'sender': 'node2',
+            'receiver': 'node1',
+            'size_B': 1024,
+            'time_send_ms': 10,
+            'msg_id': f'msg_25'
+        })
+        msg_ids.append(f'msg_25')
+        payload = {
+            "messages": message_list,
+            "max_advance": 15
+        }
 
         try:
             # Send several messages to simulate
             self.assertTrue(
-                connection.send_message_to_omnet(
-                    sender="node0",
-                    receiver="node1",
-                    msg_size_B=1024,
-                    time_send_ms=10,
-                    msg_id='msg0',
-                    max_advance=15
-                ))
+                connection.send_message_to_omnet(payload=payload, msg_ids=msg_ids))
             time.sleep(10)
             print(connection.get_all_messages())
             self.assertTrue(connection.send_termination_signal())
