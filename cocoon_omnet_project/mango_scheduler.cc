@@ -267,7 +267,7 @@ void MangoScheduler::processMessage(const std::string& message) {
 
             // Extract max_advance (shared for all messages in this batch)
             double max_advance = data["max_advance"];
-            maxTimeAdvance = max_advance / 1000; // Convert from ms to seconds
+            maxTimeAdvance = max_advance / 1000; // convert from ms to s
 
             std::cout << "Processing message batch with max advance: " << max_advance << " ms" << std::endl;
 
@@ -369,6 +369,8 @@ void MangoScheduler::processMessage(const std::string& message) {
 
 void MangoScheduler::sendMessage(const std::string& message) {
     if (clientSocket >= 0) {
+        // Add newline delimiter to separate messages
+        std::string delimitedMessage = message + "\n";
         // Use select to check if the socket is writable
         fd_set writefds;
         FD_ZERO(&writefds);
@@ -382,7 +384,7 @@ void MangoScheduler::sendMessage(const std::string& message) {
 
         if (result > 0 && FD_ISSET(clientSocket, &writefds)) {
             // Socket is ready for writing
-            ssize_t bytesSent = send(clientSocket, message.c_str(), message.length(), 0);
+            ssize_t bytesSent = send(clientSocket, delimitedMessage.c_str(), delimitedMessage.length(), 0);
 
             if (bytesSent < 0) {
                 std::cerr << "Error sending message: " << strerror(errno) << std::endl;
@@ -507,7 +509,6 @@ cEvent* MangoScheduler::takeNextEvent() {
             throw cTerminationException(E_ENDEDOK);
         }
     }
-
     // We have an event - remove it from FES and return it
     cEvent* tmp = sim->getFES()->removeFirst();
     ASSERT(tmp == event);

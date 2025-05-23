@@ -214,7 +214,8 @@ class OmnetConnection:
             logger.error("Cannot listen for messages: Socket not connected")
             return
 
-        self.socket.settimeout(0.1)  # Short timeout for non-blocking checks
+        self.socket.settimeout(0.1)
+        message_buffer = ""
 
         while self.socket_running:
             try:
@@ -222,36 +223,45 @@ class OmnetConnection:
                 bytes_read = self.socket.recv_into(buffer)
 
                 if bytes_read > 0:
-                    message = buffer[:bytes_read].decode('utf-8')
-                    logger.debug(f"Received message: {message}")
+                    message_buffer += buffer[:bytes_read].decode('utf-8')
 
-                    # Handle termination acknowledgment message
-                    if message == "TERM":
-                        logger.info("Received termination message from OMNeT++")
-                        self.socket_running = False
-                        break
+                    # Split by newlines to get complete messages
+                    lines = message_buffer.split('\n')
 
-                    # Check for termination acknowledgment
-                    if message.startswith("TERM_ACK"):
-                        logger.info("Received termination acknowledgment from OMNeT++")
-                        self.termination_acknowledged = True
+                    # Process all complete messages (all but the last if it's incomplete)
+                    for i in range(len(lines) - 1):
+                        message = lines[i].strip()
+                        if message:  # Skip empty lines
+                            logger.debug(f"Received message: {message}")
 
-                    # Add message to queue
-                    self.message_queue.put(message)
+                            # Handle special messages
+                            if message == "TERM":
+                                logger.info("Received termination message from OMNeT++")
+                                self.socket_running = False
+                                break
+                            elif message.startswith("TERM_ACK"):
+                                logger.info("Received termination acknowledgment from OMNeT++")
+                                self.termination_acknowledged = True
+
+                            # Add to queue
+                            self.message_queue.put(message)
+
+                    # Keep the last incomplete line in the buffer
+                    message_buffer = lines[-1]
+
                 elif bytes_read == 0:
                     logger.info("OMNeT++ simulator closed the connection")
                     self.socket_running = False
                     break
             except socket.timeout:
-                # This is expected with the non-blocking socket
                 pass
             except Exception as e:
-                if self.socket_running:  # Only log if we're supposed to be running
+                if self.socket_running:
                     logger.error(f"Error receiving message: {e}")
                     self.socket_running = False
                     break
 
-            time.sleep(0.01)  # Small sleep to prevent CPU spinning
+            time.sleep(0.01)
 
     def send_message(self, message: str) -> bool:
         if not self.socket:
