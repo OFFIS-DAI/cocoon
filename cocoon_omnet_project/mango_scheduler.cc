@@ -21,6 +21,12 @@ void handleSignal(int signal) {
     }
 }
 
+class AdvanceTimeEvent : public cMessage {
+  public:
+    AdvanceTimeEvent() : cMessage("AdvanceTimeEvent") {}
+};
+
+
 Register_Class(MangoScheduler);
 
 MangoScheduler::MangoScheduler()
@@ -317,7 +323,7 @@ void MangoScheduler::processMessage(const std::string& message) {
                     mangoMsg->setReceiverPort(receiverPort);
 
                     // Calculate absolute simulation time for the event
-                    simtime_t eventTime = simTime() + SimTime(time_send_ms, SIMTIME_MS);
+                    simtime_t eventTime = SimTime(time_send_ms, SIMTIME_MS);
                     mangoMsg->setCreationTime(eventTime);
 
                     // Schedule the message to the sender module
@@ -356,6 +362,22 @@ void MangoScheduler::processMessage(const std::string& message) {
 
             // Send acknowledgment back to Python
             sendMessage("TERM_ACK|Acknowledged termination request");
+        }
+        else if (type == "WAITING") {
+            std::cout << "Received waiting message" << endl;
+            json data = json::parse(payload);
+
+            // Extract max_advance (shared for all messages in this batch)
+            double max_advance = data["max_advance"];
+            maxTimeAdvance = max_advance / 1000; // convert from ms to s
+            AdvanceTimeEvent *dummyEvent = new AdvanceTimeEvent();
+            dummyEvent->setSchedulingPriority(-1); // lowest priority
+            cModule* advancer = getSimulation()->getModuleByPath("timeAdvancer");
+
+            dummyEvent->setArrival(advancer->getId(), -1, maxTimeAdvance);
+            getSimulation()->getFES()->insert(dummyEvent);
+
+            std::cout << "Scheduled dummy event to advance time to " << maxTimeAdvance << std::endl;
         }
         else {
             std::cout << "Unhandled message type: " << type << std::endl;
@@ -482,11 +504,12 @@ cEvent* MangoScheduler::takeNextEvent() {
         simtime_t timeAdvance = eventTime - currentTime;
 
         if (timeAdvance > maxTimeAdvance) {
+            sendMessage("WAITING");
             // Next event is beyond max advance - we need to wait for Python
             std::cout << "Next event at " << eventTime.str()
-                      << " exceeds max advance limit of " << maxTimeAdvance.str()
-                      << " from current time " << currentTime.str()
-                      << ". Waiting for Python..." << std::endl;
+                              << " exceeds max advance limit of " << maxTimeAdvance.str()
+                              << " from current time " << currentTime.str()
+                              << ". Waiting for Python..." << std::endl;
 
             // Don't process this event yet - wait for Python messages
             event = nullptr;
@@ -497,10 +520,11 @@ cEvent* MangoScheduler::takeNextEvent() {
         // No events in FES within allowed time range - wait for Python messages
         if (!terminationReceived) {
             std::cout << "No events within max advance limit. Waiting for Python messages..." << std::endl;
+            sendMessage("WAITING");
 
             // Wait for messages with periodic checks
             int waitAttempts = 0;
-            const int maxWaitAttempts = 100; // 10 seconds total (100 * 100ms)
+            const int maxWaitAttempts = 1000; // 100 seconds total (100 * 100ms)
 
             while (waitAttempts < maxWaitAttempts && !terminationReceived && !sigintReceived) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -527,14 +551,14 @@ cEvent* MangoScheduler::takeNextEvent() {
                 // Periodically log waiting status
                 if (waitAttempts % 10 == 0) {
                     std::cout << "Still waiting for Python messages... ("
-                              << waitAttempts / 10 << " seconds)" << std::endl;
+                            << waitAttempts / 10 << " seconds)" << " at time " << simTime()  << std::endl;
                 }
             }
 
             // If we've waited too long without receiving messages
             if (waitAttempts >= maxWaitAttempts && !event) {
                 std::cout << "Timeout waiting for Python messages. Current max advance: "
-                          << maxTimeAdvance.str() << std::endl;
+                        << maxTimeAdvance.str() << std::endl;
 
                 // Check one more time if there's an event we can process
                 event = sim->getFES()->peekFirst();

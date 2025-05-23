@@ -6,6 +6,10 @@ import inet.node.inet.Router;
 import inet.node.inet.StandardHost;
 import ned.DatarateChannel;
 
+simple MangoTimeAdvancer {
+}
+
+
 network SimpleNetwork
 {
     types:
@@ -16,10 +20,12 @@ network SimpleNetwork
         }
         channel ethline extends DatarateChannel
         {
-            delay = 10ms;
+            delay = 5ms;
             datarate = 100Mbps;
         }
     submodules:
+        timeAdvancer: MangoTimeAdvancer;
+        
         client: StandardHost {
             @display("p=250,100;i=device/laptop");
         }

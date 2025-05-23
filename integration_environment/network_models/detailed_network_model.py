@@ -293,6 +293,16 @@ class OmnetConnection:
             self.message_ids_sent.extend(msg_ids)
             return True
 
+    def send_waiting_message_to_omnet(self, max_advance_ms) -> bool:
+        message = f"WAITING|{json.dumps({'max_advance': max_advance_ms})}"
+        success = self.send_message(message)
+
+        if not success:
+            logger.error(f"Failed to send dispatch message: {message}")
+            return False
+        else:
+            return True
+
     def send_termination_signal(self) -> bool:
         # Reset flag
         self.termination_acknowledged = False
@@ -398,6 +408,9 @@ class DetailedNetworkModel:
                                                 config_name=config_name,
                                                 omnet_project_path=omnet_project_path)
         self.msg_id_to_msg = {}
+        self.msg_id_counter = 0
+
+        self.waiting_for_omnet = False
 
         self.omnet_connection.initialize()
 
@@ -415,16 +428,16 @@ class DetailedNetworkModel:
         msg_ids = []
         for sender, messages in sender_message_dict.items():
             for message in messages:
-                min_id = min(self.msg_id_to_msg.keys()) if len(self.msg_id_to_msg) > 0 else 0
                 message_list.append({
                     'sender': sender,
                     'receiver': message.receiver,
                     'size_B': len(message.message),
                     'time_send_ms': round(message.time * 1000),  # convert to ms
-                    'msg_id': f'msg_{min_id+1}'
+                    'msg_id': f'msg_{self.msg_id_counter}'
                 })
-                self.msg_id_to_msg[min_id+1] = message
-                msg_ids.append(f'msg_{min_id+1}')
+                self.msg_id_to_msg[self.msg_id_counter] = message
+                msg_ids.append(f'msg_{self.msg_id_counter}')
+                self.msg_id_counter += 1
         payload = {
             "messages": message_list,
             "max_advance": max_advance_ms
@@ -444,6 +457,8 @@ class DetailedNetworkModel:
             try:
                 # Skip non-data messages (INIT, TERM, etc.)
                 if '|' not in message:
+                    if 'WAITING' in message:
+                        self.waiting_for_omnet = False
                     continue
 
                 # Split message type and payload
@@ -481,9 +496,25 @@ class DetailedNetworkModel:
 
         return time_receive_to_message
 
+    async def handle_waiting_with_omnet(self, max_advance_ms):
+        logger.info('Handle waiting')
+        self.waiting_for_omnet = True
+        self.omnet_connection.send_waiting_message_to_omnet(max_advance_ms=max_advance_ms)
+        time_receive_to_message = {}
+        while self.waiting_for_omnet:
+            time_receive_to_message_new = await self.get_received_messages_from_omnet_connection()
+            for delivery_time, messages in time_receive_to_message_new.items():
+                if delivery_time not in time_receive_to_message:
+                    time_receive_to_message[delivery_time] = []
+                time_receive_to_message[delivery_time].extend(messages)
+        logger.info('Back to routine after waiting')
+        return time_receive_to_message
+
     def cleanup(self):
         """
         Clean up resources when finished with the simulation
         """
         if self.omnet_connection:
             self.omnet_connection.cleanup()
+
+
