@@ -475,20 +475,75 @@ cEvent* MangoScheduler::takeNextEvent() {
     // Look for the next event in the FES
     cEvent* event = sim->getFES()->peekFirst();
 
+    // Check if the next event would exceed max time advance
+    if (event) {
+        simtime_t currentTime = simTime();
+        simtime_t eventTime = event->getArrivalTime();
+        simtime_t timeAdvance = eventTime - currentTime;
+
+        if (timeAdvance > maxTimeAdvance) {
+            // Next event is beyond max advance - we need to wait for Python
+            std::cout << "Next event at " << eventTime.str()
+                      << " exceeds max advance limit of " << maxTimeAdvance.str()
+                      << " from current time " << currentTime.str()
+                      << ". Waiting for Python..." << std::endl;
+
+            // Don't process this event yet - wait for Python messages
+            event = nullptr;
+        }
+    }
+
     if (!event) {
-        // No events in FES - but we should wait for Python messages if not terminated
+        // No events in FES within allowed time range - wait for Python messages
         if (!terminationReceived) {
-            std::cout << "No more events but waiting for Python messages..." << std::endl;
+            std::cout << "No events within max advance limit. Waiting for Python messages..." << std::endl;
 
-            // Wait for a short time to allow messages to arrive
-            // This will also check for interruptions periodically
-            for (int i = 0; i < 10 && !terminationReceived && !sigintReceived; i++) {
+            // Wait for messages with periodic checks
+            int waitAttempts = 0;
+            const int maxWaitAttempts = 100; // 10 seconds total (100 * 100ms)
+
+            while (waitAttempts < maxWaitAttempts && !terminationReceived && !sigintReceived) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                waitAttempts++;
 
-                // Check for new events after waiting
+                // Check if we received new messages that might have updated maxTimeAdvance
+                // or scheduled new events within the allowed range
                 event = sim->getFES()->peekFirst();
                 if (event) {
-                    break; // Found an event, process it
+                    simtime_t currentTime = simTime();
+                    simtime_t eventTime = event->getArrivalTime();
+                    simtime_t timeAdvance = eventTime - currentTime;
+
+                    if (timeAdvance <= maxTimeAdvance) {
+                        // Found an event within allowed range
+                        std::cout << "Found event within max advance limit after waiting" << std::endl;
+                        break;
+                    } else {
+                        // Still beyond limit
+                        event = nullptr;
+                    }
+                }
+
+                // Periodically log waiting status
+                if (waitAttempts % 10 == 0) {
+                    std::cout << "Still waiting for Python messages... ("
+                              << waitAttempts / 10 << " seconds)" << std::endl;
+                }
+            }
+
+            // If we've waited too long without receiving messages
+            if (waitAttempts >= maxWaitAttempts && !event) {
+                std::cout << "Timeout waiting for Python messages. Current max advance: "
+                          << maxTimeAdvance.str() << std::endl;
+
+                // Check one more time if there's an event we can process
+                event = sim->getFES()->peekFirst();
+                if (event) {
+                    simtime_t timeAdvance = event->getArrivalTime() - simTime();
+                    if (timeAdvance > maxTimeAdvance) {
+                        std::cerr << "ERROR: No events within max advance limit and Python not responding" << std::endl;
+                        throw cRuntimeError("Simulation deadlock: No events within max advance limit");
+                    }
                 }
             }
 
@@ -498,7 +553,7 @@ cEvent* MangoScheduler::takeNextEvent() {
                 throw cTerminationException(SA_INTERRUPT);
             }
 
-            // If still no events, return nullptr to continue polling
+            // If still no events within range, return nullptr to continue polling
             if (!event) {
                 return nullptr;
             }
@@ -509,13 +564,13 @@ cEvent* MangoScheduler::takeNextEvent() {
             throw cTerminationException(E_ENDEDOK);
         }
     }
-    // We have an event - remove it from FES and return it
+
+    // We have an event within the allowed time range - remove it from FES and return it
     cEvent* tmp = sim->getFES()->removeFirst();
     ASSERT(tmp == event);
 
     return event;
 }
-
 void MangoScheduler::putBackEvent(cEvent* event) {
     sim->getFES()->insert(event);
 }
