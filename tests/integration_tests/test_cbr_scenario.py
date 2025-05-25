@@ -169,29 +169,31 @@ async def run_scenario_with_detailed_communication_simulation():
     clock = ExternalClock(start_time=0)
 
     container1 = create_external_coupling(addr='node1', codec=my_codec, clock=clock)
+    container2 = create_external_coupling(addr='node2', codec=my_codec, clock=clock)
+
+    communication_network_entity = DetailedModelScheduler(container_mapping={'node1': container1,
+                                                                             'node2': container2},
+                                                          inet_installation_path='/home/malin/cocoon_omnet_workspace/inet4.5/src',
+                                                          config_name='General',
+                                                          omnet_project_path='/home/malin/PycharmProjects/cocoon_DAI/cocoon_omnet_project/')
+
     cbr_receiver_role = ConstantBitrateReceiverRole()
     cbr_receiver_role_agent = agent_composed_of(cbr_receiver_role, ResultsRecorderRole(results_recorder))
     container1.register(cbr_receiver_role_agent)
 
-    container2 = create_external_coupling(addr='node2', codec=my_codec, clock=clock)
+    container2.current_start_time_of_step = time.time()
     cbr_sender_role_agent = agent_composed_of(
         ConstantBitrateSenderRole(receiver_addresses=[cbr_receiver_role_agent.addr],
                                   scenario_config=scenario_configuration),
         ResultsRecorderRole(results_recorder))
     container2.register(cbr_sender_role_agent)
 
-    communication_network_entity = DetailedModelScheduler(container_mapping={'node1': container1,
-                                                                             'node2': container2},
-                                                          inet_installation_path='/home/malin/cocoon_omnet_workspace/inet4.5/src',
-                                                          config_name='General',
-                                                          omnet_project_path='/home/malin/PycharmProjects/cocoon_DAI/omnet_project/')
-
     async with activate(container1, container2) as _:
         results_recorder.start_scenario_recording()
         await communication_network_entity.scenario_finished
     results_recorder.stop_scenario_recording()
 
-    # assert len(cbr_receiver_role.received_messages) > 0
+    assert len(cbr_receiver_role.received_messages) > 0
 
 
 @pytest.mark.asyncio
