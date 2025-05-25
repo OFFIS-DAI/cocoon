@@ -1,4 +1,6 @@
 import asyncio
+import time
+
 import pytest
 from mango import agent_composed_of, JSON, activate, ExternalClock
 from mango.container.factory import create_external_coupling
@@ -201,3 +203,4 @@ def test_scenarios():
     asyncio.run(run_scenario_with_ideal_communication())
     asyncio.run(run_scenario_with_simple_channel_model())
     asyncio.run(run_scenario_with_static_graph_model())
+    asyncio.run(run_scenario_with_detailed_communication_simulation())
