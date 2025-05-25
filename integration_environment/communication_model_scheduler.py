@@ -85,6 +85,9 @@ class CommunicationScheduler(ABC):
             await self.process_message_output(container_messages_dict=container_messages_dict,
                                               next_activities=next_activities_in_current_step)
 
+            if self._waiting_for_messages():
+                await self.handle_waiting()
+
             if len(self._message_buffer) > 0:
                 self.current_time = min(self._message_buffer.keys())
             elif len(self._next_activities) > 0:
@@ -94,8 +97,7 @@ class CommunicationScheduler(ABC):
                 # no more activities or messages in mango or external simulation -> finalize scenario
                 self.scenario_finished.set_result(True)
                 break
-            if self._waiting_for_messages():
-                await self.handle_waiting()
+
 
             if self.current_time >= self._duration_s:
                 print('finish because over sim duration')
