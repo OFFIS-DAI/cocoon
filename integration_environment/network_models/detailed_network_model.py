@@ -507,7 +507,6 @@ class DetailedNetworkModel:
                 if delivery_time not in time_receive_to_message:
                     time_receive_to_message[delivery_time] = []
                 time_receive_to_message[delivery_time].extend(messages)
-        logger.info('Back to routine after waiting')
         return time_receive_to_message
 
     def cleanup(self):

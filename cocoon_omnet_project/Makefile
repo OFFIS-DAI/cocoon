@@ -33,11 +33,17 @@ PROJECTRELATIVE_PATH =
 O = $(PROJECT_OUTPUT_DIR)/$(CONFIGNAME)/$(PROJECTRELATIVE_PATH)
 
 # Object files for local .cc, .msg and .sm files
-OBJS = $O/mango_scheduler.o $O/MangoTcpApp.o $O/messages/MangoMessage_m.o $O/messages/Timer_m.o $O/messages/TimerType_m.o
+OBJS = \
+    $O/MangoScheduler.o \
+    $O/MangoTcpApp.o \
+    $O/MangoTimeAdvancer.o \
+    $O/messages/MangoMsgTag_m.o \
+    $O/messages/Timer_m.o \
+    $O/messages/TimerType_m.o
 
 # Message files
 MSGFILES = \
-    messages/MangoMessage.msg \
+    messages/MangoMsgTag.msg \
     messages/Timer.msg \
     messages/TimerType.msg
 

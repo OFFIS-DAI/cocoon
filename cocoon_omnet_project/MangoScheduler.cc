@@ -1,3 +1,4 @@
+
 /*
  * mango_scheduler.cc
  */
@@ -5,7 +6,7 @@ extern "C" {
 #include <pthread.h>
 #include <signal.h>
 }
-#include "mango_scheduler.h"
+#include "MangoScheduler.h"
 
 #include <json.hpp>
 using json = nlohmann::json;// Forward declare a NetworkMessage class for our simulation messages
@@ -17,7 +18,7 @@ volatile sig_atomic_t sigintReceived = 0;
 void handleSignal(int signal) {
     if (signal == SIGINT) {
         sigintReceived = 1;
-        std::cout << "SIGINT received, preparing for graceful shutdown..." << std::endl;
+        EV << "SIGINT received, preparing for graceful shutdown..." << std::endl;
     }
 }
 
@@ -31,7 +32,7 @@ Register_Class(MangoScheduler);
 
 MangoScheduler::MangoScheduler()
 {
-    std::cout << "MangoScheduler initialized." << std::endl;
+    EV << "MangoScheduler initialized." << std::endl;
     terminationReceived = false;
 
     // Set up signal handler for graceful interruption
@@ -69,7 +70,7 @@ void MangoScheduler::cleanup() {
 }
 
 void MangoScheduler::registerApp(cModule *mod) {
-    std::cout << "App registered: " << mod->getFullPath() << std::endl;
+    EV << "App registered: " << mod->getFullPath() << std::endl;
     modules.push_back(mod);
 }
 
@@ -77,15 +78,15 @@ cModule *MangoScheduler::getReceiverModule(std::string module_name) {
     // Get corresponding module to server name
     cModule *matchingModule = nullptr;
 
-    std::cout << "Looking for module: " << module_name << std::endl;
-    std::cout << "Available modules: " << modules.size() << std::endl;
+    EV << "Looking for module: " << module_name << std::endl;
+    EV << "Available modules: " << modules.size() << std::endl;
 
     for (auto const& module : modules) {
         std::string moduleNameCheck = std::string(module->getParentModule()->getName());
-        std::cout << "Checking module: " << moduleNameCheck << std::endl;
+        EV << "Checking module: " << moduleNameCheck << std::endl;
         if (moduleNameCheck.compare(module_name) == 0) {
             matchingModule = module;
-            std::cout << "Found matching module: " << module->getFullPath() << std::endl;
+            EV << "Found matching module: " << module->getFullPath() << std::endl;
 
             break;
         }
@@ -131,7 +132,7 @@ void MangoScheduler::setupServerSocket() {
         throw cRuntimeError("Failed to listen on server socket");
     }
 
-    std::cout << "Server socket set up, waiting for Python client to connect on port " << PORT << std::endl;
+    EV << "Server socket set up, waiting for Python client to connect on port " << PORT << std::endl;
 
     // Set socket as non-blocking
     int flags = fcntl(serverSocket, F_GETFL, 0);
@@ -152,7 +153,7 @@ void MangoScheduler::setupServerSocket() {
             flags = fcntl(clientSocket, F_GETFL, 0);
             fcntl(clientSocket, F_SETFL, flags | O_NONBLOCK);
 
-            std::cout << "Python client connected" << std::endl;
+            EV << "Python client connected" << std::endl;
 
             // Start listener thread for incoming messages
             running = true;
@@ -166,14 +167,14 @@ void MangoScheduler::setupServerSocket() {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
         if (sigintReceived) {
-            std::cout << "Received interrupt while waiting for client connection" << std::endl;
+            EV << "Received interrupt while waiting for client connection" << std::endl;
             break;
         }
     }
 
     if (clientSocket < 0) {
         if (time(NULL) - startTime >= timeout) {
-            std::cout << "Timeout waiting for Python client connection" << std::endl;
+            EV << "Timeout waiting for Python client connection" << std::endl;
         }
         close(serverSocket);
         serverSocket = -1;
@@ -214,7 +215,7 @@ void MangoScheduler::listenForMessages() {
 
             if (bytesRead > 0) {
                 std::string message(buffer, bytesRead);
-                std::cout << "Received message from Python: " << message << std::endl;
+                EV << "Received message from Python: " << message << std::endl;
 
                 // Process the message immediately
                 processMessage(message);
@@ -229,7 +230,7 @@ void MangoScheduler::listenForMessages() {
                 queueCondition.notify_one();
             }
             else if (bytesRead == 0) {
-                std::cout << "Python client disconnected" << std::endl;
+                EV << "Python client disconnected" << std::endl;
                 break;
             }
             else {
@@ -243,7 +244,7 @@ void MangoScheduler::listenForMessages() {
 
         // Check for interruption
         if (sigintReceived) {
-            std::cout << "Listener thread detected interruption signal" << std::endl;
+            EV << "Listener thread detected interruption signal" << std::endl;
             break;
         }
 
@@ -251,7 +252,7 @@ void MangoScheduler::listenForMessages() {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
-    std::cout << "Listener thread exiting" << std::endl;
+    EV << "Listener thread exiting" << std::endl;
 }
 
 // Updated processMessage method to handle multiple messages in one payload
@@ -275,7 +276,7 @@ void MangoScheduler::processMessage(const std::string& message) {
             double max_advance = data["max_advance"];
             maxTimeAdvance = max_advance / 1000; // convert from ms to s
 
-            std::cout << "Processing message batch with max advance: " << max_advance << " ms" << std::endl;
+            EV << "Processing message batch with max advance: " << max_advance << " ms" << std::endl;
 
             // Extract the messages array
             json messages = data["messages"];
@@ -292,12 +293,12 @@ void MangoScheduler::processMessage(const std::string& message) {
                 std::string msg_id = msg["msg_id"];
 
                 // Log the extracted information
-                std::cout << "Processing individual message: " << std::endl;
-                std::cout << "  Sender: " << sender << std::endl;
-                std::cout << "  Receiver: " << receiver << std::endl;
-                std::cout << "  Size: " << size_B << " bytes" << std::endl;
-                std::cout << "  Send time: " << time_send_ms << " ms" << std::endl;
-                std::cout << "  Message ID: " << msg_id << std::endl;
+                EV << "Processing individual message: " << std::endl;
+                EV << "  Sender: " << sender << std::endl;
+                EV << "  Receiver: " << receiver << std::endl;
+                EV << "  Size: " << size_B << " bytes" << std::endl;
+                EV << "  Send time: " << time_send_ms << " ms" << std::endl;
+                EV << "  Message ID: " << msg_id << std::endl;
 
                 // Find sender module
                 cModule* senderModule = getReceiverModule(sender);
@@ -308,11 +309,11 @@ void MangoScheduler::processMessage(const std::string& message) {
                 cPar& portPar = receiverModule->par("localPort");
                 if (portPar.isSet()) {
                     receiverPort = portPar.intValue();
-                    std::cout << "Found receiver port: " << receiverPort << std::endl;
+                    EV << "Found receiver port: " << receiverPort << std::endl;
                 }
 
                 if (senderModule) {
-                    std::cout << "sender module: " << senderModule->getFullPath() << std::endl;
+                    EV << "sender module: " << senderModule->getFullPath() << std::endl;
 
                     // Create and schedule a network message
                     MangoMessage* mangoMsg = new MangoMessage("MangoMessage");
@@ -333,7 +334,7 @@ void MangoScheduler::processMessage(const std::string& message) {
                     // Insert into future event set
                     getSimulation()->getFES()->insert(mangoMsg);
 
-                    std::cout << "Scheduled message " << msg_id << " at time (seconds) "
+                    EV << "Scheduled message " << msg_id << " at time (seconds) "
                             << eventTime.str() << std::endl;
 
                     scheduled_msg_ids.push_back(msg_id);
@@ -357,14 +358,14 @@ void MangoScheduler::processMessage(const std::string& message) {
         }
         else if (type == "TERMINATE") {
             // Set termination flag when TERMINATE message received
-            std::cout << "Received termination signal from Python client." << std::endl;
+            EV << "Received termination signal from Python client." << std::endl;
             terminationReceived = true;
 
             // Send acknowledgment back to Python
             sendMessage("TERM_ACK|Acknowledged termination request");
         }
         else if (type == "WAITING") {
-            std::cout << "Received waiting message" << endl;
+            EV << "Received waiting message" << endl;
             json data = json::parse(payload);
 
             // Extract max_advance (shared for all messages in this batch)
@@ -377,10 +378,10 @@ void MangoScheduler::processMessage(const std::string& message) {
             dummyEvent->setArrival(advancer->getId(), -1, maxTimeAdvance);
             getSimulation()->getFES()->insert(dummyEvent);
 
-            std::cout << "Scheduled dummy event to advance time to " << maxTimeAdvance << std::endl;
+            EV << "Scheduled dummy event to advance time to " << maxTimeAdvance << std::endl;
         }
         else {
-            std::cout << "Unhandled message type: " << type << std::endl;
+            EV << "Unhandled message type: " << type << std::endl;
         }
     }
     catch (const std::exception& e) {
@@ -456,7 +457,7 @@ bool MangoScheduler::hasMessage() {
 }
 
 void MangoScheduler::startRun() {
-    std::cout << "Starting MangoScheduler run, setting up socket connection..." << std::endl;
+    EV << "Starting MangoScheduler run, setting up socket connection..." << std::endl;
 
     try {
         setupServerSocket();
@@ -472,7 +473,7 @@ void MangoScheduler::startRun() {
 }
 
 void MangoScheduler::endRun() {
-    std::cout << "Ending MangoScheduler run, cleaning up..." << std::endl;
+    EV << "Ending MangoScheduler run, cleaning up..." << std::endl;
 
     // Send termination message to Python client
     if (clientSocket >= 0) {
@@ -490,7 +491,7 @@ cEvent* MangoScheduler::guessNextEvent() {
 cEvent* MangoScheduler::takeNextEvent() {
     // First check if we've been interrupted
     if (sigintReceived) {
-        std::cout << "Simulation interrupted by signal, ending gracefully" << std::endl;
+        EV << "Simulation interrupted by signal, ending gracefully" << std::endl;
         throw cTerminationException(SA_INTERRUPT);
     }
 
@@ -506,7 +507,7 @@ cEvent* MangoScheduler::takeNextEvent() {
         if (timeAdvance > maxTimeAdvance) {
             sendMessage("WAITING");
             // Next event is beyond max advance - we need to wait for Python
-            std::cout << "Next event at " << eventTime.str()
+            EV << "Next event at " << eventTime.str()
                               << " exceeds max advance limit of " << maxTimeAdvance.str()
                               << " from current time " << currentTime.str()
                               << ". Waiting for Python..." << std::endl;
@@ -519,7 +520,7 @@ cEvent* MangoScheduler::takeNextEvent() {
     if (!event) {
         // No events in FES within allowed time range - wait for Python messages
         if (!terminationReceived) {
-            std::cout << "No events within max advance limit. Waiting for Python messages..." << std::endl;
+            EV << "No events within max advance limit. Waiting for Python messages..." << std::endl;
             sendMessage("WAITING");
 
             // Wait for messages with periodic checks
@@ -540,7 +541,7 @@ cEvent* MangoScheduler::takeNextEvent() {
 
                     if (timeAdvance <= maxTimeAdvance) {
                         // Found an event within allowed range
-                        std::cout << "Found event within max advance limit after waiting" << std::endl;
+                        EV << "Found event within max advance limit after waiting" << std::endl;
                         break;
                     } else {
                         // Still beyond limit
@@ -550,14 +551,14 @@ cEvent* MangoScheduler::takeNextEvent() {
 
                 // Periodically log waiting status
                 if (waitAttempts % 10 == 0) {
-                    std::cout << "Still waiting for Python messages... ("
+                    EV << "Still waiting for Python messages... ("
                             << waitAttempts / 10 << " seconds)" << " at time " << simTime()  << std::endl;
                 }
             }
 
             // If we've waited too long without receiving messages
             if (waitAttempts >= maxWaitAttempts && !event) {
-                std::cout << "Timeout waiting for Python messages. Current max advance: "
+                EV << "Timeout waiting for Python messages. Current max advance: "
                         << maxTimeAdvance.str() << std::endl;
 
                 // Check one more time if there's an event we can process
@@ -573,7 +574,7 @@ cEvent* MangoScheduler::takeNextEvent() {
 
             // If interrupted during wait, end simulation
             if (sigintReceived) {
-                std::cout << "Simulation interrupted while waiting for events" << std::endl;
+                EV << "Simulation interrupted while waiting for events" << std::endl;
                 throw cTerminationException(SA_INTERRUPT);
             }
 
@@ -584,7 +585,7 @@ cEvent* MangoScheduler::takeNextEvent() {
         }
         else {
             // We've received termination signal and there are no more events
-            std::cout << "No more events and termination received, ending simulation" << std::endl;
+            EV << "No more events and termination received, ending simulation" << std::endl;
             throw cTerminationException(E_ENDEDOK);
         }
     }

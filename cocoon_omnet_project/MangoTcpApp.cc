@@ -25,7 +25,7 @@
 
 #include "MangoTcpApp.h"
 #include "messages/MangoMsgTag_m.h"
-#include "mango_scheduler.h"
+#include "MangoScheduler.h"
 
 Define_Module(MangoTcpApp);
 
@@ -54,7 +54,7 @@ void MangoTcpApp::initialize(int stage) {
         // Register signals for statistics
         WATCH(numMessagesSent);
         WATCH(numMessagesReceived);
-        std::cout << moduleName << " initialized  first stage" << std::endl;
+        EV << moduleName << " initialized  first stage" << std::endl;
     }
     else if (stage == inet::INITSTAGE_APPLICATION_LAYER) {
         const char *localAddress = par("localAddress");
@@ -73,7 +73,7 @@ void MangoTcpApp::initialize(int stage) {
         scheduler->registerApp(this);
 
 
-        std::cout << moduleName << " initialized as TCP server at " << localAddress << ":" << localPort << std::endl;
+        EV << moduleName << " initialized as TCP server at " << localAddress << ":" << localPort << std::endl;
     }
     else {
         TcpAppBase::initialize(stage);
@@ -82,7 +82,7 @@ void MangoTcpApp::initialize(int stage) {
 }
 
 void MangoTcpApp::connect() {
-    std::cout << moduleName << " in connect" << endl;
+    EV << moduleName << " in connect" << endl;
     int currentSimTime = simTime().inUnit(SIMTIME_MS);
 
     // Find connections scheduled for current time
@@ -257,10 +257,10 @@ void MangoTcpApp::handleMessage(cMessage *msg) {
         int receiverPort = check_and_cast<MangoMessage *>(msg)->getReceiverPort();
 
 
-        std::cout << "  Message ID: " << msgId << std::endl;
-        std::cout << "  Sender: " << senderId << std::endl;
-        std::cout << "  Receiver: " << receiverId << " with port number: " << receiverPort << std::endl;
-        std::cout << "  Size: " << msgSize << " bytes" << std::endl;
+        EV << "  Message ID: " << msgId << std::endl;
+        EV << "  Sender: " << senderId << std::endl;
+        EV << "  Receiver: " << receiverId << " with port number: " << receiverPort << std::endl;
+        EV << "  Size: " << msgSize << " bytes" << std::endl;
 
         if (getParentModule()->getFullName() == senderId) {
             // We are the sender - let's handle everything directly here
@@ -279,7 +279,7 @@ void MangoTcpApp::handleMessage(cMessage *msg) {
                                 localPort);
             }
             catch (...) {
-                std::cout << "Socket already bound" << std::endl;
+                EV << "Socket already bound" << std::endl;
             }
 
             // Renew socket for new connection
@@ -301,14 +301,14 @@ void MangoTcpApp::handleMessage(cMessage *msg) {
             // Resolve destination address and connect
             inet::L3Address destination;
             try {
-                std::cout << "Resolving address for " << receiverId << std::endl;
+                EV << "Resolving address for " << receiverId << std::endl;
                 inet::L3AddressResolver().tryResolve(receiverId.c_str(), destination);
 
                 if (destination.isUnspecified()) {
-                    std::cout << "Cannot resolve address for " << receiverId << std::endl;
+                    EV << "Cannot resolve address for " << receiverId << std::endl;
                 }
                 else {
-                    std::cout << "Connecting to " << receiverId << " (" << destination.str() << ":" << receiverPort << ")" << std::endl;
+                    EV << "Connecting to " << receiverId << " (" << destination.str() << ":" << receiverPort << ")" << std::endl;
 
                     // Store socket
                     clientSockets[receiverPort] = clientSocket;
@@ -333,12 +333,12 @@ void MangoTcpApp::handleMessage(cMessage *msg) {
                 }
             }
             catch (std::exception& e) {
-                std::cout << "Error connecting: " << e.what() << std::endl;
+                EV << "Error connecting: " << e.what() << std::endl;
             }
         }
         else if (getParentModule()->getFullName() == receiverId) {
             // We are the receiver - expect TCP packets from sender
-            std::cout << "I am the receiver, expecting TCP packets from " << senderId << std::endl;
+            EV << "I am the receiver, expecting TCP packets from " << senderId << std::endl;
         }
 
         // Delete the MangoMessage
@@ -346,7 +346,7 @@ void MangoTcpApp::handleMessage(cMessage *msg) {
     }
     // Handle incoming data messages
     else if (msg->arrivedOn("socketIn") && strstr(msg->getName(), "data") != nullptr) {
-        std::cout << "Received data message on socketIn: " << msg->getName() << std::endl;
+        EV << "Received data message on socketIn: " << msg->getName() << std::endl;
 
         // This is a data message from a socket
         inet::Packet *packet = dynamic_cast<inet::Packet*>(msg);
@@ -356,7 +356,7 @@ void MangoTcpApp::handleMessage(cMessage *msg) {
             std::string msgId;
             int expectedMsgSize;
 
-            std::cout << "total length: " << packet->getTotalLength() << endl;
+            EV << "total length: " << packet->getTotalLength() << endl;
 
             auto data = packet->peekData(); // get all data from the packet
             auto regions = data->getAllTags<inet::MangoMsgTag>(); // get all tag regions
@@ -369,9 +369,9 @@ void MangoTcpApp::handleMessage(cMessage *msg) {
             int bytes = packet->getByteLength();
             numMessagesReceived++;
 
-            std::cout << "Received packet " << msgId << ", size: " << bytes << " bytes, expected bytes: " << expectedMsgSize << std::endl;
+            EV << "Received packet " << msgId << ", size: " << bytes << " bytes, expected bytes: " << expectedMsgSize << std::endl;
             messageSizeMap[msgId] += bytes;
-            std::cout << "updated to: " << messageSizeMap[msgId] << endl;
+            EV << "updated to: " << messageSizeMap[msgId] << endl;
 
             if (messageSizeMap[msgId] == expectedMsgSize) {
                 // Create JSON payload for the scheduler
@@ -387,7 +387,7 @@ void MangoTcpApp::handleMessage(cMessage *msg) {
                 MangoScheduler *scheduler = check_and_cast<MangoScheduler *>(getSimulation()->getScheduler());
                 if (scheduler) {
                     scheduler->sendMessage(responseMsg);
-                    std::cout << "Sent message receipt notification to scheduler: " << responseMsg << std::endl;
+                    EV << "Sent message receipt notification to scheduler: " << responseMsg << std::endl;
                 } else {
                     std::cerr << "Could not get scheduler to notify of received message" << std::endl;
                 }
@@ -446,7 +446,7 @@ void MangoTcpApp::handleMessage(cMessage *msg) {
 
             // If not processed by any socket, delete it
             if (!processed) {
-                std::cout << "Socket message not processed by any socket, deleting: " << msg->getName() << std::endl;
+                EV << "Socket message not processed by any socket, deleting: " << msg->getName() << std::endl;
                 delete msg;
             }
         }
@@ -466,7 +466,7 @@ void MangoTcpApp::handleMessage(cMessage *msg) {
                 close();
                 break;
             default:
-                std::cout << "Unknown timer type: " << timer->getTimerType() << std::endl;
+                EV << "Unknown timer type: " << timer->getTimerType() << std::endl;
                 break;
             }
         } else {
@@ -482,11 +482,11 @@ void MangoTcpApp::handleMessage(cMessage *msg) {
             ApplicationBase::handleMessage(msg);
         } catch (const std::exception& e) {
             // If there's an exception (like module is down), handle it here
-            std::cout << "Exception in ApplicationBase::handleMessage: " << e.what() << std::endl;
+            EV << "Exception in ApplicationBase::handleMessage: " << e.what() << std::endl;
             delete msg;
         } catch (...) {
             // Catch any other exceptions
-            std::cout << "Unknown exception in ApplicationBase::handleMessage" << std::endl;
+            EV << "Unknown exception in ApplicationBase::handleMessage" << std::endl;
             delete msg;
         }
     }
@@ -504,7 +504,7 @@ void MangoTcpApp::socketFailure(inet::TcpSocket *socket, int code) {
 }
 
 void MangoTcpApp::finish() {
-    std::cout << moduleName << " (" << simTime().inUnit(SIMTIME_MS)
+    EV << moduleName << " (" << simTime().inUnit(SIMTIME_MS)
                                                             << "): Received " << numMessagesReceived << " messages and sent "
                                                             << numMessagesSent << " messages" << std::endl;
 }
