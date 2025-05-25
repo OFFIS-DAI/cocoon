@@ -65,6 +65,8 @@ class ConstantBitrateSenderRole(Role):
         self.context.schedule_periodic_task(self.send_message, self.frequency_s)
 
     async def send_message(self):
+        if self.context.current_timestamp == 0:
+            return  # skip the first iteration
         logger.debug(f'Send message at time {self.context.current_timestamp}')
         time_send = round(self.context.current_timestamp * 1000)
         for receiver in self.receiver_addresses:
