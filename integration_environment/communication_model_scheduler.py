@@ -1,11 +1,16 @@
 import asyncio
+import json
+import logging
 import math
 from abc import ABC, abstractmethod
 
 from mango.container.external_coupling import ExternalSchedulingContainer, ExternalAgentMessage
 
 from integration_environment.network_models.channel_network_model import ChannelNetworkModel
+from integration_environment.network_models.cocoon_meta_model import CocoonMetaModel
 from integration_environment.network_models.detailed_network_model import DetailedNetworkModel
+
+logger = logging.getLogger(__name__)
 
 
 class CommunicationScheduler(ABC):
@@ -15,7 +20,7 @@ class CommunicationScheduler(ABC):
 
     def __init__(self,
                  container_mapping: dict[str, ExternalSchedulingContainer],
-                 scenario_duration_ms=200 * 1000):
+                 scenario_duration_ms=20 * 1000):
         """
         Initialize a new communication scheduler.
 
@@ -93,14 +98,11 @@ class CommunicationScheduler(ABC):
             elif len(self._next_activities) > 0:
                 self.current_time = min(self._next_activities)
             elif not self._waiting_for_messages():
-                print('finish because not waiting for messages')
                 # no more activities or messages in mango or external simulation -> finalize scenario
                 self.scenario_finished.set_result(True)
                 break
 
-
             if self.current_time >= self._duration_s:
-                print('finish because over sim duration')
                 # simulation has reached the defined duration -> finalize scenario
                 self.scenario_finished.set_result(True)
                 break
@@ -207,6 +209,11 @@ class ChannelModelScheduler(CommunicationScheduler):
 
 
 class DetailedModelScheduler(CommunicationScheduler):
+    """
+    Implementation of a communication scheduler which coordinates message simulation over the
+    communication network simulator OMNeT++. For this, a DetailedNetworkModel with an OMNeTConnection is used.
+    """
+
     def __init__(self,
                  container_mapping: dict[str, ExternalSchedulingContainer],
                  inet_installation_path: str,
@@ -250,11 +257,61 @@ class DetailedModelScheduler(CommunicationScheduler):
         return self.detailed_network_model.waiting_for_messages_from_omnet()
 
     async def handle_waiting(self):
-        message_buffer = await self.detailed_network_model.handle_waiting_with_omnet(max_advance_ms=self._get_max_advance_in_ms())
+        message_buffer = await self.detailed_network_model.handle_waiting_with_omnet(
+            max_advance_ms=self._get_max_advance_in_ms())
         for time_s, messages in message_buffer.items():
             if time_s not in self._message_buffer:
                 self._message_buffer[time_s] = []
             self._message_buffer[time_s].extend(messages)
+
+
+class MetaModelScheduler(DetailedModelScheduler):
+    """
+    Implementation of a communication scheduler which incorporates the meta-model cocoon.
+    """
+
+    def __init__(self, container_mapping: dict[str, ExternalSchedulingContainer], inet_installation_path: str,
+                 config_name: str, omnet_project_path: str):
+        super().__init__(container_mapping, inet_installation_path, config_name, omnet_project_path)
+        self.meta_model = CocoonMetaModel()
+
+    async def process_message_output(self,
+                                     container_messages_dict: dict[str, list[ExternalAgentMessage]],
+                                     next_activities):
+        await super().process_message_output(container_messages_dict=container_messages_dict,
+                                             next_activities=next_activities)
+
+        for container_name, messages in container_messages_dict.items():
+            for message in messages:
+                msg_id = self.detailed_network_model.get_message_id_for_message(message)
+                if msg_id:
+                    self.meta_model.process_sent_message(sender=container_name,
+                                                         receiver=message.receiver,
+                                                         payload_size_B=len(message.message),
+                                                         current_time_ms=int(self.current_time*1000),
+                                                         msg_id=msg_id)
+                else:
+                    logger.warning('ID of message cannot be resolved.')
+
+        for time_s, messages in self._message_buffer.items():
+            for message in messages:
+                msg_id = self.detailed_network_model.get_message_id_for_message(message)
+                if msg_id:
+                    self.meta_model.process_received_message(current_time_ms=int(time_s * 1000),
+                                                             msg_id=msg_id)
+                else:
+                    logger.warning('ID of message cannot be resolved.')
+
+    async def handle_waiting(self):
+        await super().handle_waiting()
+        for time_s, messages in self._message_buffer.items():
+            for message in messages:
+                msg_id = self.detailed_network_model.get_message_id_for_message(message)
+                if msg_id:
+                    self.meta_model.process_received_message(current_time_ms=int(time_s * 1000),
+                                                             msg_id=msg_id)
+                else:
+                    logger.warning('ID of message cannot be resolved.')
 
 
 class StaticDelayGraphModelScheduler(CommunicationScheduler):

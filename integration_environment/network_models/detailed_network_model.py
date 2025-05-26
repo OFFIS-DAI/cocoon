@@ -1,3 +1,4 @@
+import asyncio
 import json
 import signal
 import socket
@@ -63,6 +64,12 @@ class OmnetConnection:
     def initialize(self):
         """Initialize the connection and start OMNeT++ simulation"""
         try:
+            # Kill any existing OMNeT++ processes first
+            self.cleanup_existing_processes()
+
+            # Wait a moment for cleanup
+            time.sleep(1)
+
             # First build the project (from the project root directory)
             self.build_omnet_project()
 
@@ -359,6 +366,21 @@ class OmnetConnection:
             messages.append(self.receive_message(timeout=0.01))
         return messages
 
+    def cleanup_existing_processes(self):
+        """Kill any existing OMNeT++ processes that might be using the port"""
+        try:
+            # Kill processes by name
+            subprocess.run(['pkill', '-f', 'cocoon_omnet_project'],
+                           check=False, capture_output=True)
+
+            # Also kill processes using the socket port
+            subprocess.run(['fuser', '-k', f'{self.socket_port}/tcp'],
+                           check=False, capture_output=True)
+
+            logger.info("Cleaned up existing OMNeT++ processes")
+        except Exception as e:
+            logger.debug(f"Cleanup attempt completed: {e}")
+
     def cleanup(self):
         """Clean up resources when shutting down"""
         # First send termination signal if we're still connected
@@ -414,6 +436,12 @@ class DetailedNetworkModel:
 
         self.omnet_connection.initialize()
 
+    def get_message_id_for_message(self, message: ExternalAgentMessage):
+        fits = [(key, value) for key, value in self.msg_id_to_msg.items() if value == message]
+        if len(fits) == 1:
+            return f'msg_{fits[0][0]}'
+        return None
+
     def terminate_simulation(self):
         """
         Send termination signal to OMNeT++ simulation
@@ -443,6 +471,8 @@ class DetailedNetworkModel:
             "max_advance": max_advance_ms
         }
         self.omnet_connection.send_message_to_omnet(payload=payload, msg_ids=msg_ids)
+        # Add small delay before any subsequent communication
+        await asyncio.sleep(0.01)  # 10ms delay
 
     def waiting_for_messages_from_omnet(self) -> bool:
         messages_sent_but_not_received = [m for m in self.omnet_connection.message_ids_sent
@@ -515,5 +545,3 @@ class DetailedNetworkModel:
         """
         if self.omnet_connection:
             self.omnet_connection.cleanup()
-
-
