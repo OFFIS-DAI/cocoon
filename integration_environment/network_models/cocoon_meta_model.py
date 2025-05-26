@@ -1,6 +1,28 @@
+import copy
+import logging
 import math
+import statistics
 from dataclasses import dataclass
 from typing import Dict, Optional
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class MessageObservation:
+    sender: str
+    receiver: str
+    payload_size_B: int
+    time_send_ms: int
+    msg_id: str
+    time_receive_ms: int = math.inf
+
+    actual_delay_ms: int = math.inf
+    predicted_delay_ms: int = math.inf
+
+    sender_node_state: Optional['NodeState'] = None
+    receiver_node_state: Optional['NodeState'] = None
+    network_state: Optional['NetworkState'] = None
 
 
 @dataclass
@@ -59,7 +81,6 @@ class CocoonNetworkNode:
 
         self.messages_sent.append(message)
         self.sent_messages_by_id[msg_id] = message
-        # TODO: update node state
 
     def update_sent_message_received(self, msg_id: str, time_receive_ms: int):
         """Update a sent message when it's confirmed as received."""
@@ -84,10 +105,38 @@ class CocoonNetworkNode:
         """Get a received message by its ID."""
         return self.received_messages_by_id.get(msg_id)
 
+    def has_received_messages(self):
+        return len(self.messages_received) > 0
+
+    def has_sent_messages(self):
+        return len(self.messages_sent) > 0
+
+    def update_state(self, time_ms):
+        """
+        Updates state based on current knowledge.
+        """
+        # Handle incoming delays
+        incoming_delays = [msg.delay_ms for msg in self.messages_received
+                           if msg.delay_ms != math.inf and msg.delay_ms >= 0]
+        average_incoming_delay_ms = statistics.mean(incoming_delays) if incoming_delays else math.inf
+
+        # Handle outgoing delays
+        outgoing_delays = [msg.delay_ms for msg in self.messages_sent
+                           if msg.delay_ms != math.inf and msg.delay_ms >= 0]
+        average_outgoing_delay_ms = statistics.mean(outgoing_delays) if outgoing_delays else math.inf
+
+        # Count simultaneous messages
+        num_messages_sent_simultaneously = len([msg for msg in self.messages_sent if msg.time_send_ms == time_ms])
+
+        self.node_state = NodeState(average_incoming_delay_ms, average_outgoing_delay_ms,
+                                    num_messages_sent_simultaneously)
+
+        return copy.deepcopy(self.node_state)
+
 
 class CocoonNetworkGraph:
     def __init__(self):
-        self.nodes = {}  # {node_name: CocoonNetworkNode object}
+        self.nodes: Dict[str, CocoonNetworkNode] = {}
         self.network_state = NetworkState()
 
         # Global message tracking - this is the single source of truth
@@ -97,6 +146,27 @@ class CocoonNetworkGraph:
         if node_name not in self.nodes:
             self.nodes[node_name] = CocoonNetworkNode(name=node_name)
         return self.nodes[node_name]
+
+    def update_state(self, time_ms):
+        """
+        Update network state for a given simulation time.
+        """
+        completed_messages = self.get_completed_messages()
+        average_delay_ms = statistics.mean([msg.delay_ms for msg in completed_messages]) \
+            if len(completed_messages) > 0 else math.inf
+        num_messages_in_transit = len(self.get_messages_in_transit())
+        num_network_nodes = len(self.nodes)
+        messages_in_transit = self.get_messages_in_transit()
+        busy_links = []
+        for m in messages_in_transit:
+            if (m.sender, m.receiver) not in busy_links:
+                busy_links.append((m.sender, m.receiver))
+        num_busy_links = len(busy_links)
+        num_messages_sent_simultaneously = len([msg for msg in self.all_messages_by_id.values()
+                                                if msg.time_send_ms == time_ms])
+        self.network_state = NetworkState(average_delay_ms, num_messages_in_transit, num_busy_links, num_network_nodes,
+                                          num_messages_sent_simultaneously)
+        return copy.deepcopy(self.network_state)
 
     def register_sent_message(self, sender: str, receiver: str,
                               payload_size_B: int, current_time_ms: int, msg_id: str):
@@ -115,9 +185,6 @@ class CocoonNetworkGraph:
         message = sender_node.get_sent_message_by_id(msg_id)
         if message:
             self.all_messages_by_id[msg_id] = message
-            print('registered message: ', msg_id)
-
-        # TODO: update network state
 
     def mark_message_received(self, msg_id: str, current_time_ms: int) -> bool:
         """Mark a message as received using only msg_id and current time."""
@@ -139,8 +206,6 @@ class CocoonNetworkGraph:
         # Add the message to receiver node's received messages list
         receiver_node = self.get_or_initialize_node(message.receiver)
         receiver_node.add_received_message_from_global(message)
-
-        # TODO: update network state
         return True
 
     def get_message_by_id(self, msg_id: str) -> Optional[Message]:
@@ -168,6 +233,9 @@ class CocoonMetaModel:
     def __init__(self):
         self.network_graph = CocoonNetworkGraph()
 
+        # create empty dictionary in order track observations for prediction training
+        self.message_observations: Dict[str, MessageObservation] = {}
+
     def process_sent_message(self, sender: str, receiver: str,
                              payload_size_B: int, current_time_ms: int, msg_id: str):
         """Process a message that was sent."""
@@ -183,11 +251,33 @@ class CocoonMetaModel:
         """Process a message that was received - only needs msg_id and current time."""
         success = self.network_graph.mark_message_received(msg_id, current_time_ms)
         if not success:
-            print(f"Failed to process received message {msg_id}")
+            logger.warning(f"Failed to process received message {msg_id}")
+        if msg_id not in self.message_observations:
+            return
+        observation = self.message_observations[msg_id]
+        observation.time_receive_ms = current_time_ms
+        observation.actual_delay_ms = current_time_ms - observation.time_send_ms
 
-    def get_message_status(self, msg_id: str) -> Optional[Message]:
-        """Get the current status of a message by its ID."""
-        return self.network_graph.get_message_by_id(msg_id)
+    def predict_message_delay_times(self):
+        messages_in_transit = self.network_graph.get_messages_in_transit()
+        for message in messages_in_transit:
+            sender_node = self.network_graph.get_or_initialize_node(node_name=message.sender)
+            sender_node_state = sender_node.update_state(time_ms=message.time_send_ms)
+            receiver_node = self.network_graph.get_or_initialize_node(node_name=message.receiver)
+            receiver_node_state = receiver_node.update_state(time_ms=message.time_send_ms)
+            network_state = self.network_graph.update_state(time_ms=message.time_send_ms)
+
+            self.message_observations[message.msg_id] = MessageObservation(sender=message.sender,
+                                                                           receiver=message.receiver,
+                                                                           payload_size_B=message.payload_size_B,
+                                                                           time_send_ms=message.time_send_ms,
+                                                                           msg_id=message.msg_id,
+                                                                           sender_node_state=sender_node_state,
+                                                                           receiver_node_state=receiver_node_state,
+                                                                           network_state=network_state,
+                                                                           predicted_delay_ms=0)  # TODO
+
+            # TODO predict delay times
 
     def get_network_statistics(self) -> dict:
         """Get comprehensive network statistics."""

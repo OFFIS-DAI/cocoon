@@ -293,6 +293,8 @@ class MetaModelScheduler(DetailedModelScheduler):
                 else:
                     logger.warning('ID of message cannot be resolved.')
 
+        self.meta_model.predict_message_delay_times()
+
         for time_s, messages in self._message_buffer.items():
             for message in messages:
                 msg_id = self.detailed_network_model.get_message_id_for_message(message)
