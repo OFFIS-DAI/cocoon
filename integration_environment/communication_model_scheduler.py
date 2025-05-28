@@ -1,9 +1,10 @@
 import asyncio
-import json
 import logging
 import math
 from abc import ABC, abstractmethod
+from typing import Optional
 
+import pandas as pd
 from mango.container.external_coupling import ExternalSchedulingContainer, ExternalAgentMessage
 
 from integration_environment.network_models.channel_network_model import ChannelNetworkModel
@@ -72,6 +73,8 @@ class CommunicationScheduler(ABC):
 
         Sets the scenario_finished future when complete.
         """
+        await self._on_scenario_start()
+
         for container_name, container in self._container_mapping.items():
             while container.inbox is None:
                 await asyncio.sleep(1)
@@ -99,18 +102,29 @@ class CommunicationScheduler(ABC):
                 self.current_time = min(self._next_activities)
             elif not self._waiting_for_messages():
                 # no more activities or messages in mango or external simulation -> finalize scenario
+                await self._on_scenario_finished()
                 self.scenario_finished.set_result(True)
                 break
 
             if self.current_time >= self._duration_s:
                 # simulation has reached the defined duration -> finalize scenario
+                await self._on_scenario_finished()
                 self.scenario_finished.set_result(True)
                 break
+
+    async def _on_scenario_start(self):
+        pass
 
     def _waiting_for_messages(self):
         return False
 
     async def handle_waiting(self):
+        pass
+
+    async def _on_scenario_finished(self):
+        """
+        Called when scenario is finished. Override in subclasses for cleanup tasks.
+        """
         pass
 
     @abstractmethod
@@ -271,9 +285,22 @@ class MetaModelScheduler(DetailedModelScheduler):
     """
 
     def __init__(self, container_mapping: dict[str, ExternalSchedulingContainer], inet_installation_path: str,
-                 config_name: str, omnet_project_path: str):
+                 config_name: str, omnet_project_path: str, output_file_name: str = 'cocoon_output.csv',
+                 in_training_mode: bool = True, training_df: Optional[pd.DataFrame] = None,
+                 cluster_distance_threshold: float = 5):
         super().__init__(container_mapping, inet_installation_path, config_name, omnet_project_path)
-        self.meta_model = CocoonMetaModel()
+        self.training_df = training_df
+        self.meta_model = CocoonMetaModel(output_file_name=output_file_name,
+                                          mode=CocoonMetaModel.Mode.TRAINING
+                                          if in_training_mode else CocoonMetaModel.Mode.PRODUCTION,
+                                          cluster_distance_threshold=cluster_distance_threshold)
+
+    async def _on_scenario_start(self):
+        if self.meta_model.mode == CocoonMetaModel.Mode.PRODUCTION:
+            if not isinstance(self.training_df, pd.DataFrame):
+                logger.warning('No training data provided for meta-model in production phase.')
+            else:
+                self.meta_model.execute_egg_phase(self.training_df)
 
     async def process_message_output(self,
                                      container_messages_dict: dict[str, list[ExternalAgentMessage]],
@@ -288,12 +315,12 @@ class MetaModelScheduler(DetailedModelScheduler):
                     self.meta_model.process_sent_message(sender=container_name,
                                                          receiver=message.receiver,
                                                          payload_size_B=len(message.message),
-                                                         current_time_ms=int(self.current_time*1000),
+                                                         current_time_ms=int(self.current_time * 1000),
                                                          msg_id=msg_id)
                 else:
                     logger.warning('ID of message cannot be resolved.')
 
-        self.meta_model.predict_message_delay_times()
+        self.meta_model.process_observations()
 
         for time_s, messages in self._message_buffer.items():
             for message in messages:
@@ -314,6 +341,14 @@ class MetaModelScheduler(DetailedModelScheduler):
                                                              msg_id=msg_id)
                 else:
                     logger.warning('ID of message cannot be resolved.')
+
+    async def _on_scenario_finished(self):
+        """
+        Save meta-model observations when scenario finishes.
+        """
+        # Final call to process observations
+        self.meta_model.process_observations()
+        await self.meta_model.save_observations()
 
 
 class StaticDelayGraphModelScheduler(CommunicationScheduler):

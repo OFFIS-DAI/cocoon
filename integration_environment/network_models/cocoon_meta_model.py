@@ -1,9 +1,16 @@
 import copy
+import datetime
 import logging
 import math
 import statistics
 from dataclasses import dataclass
+from enum import Enum
 from typing import Dict, Optional
+
+import pandas as pd
+from scipy.cluster.hierarchy import linkage, fcluster
+from scipy.spatial.distance import pdist
+from sklearn.tree import DecisionTreeRegressor
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +52,20 @@ class NodeState:
     average_incoming_delay_ms: float = math.inf
     num_messages_sent_simultaneously: int = 0
 
+    def get_as_sender_node_dict(self):
+        return {
+            'sender_average_outgoing_delay_ms': self.average_outgoing_delay_ms if self.average_outgoing_delay_ms != math.inf else None,
+            'sender_average_incoming_delay_ms': self.average_incoming_delay_ms if self.average_incoming_delay_ms != math.inf else None,
+            'sender_num_messages_sent_simultaneously': self.num_messages_sent_simultaneously
+        }
+
+    def get_as_receiver_node_dict(self):
+        return {
+            'receiver_average_outgoing_delay_ms': self.average_outgoing_delay_ms if self.average_outgoing_delay_ms != math.inf else None,
+            'receiver_average_incoming_delay_ms': self.average_incoming_delay_ms if self.average_incoming_delay_ms != math.inf else None,
+            'receiver_num_messages_sent_simultaneously': self.num_messages_sent_simultaneously
+        }
+
 
 @dataclass
 class NetworkState:
@@ -56,6 +77,15 @@ class NetworkState:
     num_busy_links: int = 0
     num_network_nodes: int = 0
     num_messages_sent_simultaneously: int = 0
+
+    def get_as_dict(self):
+        return {
+            'network_average_delay_ms': self.average_delay_ms if self.average_delay_ms != math.inf else None,
+            'network_num_messages_in_transit': self.num_messages_in_transit,
+            'network_num_busy_links': self.num_busy_links,
+            'network_num_network_nodes': self.num_network_nodes,
+            'network_num_messages_sent_simultaneously': self.num_messages_sent_simultaneously
+        }
 
 
 class CocoonNetworkNode:
@@ -230,11 +260,67 @@ class CocoonNetworkGraph:
 
 
 class CocoonMetaModel:
-    def __init__(self):
+    """
+    Meta-model called cocoon which is supposed to approximate the detailed simulation.
+    """
+
+    class Mode(Enum):
+        TRAINING = 0
+        PRODUCTION = 1
+
+    def __init__(self, output_file_name: str, mode: Mode = Mode.TRAINING, cluster_distance_threshold: float = 5):
+        self.output_file_name = output_file_name
+        self.mode = mode
         self.network_graph = CocoonNetworkGraph()
 
         # create empty dictionary in order track observations for prediction training
         self.message_observations: Dict[str, MessageObservation] = {}
+
+        self.object_variables = ['network_num_messages_in_transit', 'network_num_busy_links',
+                                 'network_num_network_nodes',
+                                 'network_num_messages_sent_simultaneously', 'payload_size_B',
+                                 'sender_num_messages_sent_simultaneously']
+        self.emerging_variables = ['network_average_delay_ms', 'sender_average_outgoing_delay_ms',
+                                   'receiver_average_incoming_delay_ms']
+        self.model_features = self.object_variables + self.emerging_variables
+
+        self.clustering_distance_threshold = cluster_distance_threshold
+
+    def execute_egg_phase(self, training_df: pd.DataFrame):
+        """
+        ----------
+        EGG phase
+        ----------
+        Initialization of the simulation set-up, pre-training of decision tree regressors for each cluster.
+        """
+        # fill training dataframe with 0s
+        training_df[self.object_variables] = training_df[self.object_variables].fillna(0)
+        # calculate pairwise distances with squared Euclidean distance metric
+        dis_matrix = pdist(training_df[self.object_variables], metric='seuclidean')
+
+        # Calculate linkages with hierarchical clustering (average linkage)
+        linkage_matrix_average = linkage(dis_matrix, method='average')  # average linkage
+        # build cluster from the previously calculated distances between (message) objects
+        label_av = fcluster(linkage_matrix_average, t=self.clustering_distance_threshold, criterion='distance')
+
+        # Add cluster labels to the dataframe
+        training_df['cluster_av'] = label_av.tolist()
+        model_for_cluster_id = {}
+        # Train a regression model for each cluster
+        for cluster_id in training_df['cluster_av'].unique():
+            # Select historical data for the current cluster
+            cluster_data = training_df[training_df['cluster_av'] == cluster_id]
+
+            # Extract features (X) and target (y) for the current cluster
+            X = cluster_data[self.model_features]
+            y = cluster_data['actual_delay_ms']
+            reg = DecisionTreeRegressor(random_state=42)  # TODO: add grid search
+
+            reg.fit(X, y)
+            model_for_cluster_id[cluster_id] = reg
+
+        logger.info(f'EGG phase done. Resulting in a number of {len(model_for_cluster_id)} '
+                    f'distinct clusters with one regressor each. ')
 
     def process_sent_message(self, sender: str, receiver: str,
                              payload_size_B: int, current_time_ms: int, msg_id: str):
@@ -258,7 +344,7 @@ class CocoonMetaModel:
         observation.time_receive_ms = current_time_ms
         observation.actual_delay_ms = current_time_ms - observation.time_send_ms
 
-    def predict_message_delay_times(self):
+    def process_observations(self):
         messages_in_transit = self.network_graph.get_messages_in_transit()
         for message in messages_in_transit:
             sender_node = self.network_graph.get_or_initialize_node(node_name=message.sender)
@@ -274,55 +360,29 @@ class CocoonMetaModel:
                                                                            msg_id=message.msg_id,
                                                                            sender_node_state=sender_node_state,
                                                                            receiver_node_state=receiver_node_state,
-                                                                           network_state=network_state,
-                                                                           predicted_delay_ms=0)  # TODO
+                                                                           network_state=network_state)  # TODO
 
-            # TODO predict delay times
+            # TODO predict delay times and use in further simulation
 
-    def get_network_statistics(self) -> dict:
-        """Get comprehensive network statistics."""
-        completed_messages = self.network_graph.get_completed_messages()
-        messages_in_transit = self.network_graph.get_messages_in_transit()
+    async def save_observations(self):
+        observations_data = []
+        for msg_obs in self.message_observations.values():
+            obs_dict = {
+                'msg_id': msg_obs.msg_id,
+                'sender': msg_obs.sender,
+                'receiver': msg_obs.receiver,
+                'payload_size_B': msg_obs.payload_size_B,
+                'time_send_ms': msg_obs.time_send_ms,
+                'time_receive_ms': msg_obs.time_receive_ms if msg_obs.time_receive_ms != math.inf else None,
+                'actual_delay_ms': msg_obs.actual_delay_ms if msg_obs.actual_delay_ms != math.inf else None,
+                'predicted_delay_ms': msg_obs.predicted_delay_ms if msg_obs.predicted_delay_ms != math.inf else None
+            }
+            obs_dict.update(msg_obs.sender_node_state.get_as_sender_node_dict())
+            obs_dict.update(msg_obs.receiver_node_state.get_as_receiver_node_dict())
+            obs_dict.update(msg_obs.network_state.get_as_dict())
+            observations_data.append(obs_dict)
 
-        # Calculate delay statistics for completed messages
-        delays = [msg.delay_ms for msg in completed_messages if msg.delay_ms != math.inf]
+        df = pd.DataFrame(observations_data)
+        df.to_csv(self.output_file_name, index=False)
 
-        stats = {
-            'total_nodes': len(self.network_graph.nodes),
-            'total_messages_sent': len(self.network_graph.all_messages_by_id),
-            'messages_completed': len(completed_messages),
-            'messages_in_transit': len(messages_in_transit),
-            'message_completion_rate': len(completed_messages) / max(len(self.network_graph.all_messages_by_id), 1),
-        }
-
-        if delays:
-            stats.update({
-                'average_delay_ms': sum(delays) / len(delays),
-                'min_delay_ms': min(delays),
-                'max_delay_ms': max(delays),
-                'total_delays_measured': len(delays)
-            })
-
-        return stats
-
-    def print_network_summary(self):
-        """Print a formatted summary of network statistics."""
-        stats = self.get_network_statistics()
-
-        print("\n" + "=" * 50)
-        print("COCOON META-MODEL NETWORK SUMMARY")
-        print("=" * 50)
-        print(f"Total Nodes: {stats['total_nodes']}")
-        print(f"Total Messages Sent: {stats['total_messages_sent']}")
-        print(f"Messages Completed: {stats['messages_completed']}")
-        print(f"Messages In Transit: {stats['messages_in_transit']}")
-        print(f"Message Completion Rate: {stats['message_completion_rate']:.2%}")
-
-        if 'average_delay_ms' in stats:
-            print(f"\nDelay Statistics:")
-            print(f"  Average Delay: {stats['average_delay_ms']:.2f} ms")
-            print(f"  Min Delay: {stats['min_delay_ms']:.2f} ms")
-            print(f"  Max Delay: {stats['max_delay_ms']:.2f} ms")
-            print(f"  Total Delays Measured: {stats['total_delays_measured']}")
-
-        print("=" * 50 + "\n")
+        print(f"📊 Observations saved to CSV: {self.output_file_name}")

@@ -6,7 +6,8 @@ import inet.node.inet.Router;
 import inet.node.inet.StandardHost;
 import ned.DatarateChannel;
 
-simple MangoTimeAdvancer {
+simple MangoTimeAdvancer
+{
 }
 
 
@@ -24,8 +25,9 @@ network SimpleNetwork
             datarate = 100Mbps;
         }
     submodules:
-        timeAdvancer: MangoTimeAdvancer;
-        
+        timeAdvancer: MangoTimeAdvancer {
+            @display("p=337,40");
+        }
         client: StandardHost {
             @display("p=250,100;i=device/laptop");
         }
@@ -50,10 +52,14 @@ network SimpleNetwork
         configurator: Ipv4NetworkConfigurator {
             @display("p=100,100;is=s");
         }
+        node3: StandardHost {
+            @display("p=327,363;i=device/pc");
+        }
     connections:
         client.ethg++ <--> ethline <--> switch.ethg++;
         switch.ethg++ <--> ethline <--> node1.ethg++;
         switch.ethg++ <--> ethline <--> node2.ethg++;
+        switch.ethg++ <--> ethline <--> node3.ethg++;
         router.ethg++ <--> ethline <--> switch.ethg++;
         router.pppg++ <--> fiberline <--> net.pppg++;
         server.pppg++ <--> fiberline <--> net.pppg++;
