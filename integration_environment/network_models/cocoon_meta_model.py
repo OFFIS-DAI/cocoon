@@ -11,6 +11,7 @@ import pandas as pd
 from scipy.cluster.hierarchy import linkage, fcluster
 from scipy.spatial.distance import pdist, cdist
 from sklearn.tree import DecisionTreeRegressor
+from sklearn.base import clone
 
 logger = logging.getLogger(__name__)
 
@@ -259,6 +260,55 @@ class CocoonNetworkGraph:
         return completed_messages
 
 
+def train_decision_tree_regressor_online(cluster_model: DecisionTreeRegressor,
+                                         state_df: pd.DataFrame,
+                                         model_features: list[str]):
+    """
+    Trains decision tree regressor on current scenario data.
+    :param state_df: Dataframe with message data (state attributes and delay times) and cluster information.
+    :param model_features: list of model features.
+    :return: map containing {cluster id: trained model}
+    """
+    # Extract features (X) and target (y)
+    X_train = state_df[model_features]
+    y_train = state_df['delay_ms']
+
+    # Train a decision tree regression model
+    model = clone(cluster_model)
+    model.fit(X_train, y_train)
+
+    return model
+
+
+def get_exponential_weighted_moving_average(errors: list,
+                                            alpha: float):
+    # EWMA(t) = alpha * x(t) + (1-alpha) * EWMA(t-1)
+    exp_weigh_mov_av = None
+    for i in range(len(errors)):
+        if i == 0:
+            exp_weigh_mov_av = errors[i]
+        else:
+            exp_weigh_mov_av = alpha * errors[i] + (1 - alpha) * exp_weigh_mov_av
+    return exp_weigh_mov_av
+
+
+def weighted_prediction(alpha: float,
+                        abs_error_cluster_predictions: list,
+                        abs_error_online_predictions: list,
+                        cluster_prediction: float,
+                        online_prediction: float) -> float:
+    if len(abs_error_online_predictions) == 0:
+        if not online_prediction:
+            return cluster_prediction
+        return np.mean([cluster_prediction, online_prediction])
+    # calculate exponential weighted moving average in error values for weighting
+    cl_pred_moving_average = get_exponential_weighted_moving_average(errors=abs_error_cluster_predictions, alpha=alpha)
+    on_pred_moving_average = get_exponential_weighted_moving_average(errors=abs_error_online_predictions, alpha=alpha)
+    return ((online_prediction * cl_pred_moving_average
+             + cluster_prediction * on_pred_moving_average) /
+            (on_pred_moving_average + cl_pred_moving_average))
+
+
 class CocoonMetaModel:
     """
     Meta-model called cocoon which is supposed to approximate the detailed simulation.
@@ -268,7 +318,8 @@ class CocoonMetaModel:
         TRAINING = 0
         PRODUCTION = 1
 
-    def __init__(self, output_file_name: str, mode: Mode = Mode.TRAINING, cluster_distance_threshold: float = 5):
+    def __init__(self, output_file_name: str, mode: Mode = Mode.TRAINING, cluster_distance_threshold: float = 5,
+                 i_pupa: int = 10, alpha: float = 0.3):
         self.output_file_name = output_file_name
         self.mode = mode
         self.network_graph = CocoonNetworkGraph()
@@ -277,6 +328,7 @@ class CocoonMetaModel:
         self.training_df = None
         # Dictionary containing all pre-trained regressors on historical data
         self.model_for_cluster_id = {}
+        self.online_model = None  # TODO: add multiple models for different clusters
 
         # create empty dictionary in order track observations for prediction training
         self.message_observations: Dict[str, MessageObservation] = {}
@@ -290,6 +342,14 @@ class CocoonMetaModel:
         self.model_features = self.object_variables + self.emerging_variables
 
         self.clustering_distance_threshold = cluster_distance_threshold
+
+        self.message_index = 0
+        self.i_pupa = i_pupa
+
+        # Additional attributes for weighted predictions
+        self.alpha = alpha  # EWMA smoothing parameter
+        self.cluster_prediction_errors = []  # Track cluster prediction errors
+        self.online_prediction_errors = []  # Track online prediction errors
 
     def execute_egg_phase(self, training_df: pd.DataFrame):
         """
@@ -360,9 +420,74 @@ class CocoonMetaModel:
         regressor_cluster = self.model_for_cluster_id[closest_cluster]
         # predict message delay time with cluster regressor
         d_cl_pred = \
-        regressor_cluster.predict(np.array([variables_dict[var] for var in self.model_features]).reshape(1, -1))[0]
-        logger.info(f'Predicted delay time of {d_cl_pred}. ')
+            regressor_cluster.predict(np.array([variables_dict[var] for var in self.model_features]).reshape(1, -1))[0]
+        logger.info(f'Predicted delay time with cluster regressor: d_cl_pred = {d_cl_pred}. ')
         return int(d_cl_pred)
+
+    def execute_pupa_phase(self, sender_node: CocoonNetworkNode, receiver_node: CocoonNetworkNode,
+                           payload_size_B: int, cluster_prediction: float = None):
+        """
+        Enhanced PUPA phase with weighted predictions
+        """
+        variables_dict = self.get_all_state_variables_as_dict(sender_node, receiver_node)
+        variables_dict.update({'payload_size_B': payload_size_B})
+
+        online_prediction = None
+
+        # Train/update online model periodically
+        if self.message_index % self.i_pupa == 0:
+            message_observations_as_df = self.get_observations_as_df()
+            message_observations_as_df.dropna(subset=['actual_delay_ms'], inplace=True)
+
+            if len(message_observations_as_df) > 0:
+                # Extract features (X) and target (y)
+                X = message_observations_as_df[self.model_features]
+                y = message_observations_as_df['actual_delay_ms']
+                reg = DecisionTreeRegressor(random_state=42)
+                reg.fit(X, y)
+                self.online_model = reg
+
+        # Make online prediction if model exists
+        if self.online_model is not None:
+            online_prediction = self.online_model.predict(
+                np.array([variables_dict[var] for var in self.model_features]).reshape(1, -1)
+            )[0]
+            logger.info(f'Predicted delay time online: d_on_pred = {online_prediction}')
+
+        # Calculate weighted prediction
+        if cluster_prediction is not None and online_prediction is not None:
+            weighted_pred = weighted_prediction(
+                alpha=self.alpha,
+                abs_error_cluster_predictions=self.cluster_prediction_errors,
+                abs_error_online_predictions=self.online_prediction_errors,
+                cluster_prediction=cluster_prediction,
+                online_prediction=online_prediction
+            )
+            logger.info(f'Weighted prediction: {weighted_pred}')
+            return int(weighted_pred)
+        elif cluster_prediction is not None:
+            return int(cluster_prediction)
+        elif online_prediction is not None:
+            return int(online_prediction)
+        else:
+            logger.warning("No predictions available")
+            return 0
+
+    def update_prediction_errors(self, msg_id: str, actual_delay: float):
+        """
+        Update prediction error tracking when actual delay becomes available
+        """
+        if msg_id in self.message_observations:
+            observation = self.message_observations[msg_id]
+
+            # Calculate cluster prediction error if available
+            if observation.predicted_delay_ms != math.inf:
+                cluster_error = abs(actual_delay - observation.predicted_delay_ms)
+                self.cluster_prediction_errors.append(cluster_error)
+
+                # Keep only recent errors (e.g., last 100)
+                if len(self.cluster_prediction_errors) > 100:
+                    self.cluster_prediction_errors = self.cluster_prediction_errors[-100:]
 
     def process_sent_message(self, sender: str, receiver: str,
                              payload_size_B: int, current_time_ms: int, msg_id: str):
@@ -386,16 +511,31 @@ class CocoonMetaModel:
         observation.time_receive_ms = current_time_ms
         observation.actual_delay_ms = current_time_ms - observation.time_send_ms
 
+        # Update prediction errors for learning
+        self.update_prediction_errors(msg_id, observation.actual_delay_ms)
+
     def process_observations(self):
         messages_in_transit = self.network_graph.get_messages_in_transit()
         for message in messages_in_transit:
+            self.message_index += 1
             sender_node = self.network_graph.get_or_initialize_node(node_name=message.sender)
             sender_node_state = sender_node.update_state(time_ms=message.time_send_ms)
             receiver_node = self.network_graph.get_or_initialize_node(node_name=message.receiver)
             receiver_node_state = receiver_node.update_state(time_ms=message.time_send_ms)
             network_state = self.network_graph.update_state(time_ms=message.time_send_ms)
 
+            # LARVA phase - get cluster prediction
             d_cl_pred = self.execute_larva_phase(sender_node, receiver_node, payload_size_B=message.payload_size_B)
+
+            final_prediction = d_cl_pred
+
+            if self.message_index >= self.i_pupa:
+                # PUPA phase - get weighted prediction
+                final_prediction = self.execute_pupa_phase(
+                    sender_node, receiver_node,
+                    payload_size_B=message.payload_size_B,
+                    cluster_prediction=d_cl_pred
+                )
 
             self.message_observations[message.msg_id] = MessageObservation(sender=message.sender,
                                                                            receiver=message.receiver,
@@ -405,9 +545,27 @@ class CocoonMetaModel:
                                                                            sender_node_state=sender_node_state,
                                                                            receiver_node_state=receiver_node_state,
                                                                            network_state=network_state,
-                                                                           predicted_delay_ms=d_cl_pred)  # TODO
+                                                                           predicted_delay_ms=final_prediction)
 
-            # TODO predict delay times and use in further simulation
+    def get_observations_as_df(self):
+        observations_data = []
+        for msg_obs in self.message_observations.values():
+            obs_dict = {
+                'msg_id': msg_obs.msg_id,
+                'sender': msg_obs.sender,
+                'receiver': msg_obs.receiver,
+                'payload_size_B': msg_obs.payload_size_B,
+                'time_send_ms': msg_obs.time_send_ms,
+                'time_receive_ms': msg_obs.time_receive_ms if msg_obs.time_receive_ms != math.inf else None,
+                'actual_delay_ms': msg_obs.actual_delay_ms if msg_obs.actual_delay_ms != math.inf else None,
+                'predicted_delay_ms': msg_obs.predicted_delay_ms if msg_obs.predicted_delay_ms != math.inf else None
+            }
+            obs_dict.update(msg_obs.sender_node_state.get_as_sender_node_dict())
+            obs_dict.update(msg_obs.receiver_node_state.get_as_receiver_node_dict())
+            obs_dict.update(msg_obs.network_state.get_as_dict())
+            observations_data.append(obs_dict)
+
+        return pd.DataFrame(observations_data)
 
     async def save_observations(self):
         observations_data = []
