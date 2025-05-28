@@ -1,5 +1,4 @@
 import copy
-import datetime
 import logging
 import math
 import statistics
@@ -7,9 +6,10 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Dict, Optional
 
+import numpy as np
 import pandas as pd
 from scipy.cluster.hierarchy import linkage, fcluster
-from scipy.spatial.distance import pdist
+from scipy.spatial.distance import pdist, cdist
 from sklearn.tree import DecisionTreeRegressor
 
 logger = logging.getLogger(__name__)
@@ -273,6 +273,11 @@ class CocoonMetaModel:
         self.mode = mode
         self.network_graph = CocoonNetworkGraph()
 
+        # DataFrame containing training data for the regressors
+        self.training_df = None
+        # Dictionary containing all pre-trained regressors on historical data
+        self.model_for_cluster_id = {}
+
         # create empty dictionary in order track observations for prediction training
         self.message_observations: Dict[str, MessageObservation] = {}
 
@@ -295,6 +300,8 @@ class CocoonMetaModel:
         """
         # fill training dataframe with 0s
         training_df[self.object_variables] = training_df[self.object_variables].fillna(0)
+
+        self.training_df = training_df
         # calculate pairwise distances with squared Euclidean distance metric
         dis_matrix = pdist(training_df[self.object_variables], metric='seuclidean')
 
@@ -305,7 +312,7 @@ class CocoonMetaModel:
 
         # Add cluster labels to the dataframe
         training_df['cluster_av'] = label_av.tolist()
-        model_for_cluster_id = {}
+
         # Train a regression model for each cluster
         for cluster_id in training_df['cluster_av'].unique():
             # Select historical data for the current cluster
@@ -317,10 +324,45 @@ class CocoonMetaModel:
             reg = DecisionTreeRegressor(random_state=42)  # TODO: add grid search
 
             reg.fit(X, y)
-            model_for_cluster_id[cluster_id] = reg
+            self.model_for_cluster_id[cluster_id] = reg
 
-        logger.info(f'EGG phase done. Resulting in a number of {len(model_for_cluster_id)} '
+        logger.info(f'EGG phase done. Resulting in a number of {len(self.model_for_cluster_id)} '
                     f'distinct clusters with one regressor each. ')
+
+    def get_all_state_variables_as_dict(self, sender_node: CocoonNetworkNode, receiver_node: CocoonNetworkNode):
+        state_dict = {}
+        state_dict.update(sender_node.node_state.get_as_sender_node_dict())
+        state_dict.update(receiver_node.node_state.get_as_receiver_node_dict())
+        state_dict.update(self.network_graph.network_state.get_as_dict())
+        return state_dict
+
+    def execute_larva_phase(self, sender_node: CocoonNetworkNode, receiver_node: CocoonNetworkNode,
+                            payload_size_B: int) -> int:
+        """
+        ------------
+        LARVA phase
+        ------------
+        Assign current message to closest cluster and predict delay time with pre-trained regressor.
+        """
+        variables_dict = self.get_all_state_variables_as_dict(sender_node, receiver_node)
+        variables_dict.update({'payload_size_B': payload_size_B})
+        message_object_variables = np.array([variables_dict[var] for var in self.object_variables]).reshape(1, -1)
+        # Compute distances between this test message and all historical messages
+        distances_to_all_messages = cdist(message_object_variables, self.training_df[self.object_variables],
+                                          metric='seuclidean')
+        closest_historical_idx = distances_to_all_messages.argmin()
+        # Assign the test message to the cluster of the closest historical message
+        closest_cluster = self.training_df.iloc[closest_historical_idx]['cluster_av']
+        distance = distances_to_all_messages.T[closest_historical_idx][0]
+        logger.info(f'Assigned message to cluster {closest_cluster} with distance {distance}. ')
+
+        # get regressor of closest cluster
+        regressor_cluster = self.model_for_cluster_id[closest_cluster]
+        # predict message delay time with cluster regressor
+        d_cl_pred = \
+        regressor_cluster.predict(np.array([variables_dict[var] for var in self.model_features]).reshape(1, -1))[0]
+        logger.info(f'Predicted delay time of {d_cl_pred}. ')
+        return int(d_cl_pred)
 
     def process_sent_message(self, sender: str, receiver: str,
                              payload_size_B: int, current_time_ms: int, msg_id: str):
@@ -353,6 +395,8 @@ class CocoonMetaModel:
             receiver_node_state = receiver_node.update_state(time_ms=message.time_send_ms)
             network_state = self.network_graph.update_state(time_ms=message.time_send_ms)
 
+            d_cl_pred = self.execute_larva_phase(sender_node, receiver_node, payload_size_B=message.payload_size_B)
+
             self.message_observations[message.msg_id] = MessageObservation(sender=message.sender,
                                                                            receiver=message.receiver,
                                                                            payload_size_B=message.payload_size_B,
@@ -360,7 +404,8 @@ class CocoonMetaModel:
                                                                            msg_id=message.msg_id,
                                                                            sender_node_state=sender_node_state,
                                                                            receiver_node_state=receiver_node_state,
-                                                                           network_state=network_state)  # TODO
+                                                                           network_state=network_state,
+                                                                           predicted_delay_ms=d_cl_pred)  # TODO
 
             # TODO predict delay times and use in further simulation
 
