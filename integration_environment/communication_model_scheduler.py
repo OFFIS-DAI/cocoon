@@ -11,6 +11,7 @@ from mango.container.external_coupling import ExternalSchedulingContainer, Exter
 from integration_environment.network_models.channel_network_model import ChannelNetworkModel
 from integration_environment.network_models.cocoon_meta_model import CocoonMetaModel
 from integration_environment.network_models.detailed_network_model import DetailedNetworkModel
+from integration_environment.scenario_configuration import ScenarioDuration
 
 logger = logging.getLogger(__name__)
 
@@ -158,12 +159,13 @@ class IdealCommunicationScheduler(CommunicationScheduler):
     are not a concern.
     """
 
-    def __init__(self, container_mapping: dict[str, ExternalSchedulingContainer]):
+    def __init__(self, container_mapping: dict[str, ExternalSchedulingContainer],
+                 scenario_duration_ms: int = 200 * 1000):
         """
         Initialize an ideal communication scheduler.
         :param container_mapping: Dictionary mapping container names to their ExternalSchedulingContainer objects.
         """
-        super().__init__(container_mapping)
+        super().__init__(container_mapping, scenario_duration_ms=scenario_duration_ms)
 
     async def process_message_output(self,
                                      container_messages_dict: dict[str, list[ExternalAgentMessage]],
@@ -197,8 +199,8 @@ class ChannelModelScheduler(CommunicationScheduler):
     def __init__(self,
                  container_mapping: dict[str, ExternalSchedulingContainer],
                  topology_dict: dict = None,
-                 topology_file_name: str = None):
-        super().__init__(container_mapping)
+                 topology_file_name: str = None, scenario_duration_ms: int = 200 * 1000):
+        super().__init__(container_mapping, scenario_duration_ms=scenario_duration_ms)
         if topology_dict:
             self.channel_model = ChannelNetworkModel.from_dict(topology_data=topology_dict)
         elif topology_file_name:
@@ -233,8 +235,9 @@ class DetailedModelScheduler(CommunicationScheduler):
                  container_mapping: dict[str, ExternalSchedulingContainer],
                  inet_installation_path: str,
                  config_name: str,
-                 omnet_project_path: str):
-        super().__init__(container_mapping)
+                 omnet_project_path: str,
+                 scenario_duration_ms: int = 200 * 1000):
+        super().__init__(container_mapping, scenario_duration_ms=scenario_duration_ms)
         self.detailed_network_model = DetailedNetworkModel(inet_installation_path=inet_installation_path,
                                                            config_name=config_name,
                                                            omnet_project_path=omnet_project_path)
@@ -290,8 +293,9 @@ class MetaModelScheduler(DetailedModelScheduler):
     def __init__(self, container_mapping: dict[str, ExternalSchedulingContainer], inet_installation_path: str,
                  config_name: str, omnet_project_path: str, output_file_name: str = 'cocoon_output.csv',
                  in_training_mode: bool = True, training_df: Optional[pd.DataFrame] = None,
-                 cluster_distance_threshold: float = 5):
-        super().__init__(container_mapping, inet_installation_path, config_name, omnet_project_path)
+                 cluster_distance_threshold: float = 5, scenario_duration_ms: int = 200 * 1000):
+        super().__init__(container_mapping, inet_installation_path, config_name, omnet_project_path,
+                         scenario_duration_ms=scenario_duration_ms)
         self.training_df = training_df
         self.meta_model = CocoonMetaModel(output_file_name=output_file_name,
                                           mode=CocoonMetaModel.Mode.TRAINING
@@ -358,7 +362,7 @@ class MetaModelScheduler(DetailedModelScheduler):
                 else:
                     logger.warning('ID of message cannot be resolved.')
                     continue
-                time_receive = (message_in_transit['time_send_ms'] + message_in_transit['delay_ms'])/1000
+                time_receive = (message_in_transit['time_send_ms'] + message_in_transit['delay_ms']) / 1000
                 if time_receive not in self._message_buffer:
                     self._message_buffer[time_receive] = []
                 self._message_buffer[time_receive].append(self.msg_id_to_msg[msg_id_num])
@@ -418,7 +422,8 @@ class StaticDelayGraphModelScheduler(CommunicationScheduler):
     def __init__(self,
                  container_mapping: dict[str, ExternalSchedulingContainer],
                  topology_dict: dict = None,
-                 topology_file_name: str = None):
+                 topology_file_name: str = None,
+                 scenario_duration_ms: int = 200 * 1000):
         """
         Initialize a static delay graph model scheduler.
 
@@ -426,7 +431,7 @@ class StaticDelayGraphModelScheduler(CommunicationScheduler):
         :param topology_dict: Dictionary containing network topology information.
         :param topology_file_name: Path to JSON file containing topology information.
         """
-        super().__init__(container_mapping)
+        super().__init__(container_mapping, scenario_duration_ms=scenario_duration_ms)
 
         # We'll import StaticGraphModel locally to avoid circular imports
         from integration_environment.network_models.static_graph_model import StaticGraphModel

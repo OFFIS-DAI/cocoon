@@ -1,9 +1,8 @@
 import asyncio
+import logging
 import time
-from typing import List, Dict
+from typing import List, Dict, Optional
 
-import pandas as pd
-import pytest
 from mango import agent_composed_of, JSON, activate, ExternalClock
 from mango.container.external_coupling import ExternalSchedulingContainer
 from mango.container.factory import create_external_coupling
@@ -13,20 +12,57 @@ from integration_environment.communication_model_scheduler import IdealCommunica
 from integration_environment.messages import TrafficMessage
 from integration_environment.results_recorder import ResultsRecorder
 from integration_environment.roles import ConstantBitrateSenderRole, ConstantBitrateReceiverRole, ResultsRecorderRole
-from integration_environment.scenario_configuration import ScenarioConfiguration, PayloadSizeConfig
-from tests.integration_tests.utils import setup_logging, visualize_channel_model_graph, visualize_static_graph
+from integration_environment.scenario_configuration import ScenarioConfiguration, PayloadSizeConfig, ModelType, \
+    ScenarioDuration, NumDevices
 
 my_codec = JSON()
 my_codec.add_serializer(*TrafficMessage.__serializer__())
 
-scenario_configurations = [
-    ScenarioConfiguration(scenario_id='ideal-2',
-                          payload_size=PayloadSizeConfig.SMALL,
-                          num_devices=2),
-    ScenarioConfiguration(scenario_id='ideal-3',
-                          payload_size=PayloadSizeConfig.SMALL,
-                          num_devices=3)
-]
+# Set up logging
+logging.basicConfig(
+    level=logging.WARNING,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler("evaluation.log"),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
+
+def get_scenario_configurations():
+    scenario_configurations = []
+    for payload_size in [payload for payload in PayloadSizeConfig]:
+        for model_type in [m for m in ModelType]:
+            for scenario_duration in [s for s in ScenarioDuration]:
+                for n_devices in [d for d in NumDevices]:
+                    scenario_configurations.append(ScenarioConfiguration(payload_size=payload_size,
+                                                                         num_devices=n_devices,
+                                                                         model_type=model_type,
+                                                                         scenario_duration=scenario_duration))
+    return scenario_configurations
+
+
+def get_scheduler(scenario_configuration: ScenarioConfiguration,
+                  container_mapping: Dict[str, ExternalSchedulingContainer]) -> Optional[CommunicationScheduler]:
+    if scenario_configuration.model_type == ModelType.ideal:
+        return IdealCommunicationScheduler(container_mapping=container_mapping,
+                                           scenario_duration_ms=scenario_configuration.scenario_duration.value)
+    elif scenario_configuration.model_type == ModelType.channel:
+        return ChannelModelScheduler(container_mapping=container_mapping,
+                                     scenario_duration_ms=scenario_configuration.scenario_duration.value)
+    elif scenario_configuration.model_type == ModelType.static_graph:
+        return StaticDelayGraphModelScheduler(container_mapping=container_mapping,
+                                              scenario_duration_ms=scenario_configuration.scenario_duration.value)
+    elif scenario_configuration.model_type == ModelType.detailed:
+        return DetailedModelScheduler(container_mapping=container_mapping,
+                                      scenario_duration_ms=scenario_configuration.scenario_duration.value)
+    elif scenario_configuration.model_type == ModelType.meta_model:
+        return MetaModelScheduler(container_mapping=container_mapping,
+                                  scenario_duration_ms=scenario_configuration.scenario_duration.value)
+    else:
+        logging.warning(f'Unknown model type: {scenario_configuration.model_type}')
+        return None
 
 
 async def initialize_constant_bitrate_broadcast_agents(clock: ExternalClock,
@@ -34,7 +70,7 @@ async def initialize_constant_bitrate_broadcast_agents(clock: ExternalClock,
                                                        scenario_configuration: ScenarioConfiguration):
     container_mapping = {}
     receiver_addresses = []
-    for n_agents in range(scenario_configuration.num_devices - 1):
+    for n_agents in range(scenario_configuration.num_devices.value - 1):
         index = n_agents + 1
         container = create_external_coupling(addr=f'node{index}', codec=my_codec, clock=clock)
         cbr_receiver_role = ConstantBitrateReceiverRole()
@@ -43,14 +79,14 @@ async def initialize_constant_bitrate_broadcast_agents(clock: ExternalClock,
         receiver_addresses.append(cbr_receiver_role_agent.addr)
         container_mapping[f'node{index}'] = container
 
-    container2 = create_external_coupling(addr=f'node{scenario_configuration.num_devices}',
+    container2 = create_external_coupling(addr=f'node{scenario_configuration.num_devices.value}',
                                           codec=my_codec, clock=clock)
     cbr_sender_role_agent = agent_composed_of(
         ConstantBitrateSenderRole(receiver_addresses=receiver_addresses, scenario_config=scenario_configuration),
         ResultsRecorderRole(results_recorder))
     container2.register(cbr_sender_role_agent)
 
-    container_mapping[f'node{scenario_configuration.num_devices}'] = container2
+    container_mapping[f'node{scenario_configuration.num_devices.value}'] = container2
 
     return container_mapping
 
@@ -65,20 +101,23 @@ async def run_scenario(container_mapping: Dict[str, ExternalSchedulingContainer]
 
 
 async def run_benchmark_suite():
-    # TODO: generate set of scenario configurations (for 2, 5, 10, 50 agents)
-    for scenario_configuration in scenario_configurations:
+    for scenario_configuration in get_scenario_configurations():
         results_recorder = ResultsRecorder(scenario_configuration=scenario_configuration)
         clock = ExternalClock(start_time=0)
 
-        container_mapping = await initialize_constant_bitrate_broadcast_agents(clock=clock,
-                                                                               results_recorder=results_recorder,
-                                                                               scenario_configuration=scenario_configuration)
+        container_mapping = \
+            await initialize_constant_bitrate_broadcast_agents(clock=clock,
+                                                               results_recorder=results_recorder,
+                                                               scenario_configuration=scenario_configuration)
 
-        scheduler = IdealCommunicationScheduler(container_mapping=container_mapping)
+        scheduler = get_scheduler(scenario_configuration=scenario_configuration,
+                                  container_mapping=container_mapping)
 
-        await run_scenario(container_mapping=container_mapping,
-                           results_recorder=results_recorder,
-                           scheduler=scheduler)
+        if scheduler is not None:
+            print(f'Running scenario with config: {scenario_configuration.scenario_id}')
+            await run_scenario(container_mapping=container_mapping,
+                               results_recorder=results_recorder,
+                               scheduler=scheduler)
 
 
 if __name__ == "__main__":
