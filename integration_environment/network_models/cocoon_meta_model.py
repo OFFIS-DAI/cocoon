@@ -306,6 +306,19 @@ class CocoonMetaModel:
         # OPTIMIZATION: Store cluster centroids for fast distance calculation
         self.cluster_centroids = {}  # {cluster_id: centroid_vector}
 
+        # boolean variable indicating if substitution threshold has been reached
+        self.substitution_threshold_reached = False
+        self.previous_node_count = 0
+
+    def get_messages_in_transit(self):
+        messages_in_transit = self.network_graph.get_messages_in_transit()
+        messages_in_transit_with_delay = [{'msg_id': m.msg_id,
+                                           'time_send_ms': m.time_send_ms,
+                                           'delay_ms': self.message_observations[m.msg_id].predicted_delay_ms}
+                                          for m in messages_in_transit]
+
+        return messages_in_transit_with_delay
+
     def execute_egg_phase(self, training_df: pd.DataFrame):
         """
         ----------
@@ -413,7 +426,6 @@ class CocoonMetaModel:
             if distance < min_distance:
                 min_distance = distance
                 closest_cluster = cluster_id
-
         return closest_cluster
 
     def execute_pupa_phase(self, sender_node: CocoonNetworkNode, receiver_node: CocoonNetworkNode,
@@ -455,7 +467,7 @@ class CocoonMetaModel:
                 cluster_prediction=cluster_prediction,
                 online_prediction=online_prediction
             )
-            logger.info(f'Weighted prediction: {weighted_pred}')
+            logger.info(f'Weighted prediction: d_w_pred = {weighted_pred}')
             return int(weighted_pred)
         elif cluster_prediction is not None:
             return int(cluster_prediction)
@@ -531,6 +543,115 @@ class CocoonMetaModel:
 
         return weighted_pred
 
+    def execute_butterfly_phase(self):
+        """
+        ----------
+        BUTTERFLY phase
+        ----------
+        Calculate substitution threshold based on:
+        - Error trend of weighted predictions (d_w_pred)
+        - Distance towards nearest cluster (dist_c)
+        - Network graph topology information (number of nodes)
+
+        Sets self.substitution_threshold_reached to True if the meta-model has
+        reached sufficient performance/stability.
+        """
+        # 1. Error trend of weighted predictions
+        if len(self.cluster_prediction_errors) >= 3:
+            # Calculate error trend over recent predictions
+            recent_errors = self.cluster_prediction_errors[-3:]
+            error_trend = (recent_errors[2] - recent_errors[0]) / 2
+
+            # Normalize error trend (negative slope means improving predictions)
+            recent_mean_error = sum(recent_errors) / len(recent_errors)
+
+            # Higher score for lower errors and improving trends
+            error_trend_factor = 1.0 - min(1.0, max(0.0,
+                                                    (recent_mean_error / 100) * 0.5 +
+                                                    max(0, error_trend / 50)))
+        else:
+            # Not enough history to determine trend
+            error_trend_factor = 0.3  # Neutral starting value
+
+        # 2. Distance towards nearest cluster
+        # Calculate for the most recent message observation
+        if self.message_observations and self.message_index > 0:
+            # Get the most recent message
+            recent_msg_id = list(self.message_observations.keys())[-1]
+            observation = self.message_observations[recent_msg_id]
+
+            # Extract object variables from the observation
+            msg_features = []
+            for var in self.object_variables:
+                if var.startswith('network_'):
+                    msg_features.append(observation.network_state.get_as_dict().get(var, 0))
+                elif var.startswith('sender_'):
+                    msg_features.append(observation.sender_node_state.get_as_sender_node_dict().get(var, 0))
+                elif var.startswith('receiver_'):
+                    msg_features.append(observation.receiver_node_state.get_as_receiver_node_dict().get(var, 0))
+                elif var == 'payload_size_B':
+                    msg_features.append(observation.payload_size_B)
+
+            msg_features = np.array(msg_features)
+
+            # Find closest cluster and its distance
+            min_distance = float('inf')
+
+            for cluster_id, centroid in self.cluster_centroids.items():
+                distance = np.linalg.norm(msg_features - centroid)
+                if distance < min_distance:
+                    min_distance = distance
+
+            # Normalize distance (closer is better)
+            # Using a reasonable maximum expected distance
+            max_expected_distance = self.clustering_distance_threshold * 10 # could be much higher than in training data
+            cluster_distance_factor = 1.0 - min(1.0, min_distance / max_expected_distance)
+
+        else:
+            cluster_distance_factor = 0.3  # Neutral starting value
+
+        # 3. Network graph topology (number of nodes)
+        current_node_count = len(self.network_graph.nodes)
+
+        # Calculate stability of network topology
+        if self.previous_node_count > 0:
+            # Lower change ratio means more stable topology
+            node_change_ratio = abs(current_node_count - self.previous_node_count) / self.previous_node_count
+            network_topology_factor = 1.0 - min(1.0, node_change_ratio * 2)
+        else:
+            network_topology_factor = 0.5
+
+        # Update previous node count for next call
+        self.previous_node_count = current_node_count
+
+        # Calculate combined threshold using weighted factors
+        weights = {
+            'error_trend': 0.45,  # Error trend is primary indicator
+            'cluster_distance': 0.35,  # Cluster proximity is important
+            'network_topology': 0.20  # Network stability is supplementary
+        }
+
+        combined_score = (
+                weights['error_trend'] * error_trend_factor +
+                weights['cluster_distance'] * cluster_distance_factor +
+                weights['network_topology'] * network_topology_factor
+        )
+
+        # Determine if substitution threshold is reached
+        threshold_value = 0.65  # Required threshold to trigger substitution
+        self.substitution_threshold_reached = combined_score >= threshold_value
+
+        # Log the results if logger is available
+        if logger:
+            logger.info(f"Butterfly Phase Results:")
+            logger.info(f"  Error Trend Factor: {error_trend_factor:.4f}")
+            logger.info(f"  Cluster Distance Factor: {cluster_distance_factor:.4f}")
+            logger.info(f"  Network Topology Factor: {network_topology_factor:.4f}")
+            logger.info(f"  Combined Score: {combined_score:.4f} (required: {threshold_value})")
+            logger.info(f"  Substitution Threshold Reached: {self.substitution_threshold_reached}")
+
+        return self.substitution_threshold_reached
+
     def update_prediction_errors(self, msg_id: str, actual_delay: float):
         """
         Update prediction error tracking when actual delay becomes available
@@ -567,12 +688,16 @@ class CocoonMetaModel:
             return
         observation = self.message_observations[msg_id]
         observation.time_receive_ms = current_time_ms
-        observation.actual_delay_ms = current_time_ms - observation.time_send_ms
+        if not self.substitution_threshold_reached:
+            observation.actual_delay_ms = current_time_ms - observation.time_send_ms
+            # Update prediction errors for learning
+            self.update_prediction_errors(msg_id, observation.actual_delay_ms)
 
-        # Update prediction errors for learning
-        self.update_prediction_errors(msg_id, observation.actual_delay_ms)
-
-    def process_observations(self):
+    async def process_observations(self) -> bool:
+        """
+        Processes current observations in the detailed simulation.
+        Returns boolean, indicating if substitution threshold has been reached.
+        """
         messages_in_transit = self.network_graph.get_messages_in_transit()
         for message in messages_in_transit:
             self.message_index += 1
@@ -604,6 +729,13 @@ class CocoonMetaModel:
                                                                            receiver_node_state=receiver_node_state,
                                                                            network_state=network_state,
                                                                            predicted_delay_ms=final_prediction)
+            if self.message_index >= self.i_pupa:
+                if self.substitution_threshold_reached:
+                    # threshold has already been reached -> return True
+                    return True
+                return self.execute_butterfly_phase()
+            else:
+                return False
 
     def get_observations_as_df(self):
         observations_data = []

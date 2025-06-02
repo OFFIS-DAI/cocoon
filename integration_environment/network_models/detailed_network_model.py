@@ -528,6 +528,8 @@ class DetailedNetworkModel:
 
     async def handle_waiting_with_omnet(self, max_advance_ms):
         logger.info('Handle waiting')
+        if not self.omnet_connection.running:
+            return {}
         self.waiting_for_omnet = True
         self.omnet_connection.send_waiting_message_to_omnet(max_advance_ms=max_advance_ms)
         time_receive_to_message = {}

@@ -2,6 +2,7 @@ import asyncio
 import logging
 import math
 from abc import ABC, abstractmethod
+from copy import copy
 from typing import Optional
 
 import pandas as pd
@@ -21,7 +22,7 @@ class CommunicationScheduler(ABC):
 
     def __init__(self,
                  container_mapping: dict[str, ExternalSchedulingContainer],
-                 scenario_duration_ms=20 * 1000):
+                 scenario_duration_ms=200 * 1000):
         """
         Initialize a new communication scheduler.
 
@@ -35,7 +36,7 @@ class CommunicationScheduler(ABC):
         self.current_time = 0
         self._duration_s = scenario_duration_ms / 1000
 
-        self._message_buffer = {}  # time: message
+        self._message_buffer = {}  # time (in sec): message
 
         # create Future in order to wait for scenario finalization
         self.scenario_finished = asyncio.Future()
@@ -271,6 +272,8 @@ class DetailedModelScheduler(CommunicationScheduler):
         return self.detailed_network_model.waiting_for_messages_from_omnet()
 
     async def handle_waiting(self):
+        if not self.detailed_network_model.omnet_connection or not self.detailed_network_model.omnet_connection.running:
+            return
         message_buffer = await self.detailed_network_model.handle_waiting_with_omnet(
             max_advance_ms=self._get_max_advance_in_ms())
         for time_s, messages in message_buffer.items():
@@ -294,6 +297,9 @@ class MetaModelScheduler(DetailedModelScheduler):
                                           mode=CocoonMetaModel.Mode.TRAINING
                                           if in_training_mode else CocoonMetaModel.Mode.PRODUCTION,
                                           cluster_distance_threshold=cluster_distance_threshold)
+        self.meta_model_only = False
+        self.msg_id_to_msg = None
+        self.meta_model_msg_counter = 0
 
     async def _on_scenario_start(self):
         if self.meta_model.mode == CocoonMetaModel.Mode.PRODUCTION:
@@ -305,12 +311,18 @@ class MetaModelScheduler(DetailedModelScheduler):
     async def process_message_output(self,
                                      container_messages_dict: dict[str, list[ExternalAgentMessage]],
                                      next_activities):
-        await super().process_message_output(container_messages_dict=container_messages_dict,
-                                             next_activities=next_activities)
+        if not self.meta_model_only:
+            await super().process_message_output(container_messages_dict=container_messages_dict,
+                                                 next_activities=next_activities)
 
         for container_name, messages in container_messages_dict.items():
             for message in messages:
-                msg_id = self.detailed_network_model.get_message_id_for_message(message)
+                if not self.meta_model_only:
+                    msg_id = self.detailed_network_model.get_message_id_for_message(message)
+                else:
+                    msg_id = f'msg_{self.meta_model_msg_counter}'
+                    self.msg_id_to_msg[self.meta_model_msg_counter] = message
+                    self.meta_model_msg_counter += 1
                 if msg_id:
                     self.meta_model.process_sent_message(sender=container_name,
                                                          receiver=message.receiver,
@@ -320,18 +332,61 @@ class MetaModelScheduler(DetailedModelScheduler):
                 else:
                     logger.warning('ID of message cannot be resolved.')
 
-        self.meta_model.process_observations()
+        stand_alone_meta_model_before = copy(self.meta_model_only)
+        await self.meta_model.process_observations()
+        self.meta_model_only = self.meta_model.substitution_threshold_reached
+
+        if not stand_alone_meta_model_before and self.meta_model_only:
+            logger.info('Now switching to meta-model only mode.')
+            self.detailed_network_model.cleanup()
+            self.meta_model_msg_counter = max(self.detailed_network_model.msg_id_to_msg.keys()) + 1
+            self.msg_id_to_msg = self.detailed_network_model.msg_id_to_msg
+            logger.debug(f'Message counter starts at {self.meta_model_msg_counter}')
+            await asyncio.sleep(0.1)  # wait to terminate OMNeT++
+
+        if self.meta_model_only:
+            messages_in_transit = self.meta_model.get_messages_in_transit()
+            for message_in_transit in messages_in_transit:
+                if ('msg_id' not in message_in_transit
+                        or 'time_send_ms' not in message_in_transit
+                        or 'delay_ms' not in message_in_transit):
+                    logger.warning('Missing keys in message.')
+                    continue
+                msg_id_num = message_in_transit['msg_id'].split('_')
+                if len(msg_id_num) == 2:
+                    msg_id_num = int(msg_id_num[1])
+                else:
+                    logger.warning('ID of message cannot be resolved.')
+                    continue
+                time_receive = (message_in_transit['time_send_ms'] + message_in_transit['delay_ms'])/1000
+                if time_receive not in self._message_buffer:
+                    self._message_buffer[time_receive] = []
+                self._message_buffer[time_receive].append(self.msg_id_to_msg[msg_id_num])
+            # Update next activities
+            self._next_activities.extend([na for na in next_activities if na is not None])
+            self._next_activities = [na for na in self._next_activities if na >= self.current_time]
 
         for time_s, messages in self._message_buffer.items():
             for message in messages:
-                msg_id = self.detailed_network_model.get_message_id_for_message(message)
+                if not self.meta_model_only:
+                    msg_id = self.detailed_network_model.get_message_id_for_message(message)
+                else:
+                    msg_id = self.get_message_id_for_message(message)
                 if msg_id:
                     self.meta_model.process_received_message(current_time_ms=int(time_s * 1000),
                                                              msg_id=msg_id)
                 else:
                     logger.warning('ID of message cannot be resolved.')
 
+    def get_message_id_for_message(self, message: ExternalAgentMessage):
+        fits = [(key, value) for key, value in self.msg_id_to_msg.items() if value == message]
+        if len(fits) == 1:
+            return f'msg_{fits[0][0]}'
+        return None
+
     async def handle_waiting(self):
+        if self.meta_model_only:
+            return
         await super().handle_waiting()
         for time_s, messages in self._message_buffer.items():
             for message in messages:
@@ -347,7 +402,7 @@ class MetaModelScheduler(DetailedModelScheduler):
         Save meta-model observations when scenario finishes.
         """
         # Final call to process observations
-        self.meta_model.process_observations()
+        await self.meta_model.process_observations()
         await self.meta_model.save_observations()
 
 
