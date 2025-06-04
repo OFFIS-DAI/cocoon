@@ -13,7 +13,7 @@ from integration_environment.messages import TrafficMessage
 from integration_environment.results_recorder import ResultsRecorder
 from integration_environment.roles import ConstantBitrateSenderRole, ConstantBitrateReceiverRole, ResultsRecorderRole
 from integration_environment.scenario_configuration import ScenarioConfiguration, PayloadSizeConfig, ModelType, \
-    ScenarioDuration, NumDevices
+    ScenarioDuration, NumDevices, TrafficConfig
 
 my_codec = JSON()
 my_codec.add_serializer(*TrafficMessage.__serializer__())
@@ -32,14 +32,16 @@ logger = logging.getLogger(__name__)
 
 def get_scenario_configurations():
     scenario_configurations = []
-    for payload_size in [payload for payload in PayloadSizeConfig]:
+    for payload_size in [p for p in PayloadSizeConfig]:
         for model_type in [m for m in ModelType]:
             for scenario_duration in [s for s in ScenarioDuration]:
                 for n_devices in [d for d in NumDevices]:
-                    scenario_configurations.append(ScenarioConfiguration(payload_size=payload_size,
-                                                                         num_devices=n_devices,
-                                                                         model_type=model_type,
-                                                                         scenario_duration=scenario_duration))
+                    for traffic_config in [t for t in TrafficConfig]:
+                        scenario_configurations.append(ScenarioConfiguration(payload_size=payload_size,
+                                                                             num_devices=n_devices,
+                                                                             model_type=model_type,
+                                                                             scenario_duration=scenario_duration,
+                                                                             traffic_configuration=traffic_config))
     return scenario_configurations
 
 
@@ -105,10 +107,12 @@ async def run_benchmark_suite():
         results_recorder = ResultsRecorder(scenario_configuration=scenario_configuration)
         clock = ExternalClock(start_time=0)
 
-        container_mapping = \
-            await initialize_constant_bitrate_broadcast_agents(clock=clock,
-                                                               results_recorder=results_recorder,
-                                                               scenario_configuration=scenario_configuration)
+        container_mapping = {}
+        if scenario_configuration.traffic_configuration == TrafficConfig.cbr_broadcast_1_mps:
+            container_mapping = \
+                await initialize_constant_bitrate_broadcast_agents(clock=clock,
+                                                                   results_recorder=results_recorder,
+                                                                   scenario_configuration=scenario_configuration)
 
         scheduler = get_scheduler(scenario_configuration=scenario_configuration,
                                   container_mapping=container_mapping)

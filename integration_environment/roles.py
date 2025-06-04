@@ -7,6 +7,7 @@ from mango import Role
 
 from integration_environment.messages import TrafficMessage
 from integration_environment.results_recorder import ResultsRecorder, ScenarioConfiguration
+from integration_environment.scenario_configuration import TrafficConfig
 
 logger = logging.getLogger(__name__)
 
@@ -47,9 +48,16 @@ def generate_payload_with_byte_size(byte_size: int):
 
 
 class ConstantBitrateSenderRole(Role):
-    def __init__(self, receiver_addresses: list, scenario_config: ScenarioConfiguration, frequency_ms=1000):
+    def __init__(self, receiver_addresses: list, scenario_config: ScenarioConfiguration):
         super().__init__()
-        self.frequency_s = frequency_ms / 1000
+        if scenario_config.traffic_configuration == TrafficConfig.cbr_broadcast_1_mps:
+            self.frequency_s = 1  # every second
+        elif scenario_config.traffic_configuration == TrafficConfig.cbr_broadcast_1_mpm:
+            self.frequency_s = 60  # every 60 seconds
+        elif scenario_config.traffic_configuration == TrafficConfig.cbr_broadcast_4_mph:
+            self.frequency_s = 60*15  # every 15 minutes
+        else:
+            self.frequency_s = 1  # default
         self.receiver_addresses = receiver_addresses
         self.scenario_configuration = scenario_config
 

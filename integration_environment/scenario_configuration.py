@@ -30,14 +30,22 @@ class NumDevices(Enum):
     thousand = 1000
 
 
+class TrafficConfig(Enum):
+    cbr_broadcast_1_mps = 0  # one message per second
+    cbr_broadcast_1_mpm = 1  # one message per minute
+    cbr_broadcast_4_mph = 2  # four messages per hour
+
+
 @dataclass
 class ScenarioConfiguration:
-    payload_size: PayloadSizeConfig
-    num_devices: NumDevices
-    model_type: ModelType
-    scenario_duration: ScenarioDuration
+    payload_size: PayloadSizeConfig = PayloadSizeConfig.small
+    num_devices: NumDevices = NumDevices.two
+    model_type: ModelType = ModelType.ideal
+    scenario_duration: ScenarioDuration = ScenarioDuration.one_min
+    traffic_configuration: TrafficConfig = TrafficConfig.cbr_broadcast_1_mps
 
     @property
     def scenario_id(self):
         """Create a scenario ID that includes all configuration parameters."""
-        return f"{self.model_type.name}-{self.num_devices.name}-{self.payload_size.name}-{self.scenario_duration.name}"
+        return (f"{self.model_type.name}-{self.num_devices.name}-{self.payload_size.name}-{self.scenario_duration.name}"
+                f"-{self.traffic_configuration.name}")
