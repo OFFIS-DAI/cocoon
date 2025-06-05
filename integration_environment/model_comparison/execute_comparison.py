@@ -75,7 +75,7 @@ async def initialize_constant_bitrate_broadcast_agents(clock: ExternalClock,
     for n_agents in range(scenario_configuration.num_devices.value - 1):
         index = n_agents + 1
         container = create_external_coupling(addr=f'node{index}', codec=my_codec, clock=clock)
-        cbr_receiver_role = ConstantBitrateReceiverRole()
+        cbr_receiver_role = ReceiverRole()
         cbr_receiver_role_agent = agent_composed_of(cbr_receiver_role, ResultsRecorderRole(results_recorder))
         container.register(cbr_receiver_role_agent)
         receiver_addresses.append(cbr_receiver_role_agent.addr)
