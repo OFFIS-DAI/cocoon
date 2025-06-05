@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import time
 from typing import List, Dict, Optional
 
 from mango import agent_composed_of, JSON, activate, ExternalClock
@@ -11,7 +10,8 @@ from integration_environment.communication_model_scheduler import IdealCommunica
     StaticDelayGraphModelScheduler, DetailedModelScheduler, MetaModelScheduler, CommunicationScheduler
 from integration_environment.messages import TrafficMessage
 from integration_environment.results_recorder import ResultsRecorder
-from integration_environment.roles import ConstantBitrateSenderRole, ConstantBitrateReceiverRole, ResultsRecorderRole
+from integration_environment.roles import ConstantBitrateSenderRole, ReceiverRole, ResultsRecorderRole, \
+    PoissonSenderRole
 from integration_environment.scenario_configuration import ScenarioConfiguration, PayloadSizeConfig, ModelType, \
     ScenarioDuration, NumDevices, TrafficConfig
 
@@ -72,8 +72,8 @@ async def initialize_constant_bitrate_broadcast_agents(clock: ExternalClock,
                                                        scenario_configuration: ScenarioConfiguration):
     container_mapping = {}
     receiver_addresses = []
-    for n_agents in range(scenario_configuration.num_devices.value - 1):
-        index = n_agents + 1
+    for n_agents in range(scenario_configuration.num_devices.value):
+        index = n_agents
         container = create_external_coupling(addr=f'node{index}', codec=my_codec, clock=clock)
         cbr_receiver_role = ReceiverRole()
         cbr_receiver_role_agent = agent_composed_of(cbr_receiver_role, ResultsRecorderRole(results_recorder))
@@ -87,6 +87,32 @@ async def initialize_constant_bitrate_broadcast_agents(clock: ExternalClock,
         ConstantBitrateSenderRole(receiver_addresses=receiver_addresses, scenario_config=scenario_configuration),
         ResultsRecorderRole(results_recorder))
     container2.register(cbr_sender_role_agent)
+
+    container_mapping[f'node{scenario_configuration.num_devices.value}'] = container2
+
+    return container_mapping
+
+
+async def initialize_poisson_broadcast_agents(clock: ExternalClock,
+                                              results_recorder: ResultsRecorder,
+                                              scenario_configuration: ScenarioConfiguration):
+    container_mapping = {}
+    receiver_addresses = []
+    for n_agents in range(scenario_configuration.num_devices.value - 1):
+        index = n_agents + 1
+        container = create_external_coupling(addr=f'node{index}', codec=my_codec, clock=clock)
+        receiver_role = ReceiverRole()
+        receiver_role_agent = agent_composed_of(receiver_role, ResultsRecorderRole(results_recorder))
+        container.register(receiver_role_agent)
+        receiver_addresses.append(receiver_role_agent.addr)
+        container_mapping[f'node{index}'] = container
+
+    container2 = create_external_coupling(addr=f'node{scenario_configuration.num_devices.value}',
+                                          codec=my_codec, clock=clock)
+    poisson_sender_role_agent = agent_composed_of(
+        PoissonSenderRole(receiver_addresses=receiver_addresses, scenario_config=scenario_configuration),
+        ResultsRecorderRole(results_recorder))
+    container2.register(poisson_sender_role_agent)
 
     container_mapping[f'node{scenario_configuration.num_devices.value}'] = container2
 
@@ -108,11 +134,20 @@ async def run_benchmark_suite():
         clock = ExternalClock(start_time=0)
 
         container_mapping = {}
-        if scenario_configuration.traffic_configuration == TrafficConfig.cbr_broadcast_1_mps:
+        if scenario_configuration.traffic_configuration in [TrafficConfig.cbr_broadcast_1_mps,
+                                                            TrafficConfig.cbr_broadcast_1_mpm,
+                                                            TrafficConfig.cbr_broadcast_4_mph]:
             container_mapping = \
                 await initialize_constant_bitrate_broadcast_agents(clock=clock,
                                                                    results_recorder=results_recorder,
                                                                    scenario_configuration=scenario_configuration)
+        elif scenario_configuration.traffic_configuration in [TrafficConfig.poisson_broadcast_1_mps,
+                                                              TrafficConfig.poisson_broadcast_1_mpm,
+                                                              TrafficConfig.poisson_broadcast_4_mph]:
+            container_mapping = \
+                await initialize_poisson_broadcast_agents(clock=clock,
+                                                          results_recorder=results_recorder,
+                                                          scenario_configuration=scenario_configuration)
 
         scheduler = get_scheduler(scenario_configuration=scenario_configuration,
                                   container_mapping=container_mapping)
