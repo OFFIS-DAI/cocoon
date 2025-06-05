@@ -20,11 +20,11 @@ my_codec.add_serializer(*TrafficMessage.__serializer__())
 
 
 async def run_with_different_configs():
-    for config in ['Net5G', 'LTE450', 'LTE', 'Ethernet']:
+    for config in ['Ethernet', 'LTE450',  'LTE', 'Net5G']:
         scenario_configuration = ScenarioConfiguration(model_type=ModelType.detailed,
                                                        scenario_duration=ScenarioDuration.one_min,
                                                        traffic_configuration=TrafficConfig.cbr_broadcast_1_mpm,
-                                                       num_devices=NumDevices.fifty)
+                                                       num_devices=NumDevices.two)
         results_recorder = ResultsRecorder(scenario_configuration=scenario_configuration)
 
         clock = ExternalClock(start_time=0)
@@ -37,7 +37,8 @@ async def run_with_different_configs():
                                                               inet_installation_path='/home/malin/cocoon_omnet_workspace/inet4.5/src',
                                                               simu5G_installation_path='/home/malin/PycharmProjects/trace/Simu5G-1.2.2/src',
                                                               config_name=config,
-                                                              omnet_project_path='/home/malin/PycharmProjects/cocoon_DAI/cocoon_omnet_project/')
+                                                              omnet_project_path='/home/malin/PycharmProjects/cocoon_DAI/cocoon_omnet_project/',
+                                                              scenario_duration_ms=60*1000 + 100)
 
         cbr_receiver_role = ReceiverRole()
         cbr_receiver_role_agent = agent_composed_of(cbr_receiver_role, ResultsRecorderRole(results_recorder))
