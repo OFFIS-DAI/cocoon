@@ -27,13 +27,15 @@ class NumDevices(Enum):
     ten = 10
     fifty = 50
     hundred = 100
-    thousand = 1000
 
 
 class TrafficConfig(Enum):
     cbr_broadcast_1_mps = 0  # one message per second
     cbr_broadcast_1_mpm = 1  # one message per minute
     cbr_broadcast_4_mph = 2  # four messages per hour
+    poisson_broadcast_1_mps = 0  # one message per second
+    poisson_broadcast_1_mpm = 1  # one message per minute
+    poisson_broadcast_4_mph = 2  # four messages per hour
 
 
 @dataclass
