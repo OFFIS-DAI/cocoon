@@ -550,6 +550,8 @@ class DetailedNetworkModel:
         self.omnet_connection.send_waiting_message_to_omnet(max_advance_ms=max_advance_ms)
         time_receive_to_message = {}
         while self.waiting_for_omnet:
+            if not self.omnet_connection.socket_running:
+                return time_receive_to_message
             time_receive_to_message_new = await self.get_received_messages_from_omnet_connection()
             for delivery_time, messages in time_receive_to_message_new.items():
                 if delivery_time not in time_receive_to_message:
