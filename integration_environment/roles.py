@@ -134,3 +134,98 @@ class ReceiverRole(Role):
 
     async def on_stop(self):
         pass
+
+
+class PoissonSenderRole(Role):
+    def __init__(self, receiver_addresses: list, scenario_config: ScenarioConfiguration):
+        super().__init__()
+        self.receiver_addresses = receiver_addresses
+        self.scenario_configuration = scenario_config
+        self._message_counter = 0
+        self._running = False
+        self._scheduled_tasks = []
+
+        # Configure lambda rate based on traffic configuration
+        self.lambda_rate = self._get_lambda_rate_from_config()
+
+    def _get_lambda_rate_from_config(self) -> float:
+        """Map traffic configuration to Poisson rate parameter."""
+        # You can extend this mapping based on your TrafficConfig enum
+        if self.scenario_configuration.traffic_configuration == TrafficConfig.poisson_broadcast_1_mps:
+            return 1.0  # 1 message per second on average
+        elif self.scenario_configuration.traffic_configuration == TrafficConfig.poisson_broadcast_1_mpm:
+            return 1.0 / 60.0  # 1 message per minute on average
+        elif self.scenario_configuration.traffic_configuration == TrafficConfig.poisson_broadcast_4_mph:
+            return 4.0 / 3600.0  # 4 messages per hour on average
+        else:
+            return 1.0  # Default: 1 message per second
+
+    def setup(self):
+        pass
+
+    def on_start(self):
+        pass
+
+    def on_ready(self):
+        self._running = True
+        self._schedule_all_poisson_events()
+
+    def _schedule_all_poisson_events(self):
+        """Schedule all Poisson-distributed message sending events."""
+        current_time = self.context.current_timestamp
+
+        # Schedule events for the entire simulation duration
+        # You may want to set a reasonable upper bound based on your simulation length
+        max_simulation_time = current_time + 3600  # Example: 1 hour from start
+
+        while current_time < max_simulation_time and self._running:
+            # Generate exponentially distributed inter-arrival time
+            inter_arrival_time = expovariate(self.lambda_rate)
+            current_time += inter_arrival_time
+
+            # Schedule the message sending task
+            task = self.context.schedule_timestamp_task(
+                timestamp=current_time,
+                coroutine=self._send_message_to_all_receivers()
+            )
+            self._scheduled_tasks.append(task)
+
+    async def _send_message_to_all_receivers(self):
+        """Send message to all receivers with event recording."""
+        if not self._running:
+            return
+
+        time_send = round(self.context.current_timestamp * 1000)
+
+        for receiver in self.receiver_addresses:
+            msg_id = f'{self.context.addr.protocol_addr}_{self._message_counter}'
+
+            await self.context.send_message(
+                TrafficMessage(msg_id=msg_id, payload=self.scenario_configuration.payload_size.value),
+                receiver_addr=receiver,
+            )
+
+            event = SendMessage(
+                sender=self.context.addr,
+                receiver=receiver,
+                msg_id=msg_id,
+                payload_size_B=self.scenario_configuration.payload_size.value,
+                time_send_ms=time_send
+            )
+            self.context.emit_event(event=event, event_source=self)
+            self._message_counter += 1
+
+        logger.debug(f'Sent Poisson message at time {self.context.current_timestamp}, '
+                     f'lambda rate: {self.lambda_rate}, message count: {self._message_counter}')
+
+    async def on_stop(self):
+        """Clean shutdown."""
+        self._running = False
+        # Cancel all scheduled tasks
+        for task in self._scheduled_tasks:
+            if not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
