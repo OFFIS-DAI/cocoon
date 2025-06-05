@@ -242,7 +242,8 @@ class DetailedModelScheduler(CommunicationScheduler):
         self.detailed_network_model = DetailedNetworkModel(inet_installation_path=inet_installation_path,
                                                            simu5G_installation_path=simu5G_installation_path,
                                                            config_name=config_name,
-                                                           omnet_project_path=omnet_project_path)
+                                                           omnet_project_path=omnet_project_path,
+                                                           simulation_duration_ms=scenario_duration_ms)
 
     async def process_message_output(self,
                                      container_messages_dict: dict[str, list[ExternalAgentMessage]],
@@ -293,10 +294,15 @@ class MetaModelScheduler(DetailedModelScheduler):
     """
 
     def __init__(self, container_mapping: dict[str, ExternalSchedulingContainer], inet_installation_path: str,
+                 simu5G_installation_path: str,
                  config_name: str, omnet_project_path: str, output_file_name: str = 'cocoon_output.csv',
                  in_training_mode: bool = True, training_df: Optional[pd.DataFrame] = None,
                  cluster_distance_threshold: float = 5, scenario_duration_ms: int = 200 * 1000):
-        super().__init__(container_mapping, inet_installation_path, config_name, omnet_project_path,
+        super().__init__(container_mapping=container_mapping,
+                         inet_installation_path=inet_installation_path,
+                         simu5G_installation_path=simu5G_installation_path,
+                         config_name=config_name,
+                         omnet_project_path=omnet_project_path,
                          scenario_duration_ms=scenario_duration_ms)
         self.training_df = training_df
         self.meta_model = CocoonMetaModel(output_file_name=output_file_name,
