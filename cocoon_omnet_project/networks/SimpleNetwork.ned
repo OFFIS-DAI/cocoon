@@ -6,9 +6,7 @@ import inet.node.inet.Router;
 import inet.node.inet.StandardHost;
 import ned.DatarateChannel;
 
-simple MangoTimeAdvancer
-{
-}
+import MangoTimeAdvancer;
 
 
 network SimpleNetwork
