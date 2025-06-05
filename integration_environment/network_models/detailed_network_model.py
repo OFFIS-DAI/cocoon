@@ -24,7 +24,8 @@ class OmnetConnection:
                  ini_file_name: str = 'omnetpp.ini',
                  socket_host: str = "127.0.0.1",
                  socket_port: int = 8345,
-                 socket_timeout: int = 30):
+                 socket_timeout: int = 30,
+                 simulation_duration_ms: int = 1000):
         """
         Initialize the OMNeT++ connection
 
@@ -42,6 +43,8 @@ class OmnetConnection:
         self.config_name = config_name
         self.omnet_project_path = omnet_project_path
         self.ini_file_name = ini_file_name
+
+        self.simulation_duration_ms = simulation_duration_ms
 
         # Process management
         self.omnet_process = None
@@ -122,7 +125,9 @@ class OmnetConnection:
                    f'-u Cmdenv '
                    f'-n {self.inet_installation_path} '
                    f'-f {self.ini_file_name} '
-                   f'-c {self.config_name} ')
+                   f'-c {self.config_name} '
+                   f'--cmdenv-express-mode=true '
+                   f'--cmdenv-status-frequency=0s')
 
         try:
             omnet_ini_path = self.omnet_project_path
@@ -183,6 +188,11 @@ class OmnetConnection:
                 logger.error(f"Expected INIT message, received: {init_msg}")
                 self.disconnect_socket()
                 return False
+            # Send simulation configuration including duration
+            config_msg = {
+                "simulation_duration": self.simulation_duration_ms
+            }
+            self.send_message(f"CONFIG|{json.dumps(config_msg)}")
 
             return True
         except socket.timeout:
@@ -428,11 +438,13 @@ class DetailedNetworkModel:
                  inet_installation_path: str,
                  simu5G_installation_path: str,
                  config_name: str,
-                 omnet_project_path: str):
+                 omnet_project_path: str,
+                 simulation_duration_ms: int):
         self.omnet_connection = OmnetConnection(inet_installation_path=inet_installation_path,
                                                 simu5G_installation_path=simu5G_installation_path,
                                                 config_name=config_name,
-                                                omnet_project_path=omnet_project_path)
+                                                omnet_project_path=omnet_project_path,
+                                                simulation_duration_ms=simulation_duration_ms)
         self.msg_id_to_msg = {}
         self.msg_id_counter = 0
 

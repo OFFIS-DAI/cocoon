@@ -23,7 +23,7 @@ void handleSignal(int signal) {
 }
 
 class AdvanceTimeEvent : public cMessage {
-  public:
+public:
     AdvanceTimeEvent() : cMessage("AdvanceTimeEvent") {}
 };
 
@@ -268,6 +268,21 @@ void MangoScheduler::processMessage(const std::string& message) {
         std::string type = message.substr(0, delimiterPos);
         std::string payload = message.substr(delimiterPos + 1);
 
+        if (type == "CONFIG") {
+            // Handle configuration message with simulation duration
+            json data = json::parse(payload);
+
+            if (data.contains("simulation_duration")) {
+                int duration = data["simulation_duration"];
+                simulationDuration = SimTime(duration, SIMTIME_MS);
+
+                EV << "Scheduled simulation termination at " << simulationDuration.str() << std::endl;
+            }
+
+            // Send acknowledgment
+            sendMessage("CONFIG_ACK|Configuration received");
+        }
+
         if (type == "MESSAGE") {
             // Parse the JSON payload
             json data = json::parse(payload);
@@ -494,6 +509,11 @@ cEvent* MangoScheduler::takeNextEvent() {
         EV << "Simulation interrupted by signal, ending gracefully" << std::endl;
         throw cTerminationException(SA_INTERRUPT);
     }
+    // Check if simulation duration has been reached
+    if (simTime() >= simulationDuration) {
+        EV << "Simulation duration reached: " << simulationDuration.str() << std::endl;
+        throw cTerminationException(E_ENDEDOK);
+    }
 
     // Look for the next event in the FES
     cEvent* event = sim->getFES()->peekFirst();
@@ -508,9 +528,9 @@ cEvent* MangoScheduler::takeNextEvent() {
             sendMessage("WAITING");
             // Next event is beyond max advance - we need to wait for Python
             EV << "Next event at " << eventTime.str()
-                              << " exceeds max advance limit of " << maxTimeAdvance.str()
-                              << " from current time " << currentTime.str()
-                              << ". Waiting for Python..." << std::endl;
+                                      << " exceeds max advance limit of " << maxTimeAdvance.str()
+                                      << " from current time " << currentTime.str()
+                                      << ". Waiting for Python..." << std::endl;
 
             // Don't process this event yet - wait for Python messages
             event = nullptr;

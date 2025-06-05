@@ -34,6 +34,8 @@ private:
 public:
     MangoMessage(const char* name = nullptr) : cMessage(name) {}
 
+    void setSimulationDuration(simtime_t duration);
+
     void setMessageId(const std::string& id) { messageId = id; }
     std::string getMessageId() const { return messageId; }
 
@@ -84,6 +86,8 @@ private:
 
     // Flag to track if termination message from Python was received
     bool terminationReceived = false;
+
+    simtime_t simulationDuration = SIMTIME_ZERO;
 
     // Add the message processing method
     void processMessage(const std::string& message);
