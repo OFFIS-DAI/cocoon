@@ -234,11 +234,13 @@ class DetailedModelScheduler(CommunicationScheduler):
     def __init__(self,
                  container_mapping: dict[str, ExternalSchedulingContainer],
                  inet_installation_path: str,
+                 simu5G_installation_path: str,
                  config_name: str,
                  omnet_project_path: str,
                  scenario_duration_ms: int = 200 * 1000):
         super().__init__(container_mapping, scenario_duration_ms=scenario_duration_ms)
         self.detailed_network_model = DetailedNetworkModel(inet_installation_path=inet_installation_path,
+                                                           simu5G_installation_path=simu5G_installation_path,
                                                            config_name=config_name,
                                                            omnet_project_path=omnet_project_path)
 

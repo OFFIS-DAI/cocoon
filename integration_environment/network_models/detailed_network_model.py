@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 class OmnetConnection:
     def __init__(self,
                  inet_installation_path: str,
+                 simu5G_installation_path: str,
                  config_name: str,
                  omnet_project_path: str,
                  ini_file_name: str = 'omnetpp.ini',
@@ -37,6 +38,7 @@ class OmnetConnection:
             socket_timeout: Socket connection timeout in seconds (default: 30)
         """
         self.inet_installation_path = inet_installation_path
+        self.simu5G_installation_path = simu5G_installation_path
         self.config_name = config_name
         self.omnet_project_path = omnet_project_path
         self.ini_file_name = ini_file_name
@@ -424,9 +426,11 @@ class OmnetConnection:
 class DetailedNetworkModel:
     def __init__(self,
                  inet_installation_path: str,
+                 simu5G_installation_path: str,
                  config_name: str,
                  omnet_project_path: str):
         self.omnet_connection = OmnetConnection(inet_installation_path=inet_installation_path,
+                                                simu5G_installation_path=simu5G_installation_path,
                                                 config_name=config_name,
                                                 omnet_project_path=omnet_project_path)
         self.msg_id_to_msg = {}
