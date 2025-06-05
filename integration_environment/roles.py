@@ -1,7 +1,8 @@
+import asyncio
 import logging
 from dataclasses import dataclass
 
-from random import choice
+from random import choice, expovariate
 from string import ascii_uppercase
 from mango import Role
 
@@ -62,6 +63,7 @@ class ConstantBitrateSenderRole(Role):
         self.scenario_configuration = scenario_config
 
         self._message_counter = 0
+        self._periodic_task = None
 
     def setup(self):
         pass
@@ -70,7 +72,7 @@ class ConstantBitrateSenderRole(Role):
         pass
 
     def on_ready(self):
-        self.context.schedule_periodic_task(self.send_message, self.frequency_s)
+        self._periodic_task = self.context.schedule_periodic_task(self.send_message, self.frequency_s)
 
     async def send_message(self):
         if self.context.current_timestamp == 0:
@@ -98,19 +100,25 @@ class ConstantBitrateSenderRole(Role):
             self._message_counter += 1
 
     async def on_stop(self):
-        pass
+        """Clean shutdown - cancel the periodic task."""
+        if self._periodic_task and not self._periodic_task.done():
+            self._periodic_task.cancel()
+            try:
+                await self._periodic_task
+            except asyncio.CancelledError:
+                pass
 
 
-class ConstantBitrateReceiverRole(Role):
+class ReceiverRole(Role):
     def __init__(self):
         super().__init__()
         self.received_messages = []
 
     def setup(self):
-        self.context.subscribe_message(self, self.handle_cbr_message,
+        self.context.subscribe_message(self, self.handle_traffic_message,
                                        lambda content, meta: isinstance(content, TrafficMessage))
 
-    def handle_cbr_message(self, content: TrafficMessage, meta):
+    def handle_traffic_message(self, content: TrafficMessage, meta):
         logger.debug(f'Traffic Message received at time {self.context.current_timestamp}.')
         # initialize event for results recording
         event = ReceiveMessage(msg_id=content.msg_id,
