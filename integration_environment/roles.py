@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from random import choice, expovariate
 from string import ascii_uppercase
-from mango import Role
+from mango import Role, AgentAddress
 
 from integration_environment.messages import TrafficMessage, PlanningDataMessage
 from integration_environment.results_recorder import ResultsRecorder, ScenarioConfiguration
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class SendMessage:
     sender: str
-    receiver: str
+    receiver: AgentAddress
     payload_size_B: int
     time_send_ms: int
     msg_id: str
@@ -137,11 +137,10 @@ class ReceiverRole(Role):
 
 
 class FlexAgentRole(Role):
-    def __init__(self, receiver_addresses: list, scenario_config: ScenarioConfiguration):
+    def __init__(self, aggregator_address: AgentAddress, scenario_config: ScenarioConfiguration):
         super().__init__()
-        self.frequency_s = 5 * 60  # every 5 minutes
 
-        self.receiver_addresses = receiver_addresses
+        self.aggregator_address = aggregator_address
         self.scenario_configuration = scenario_config
 
         self._message_counter = 0
@@ -154,32 +153,32 @@ class FlexAgentRole(Role):
         pass
 
     def on_ready(self):
-        self._periodic_task = self.context.schedule_periodic_task(self.send_message, self.frequency_s)
+        # send planning data every 15 minutes
+        self._periodic_task = self.context.schedule_periodic_task(self.send_planning_data, 15 * 60)
 
-    async def send_message(self):
+    async def send_planning_data(self):
         if self.context.current_timestamp == 0:
             return  # skip the first iteration
-        logger.debug(f'Send message at time {self.context.current_timestamp}')
+        logger.debug(f'Send planning data at time {self.context.current_timestamp/60} minutes.')
         time_send = round(self.context.current_timestamp * 1000)
-        for receiver in self.receiver_addresses:
-            msg_id = f'{self.context.addr.protocol_addr}_{self._message_counter}'
+        msg_id = f'{self.context.addr.protocol_addr}_planning_data_{self._message_counter}'
 
-            await self.context.send_message(
-                PlanningDataMessage(msg_id=msg_id,
-                                    baseline=0,
-                                    min_p=0,
-                                    max_p=1),
-                receiver_addr=receiver,
-            )
-            # initialize event for results recording
-            event = SendMessage(sender=self.context.addr,
-                                receiver=receiver,
-                                msg_id=msg_id,
-                                payload_size_B=self.scenario_configuration.payload_size.value,
-                                time_send_ms=time_send)
-            self.context.emit_event(event=event, event_source=self)
+        await self.context.send_message(
+            PlanningDataMessage(msg_id=msg_id,
+                                baseline=0,
+                                min_p=0,
+                                max_p=1),
+            receiver_addr=self.aggregator_address,
+        )
+        # initialize event for results recording
+        event = SendMessage(sender=self.context.addr,
+                            receiver=self.aggregator_address,
+                            msg_id=msg_id,
+                            payload_size_B=self.scenario_configuration.payload_size.value,
+                            time_send_ms=time_send)
+        self.context.emit_event(event=event, event_source=self)
 
-            self._message_counter += 1
+        self._message_counter += 1
 
     async def on_stop(self):
         """Clean shutdown - cancel the periodic task."""
@@ -196,12 +195,25 @@ class AggregatorAgentRole(Role):
         super().__init__()
         self.received_messages = []
 
+        self._fix_power_tasks = []
+        self.x_minute_time_window = 5
+
     def setup(self):
-        self.context.subscribe_message(self, self.handle_traffic_message,
+        self.context.subscribe_message(self, self.handle_planning_data,
                                        lambda content, meta: isinstance(content, PlanningDataMessage))
 
-    def handle_traffic_message(self, content: PlanningDataMessage, meta):
-        logger.debug(f'Traffic Message received at time {self.context.current_timestamp}.')
+    def on_ready(self):
+        # send planning data every 15 minutes
+        time_stamps = [(15*i - self.x_minute_time_window)*60 for i in range(4)]
+        for t in time_stamps:
+            self._fix_power_tasks.append(self.context.schedule_timestamp_task(timestamp=t,
+                                                                              coroutine=self.send_fixed_power()))
+
+    async def send_fixed_power(self):
+        logger.debug(f'Aggregator sends fixed power at time {self.context.current_timestamp/60} minutes.')
+
+    def handle_planning_data(self, content: PlanningDataMessage, meta):
+        logger.debug(f'Planning Data received at time {self.context.current_timestamp/60} minutes.')
         # initialize event for results recording
         event = ReceiveMessage(msg_id=content.msg_id,
                                time_receive_ms=round(self.context.current_timestamp * 1000))
@@ -211,11 +223,14 @@ class AggregatorAgentRole(Role):
     def on_start(self):
         pass
 
-    def on_ready(self):
-        pass
-
     async def on_stop(self):
-        pass
+        for t in self._fix_power_tasks:
+            if not t.done():
+                t.cancel()
+                try:
+                    await t
+                except asyncio.CancelledError:
+                    pass
 
 
 class PoissonSenderRole(Role):
