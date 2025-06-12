@@ -6,7 +6,7 @@ from random import choice, expovariate
 from string import ascii_uppercase
 from mango import Role
 
-from integration_environment.messages import TrafficMessage
+from integration_environment.messages import TrafficMessage, PlanningDataMessage
 from integration_environment.results_recorder import ResultsRecorder, ScenarioConfiguration
 from integration_environment.scenario_configuration import TrafficConfig
 
@@ -56,7 +56,7 @@ class ConstantBitrateSenderRole(Role):
         elif scenario_config.traffic_configuration == TrafficConfig.cbr_broadcast_1_mpm:
             self.frequency_s = 60  # every 60 seconds
         elif scenario_config.traffic_configuration == TrafficConfig.cbr_broadcast_4_mph:
-            self.frequency_s = 60*15  # every 15 minutes
+            self.frequency_s = 60 * 15  # every 15 minutes
         else:
             self.frequency_s = 1  # default
         self.receiver_addresses = receiver_addresses
@@ -119,6 +119,88 @@ class ReceiverRole(Role):
                                        lambda content, meta: isinstance(content, TrafficMessage))
 
     def handle_traffic_message(self, content: TrafficMessage, meta):
+        logger.debug(f'Traffic Message received at time {self.context.current_timestamp}.')
+        # initialize event for results recording
+        event = ReceiveMessage(msg_id=content.msg_id,
+                               time_receive_ms=round(self.context.current_timestamp * 1000))
+        self.context.emit_event(event=event, event_source=self)
+        self.received_messages.append(content)
+
+    def on_start(self):
+        pass
+
+    def on_ready(self):
+        pass
+
+    async def on_stop(self):
+        pass
+
+
+class FlexAgentRole(Role):
+    def __init__(self, receiver_addresses: list, scenario_config: ScenarioConfiguration):
+        super().__init__()
+        self.frequency_s = 5 * 60  # every 5 minutes
+
+        self.receiver_addresses = receiver_addresses
+        self.scenario_configuration = scenario_config
+
+        self._message_counter = 0
+        self._periodic_task = None
+
+    def setup(self):
+        pass
+
+    def on_start(self):
+        pass
+
+    def on_ready(self):
+        self._periodic_task = self.context.schedule_periodic_task(self.send_message, self.frequency_s)
+
+    async def send_message(self):
+        if self.context.current_timestamp == 0:
+            return  # skip the first iteration
+        logger.debug(f'Send message at time {self.context.current_timestamp}')
+        time_send = round(self.context.current_timestamp * 1000)
+        for receiver in self.receiver_addresses:
+            msg_id = f'{self.context.addr.protocol_addr}_{self._message_counter}'
+
+            await self.context.send_message(
+                PlanningDataMessage(msg_id=msg_id,
+                                    baseline=0,
+                                    min_p=0,
+                                    max_p=1),
+                receiver_addr=receiver,
+            )
+            # initialize event for results recording
+            event = SendMessage(sender=self.context.addr,
+                                receiver=receiver,
+                                msg_id=msg_id,
+                                payload_size_B=self.scenario_configuration.payload_size.value,
+                                time_send_ms=time_send)
+            self.context.emit_event(event=event, event_source=self)
+
+            self._message_counter += 1
+
+    async def on_stop(self):
+        """Clean shutdown - cancel the periodic task."""
+        if self._periodic_task and not self._periodic_task.done():
+            self._periodic_task.cancel()
+            try:
+                await self._periodic_task
+            except asyncio.CancelledError:
+                pass
+
+
+class AggregatorAgentRole(Role):
+    def __init__(self):
+        super().__init__()
+        self.received_messages = []
+
+    def setup(self):
+        self.context.subscribe_message(self, self.handle_traffic_message,
+                                       lambda content, meta: isinstance(content, PlanningDataMessage))
+
+    def handle_traffic_message(self, content: PlanningDataMessage, meta):
         logger.debug(f'Traffic Message received at time {self.context.current_timestamp}.')
         # initialize event for results recording
         event = ReceiveMessage(msg_id=content.msg_id,
