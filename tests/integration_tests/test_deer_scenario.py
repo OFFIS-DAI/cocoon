@@ -38,16 +38,16 @@ async def test_run_deer_scenario_with_ideal_communication():
     clock = ExternalClock(start_time=0)
 
     container1 = create_external_coupling(addr='node1', codec=my_codec, clock=clock)
-    cbr_receiver_role = AggregatorAgentRole()
-    cbr_receiver_role_agent = agent_composed_of(cbr_receiver_role, ResultsRecorderRole(results_recorder))
-    container1.register(cbr_receiver_role_agent)
+    aggregator_role = AggregatorAgentRole()
+    aggregator_agent = agent_composed_of(aggregator_role, ResultsRecorderRole(results_recorder))
+    container1.register(aggregator_agent)
 
     container2 = create_external_coupling(addr='node2', codec=my_codec, clock=clock)
-    cbr_sender_role_agent = agent_composed_of(
-        FlexAgentRole(receiver_addresses=[cbr_receiver_role_agent.addr],
+    flex_agent = agent_composed_of(
+        FlexAgentRole(aggregator_address=aggregator_agent.addr,
                       scenario_config=scenario_configuration),
         ResultsRecorderRole(results_recorder))
-    container2.register(cbr_sender_role_agent)
+    container2.register(flex_agent)
 
     communication_network_entity = IdealCommunicationScheduler(container_mapping={'node1': container1,
                                                                                   'node2': container2},
@@ -58,4 +58,4 @@ async def test_run_deer_scenario_with_ideal_communication():
         await communication_network_entity.scenario_finished
     results_recorder.stop_scenario_recording()
 
-    assert len(cbr_receiver_role.received_messages) > 0
+    assert len(aggregator_role.received_messages) > 0
