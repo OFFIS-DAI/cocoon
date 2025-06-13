@@ -1,12 +1,15 @@
 import asyncio
 import logging
+import random
 from dataclasses import dataclass
 
 from random import choice, expovariate
 from string import ascii_uppercase
+from typing import List, Optional
+
 from mango import Role, AgentAddress
 
-from integration_environment.messages import TrafficMessage, PlanningDataMessage
+from integration_environment.messages import *
 from integration_environment.results_recorder import ResultsRecorder, ScenarioConfiguration
 from integration_environment.scenario_configuration import TrafficConfig
 
@@ -137,29 +140,124 @@ class ReceiverRole(Role):
 
 
 class FlexAgentRole(Role):
-    def __init__(self, aggregator_address: AgentAddress, scenario_config: ScenarioConfiguration):
+    def __init__(self, aggregator_address: AgentAddress, scenario_config: ScenarioConfiguration,
+                 can_provide_power: bool = True, flexibility_value: int = 0):
         super().__init__()
 
         self.aggregator_address = aggregator_address
         self.scenario_configuration = scenario_config
 
+        # flag if this is an agent that cannot provide the requested power value
+        self.can_provide_power = can_provide_power
+        self.sent_notification_infeasible_power = False
+        self.calculation_time = random.random()
+        self.flexibility_value = flexibility_value
+
+        self.infeasible_requests = []
+
         self._message_counter = 0
         self._periodic_task = None
 
     def setup(self):
-        pass
+        self.context.subscribe_message(self, self.handle_fixed_power,
+                                       lambda content, meta: isinstance(content, FixedPowerMessage))
+        self.context.subscribe_message(self, self.handle_power_deviation_request,
+                                       lambda content, meta: isinstance(content, PowerDeviationRequest))
 
     def on_start(self):
         pass
 
     def on_ready(self):
+        # start after 5 minutes
+        self.context.schedule_timestamp_task(self.schedule_periodic_task(), timestamp=5 * 60)
+
+    async def schedule_periodic_task(self):
         # send planning data every 15 minutes
         self._periodic_task = self.context.schedule_periodic_task(self.send_planning_data, 15 * 60)
+
+    def handle_fixed_power(self, content: FixedPowerMessage, meta):
+        logger.debug(f'Received fixed power of {content.power_value} W '
+                     f'at time {self.context.current_timestamp / 60} minutes.')
+        event = ReceiveMessage(msg_id=content.msg_id,
+                               time_receive_ms=round(self.context.current_timestamp * 1000))
+        self.context.emit_event(event=event, event_source=self)
+
+        self.context.schedule_instant_task(self.mock_calculation_time())
+        if (self.context.current_timestamp / 60) >= content.t_start:
+            # cannot control asset anymore
+            print('Infeasible request!')
+            self.infeasible_requests.append({'power_value': content.power_value, 't_start': content.t_start,
+                                             'cur_time': self.context.current_timestamp/60})
+            return
+
+        if self.can_provide_power or self.sent_notification_infeasible_power:
+            return
+        self.context.schedule_instant_task(self.send_infeasible_power_notification(requested_power=content.power_value,
+                                                                                   t_start=content.t_start))
+
+    def handle_power_deviation_request(self, content: PowerDeviationRequest, meta):
+        logger.debug(f'Received power deviation request '
+                     f'at time {self.context.current_timestamp / 60} minutes.')
+        event = ReceiveMessage(msg_id=content.msg_id,
+                               time_receive_ms=round(self.context.current_timestamp * 1000))
+        self.context.emit_event(event=event, event_source=self)
+
+        self.context.schedule_instant_task(
+            self.send_power_deviation_response(power_deviation_requested=content.power_deviation_value_requested,
+                                               t_start=content.t_start))
+
+    async def send_power_deviation_response(self, power_deviation_requested: int, t_start: int):
+        time_send = round(self.context.current_timestamp * 1000)
+        msg_id = f'{self.context.addr.protocol_addr}_power_deviation_response_{self._message_counter}'
+
+        await self.context.send_message(
+            PowerDeviationResponse(msg_id=msg_id,
+                                   power_deviation_value_requested=power_deviation_requested,
+                                   power_deviation_value_available=self.flexibility_value,
+                                   t_start=t_start),
+            receiver_addr=self.aggregator_address,
+        )
+        # initialize event for results recording
+        event = SendMessage(sender=self.context.addr,
+                            receiver=self.aggregator_address,
+                            msg_id=msg_id,
+                            payload_size_B=self.scenario_configuration.payload_size.value,
+                            time_send_ms=time_send)
+        self.context.emit_event(event=event, event_source=self)
+
+        self._message_counter += 1
+
+    async def send_infeasible_power_notification(self, requested_power: int, t_start: int):
+        logger.debug(f'Send infeasible power notification '
+                     f'at time {self.context.current_timestamp / 60} minutes.')
+        time_send = round(self.context.current_timestamp * 1000)
+        msg_id = f'{self.context.addr.protocol_addr}_infeasible_power_{self._message_counter}'
+
+        await self.context.send_message(
+            InfeasiblePowerNotification(msg_id=msg_id,
+                                        power_value_requested=requested_power,
+                                        power_value_available=int(requested_power * 0.9),
+                                        t_start=t_start),
+            receiver_addr=self.aggregator_address,
+        )
+        # initialize event for results recording
+        event = SendMessage(sender=self.context.addr,
+                            receiver=self.aggregator_address,
+                            msg_id=msg_id,
+                            payload_size_B=self.scenario_configuration.payload_size.value,
+                            time_send_ms=time_send)
+        self.context.emit_event(event=event, event_source=self)
+
+        self._message_counter += 1
+        self.sent_notification_infeasible_power = True
+
+    async def mock_calculation_time(self):
+        await asyncio.sleep(self.calculation_time)
 
     async def send_planning_data(self):
         if self.context.current_timestamp == 0:
             return  # skip the first iteration
-        logger.debug(f'Send planning data at time {self.context.current_timestamp/60} minutes.')
+        logger.debug(f'Send planning data at time {self.context.current_timestamp / 60} minutes.')
         time_send = round(self.context.current_timestamp * 1000)
         msg_id = f'{self.context.addr.protocol_addr}_planning_data_{self._message_counter}'
 
@@ -191,34 +289,134 @@ class FlexAgentRole(Role):
 
 
 class AggregatorAgentRole(Role):
-    def __init__(self):
+    def __init__(self, flex_agent_addresses: Optional[List[AgentAddress]]):
         super().__init__()
-        self.received_messages = []
+        self.flex_agent_addresses = flex_agent_addresses
+
+        self.individual_baselines = {}
 
         self._fix_power_tasks = []
         self.x_minute_time_window = 5
 
+        self._message_counter = 0
+
+        self.power_deviation_responses = {}
+
     def setup(self):
         self.context.subscribe_message(self, self.handle_planning_data,
                                        lambda content, meta: isinstance(content, PlanningDataMessage))
+        self.context.subscribe_message(self, self.handle_infeasible_power_notification,
+                                       lambda content, meta: isinstance(content, InfeasiblePowerNotification))
+        self.context.subscribe_message(self, self.handle_power_deviation_response,
+                                       lambda content, meta: isinstance(content, PowerDeviationResponse))
 
     def on_ready(self):
         # send planning data every 15 minutes
-        time_stamps = [(15*i - self.x_minute_time_window)*60 for i in range(4)]
+        time_stamps = [(15 * i - self.x_minute_time_window) * 60 for i in range(4)]
         for t in time_stamps:
             self._fix_power_tasks.append(self.context.schedule_timestamp_task(timestamp=t,
                                                                               coroutine=self.send_fixed_power()))
 
-    async def send_fixed_power(self):
-        logger.debug(f'Aggregator sends fixed power at time {self.context.current_timestamp/60} minutes.')
+    def handle_power_deviation_response(self, content: PowerDeviationResponse, meta):
+        event = ReceiveMessage(msg_id=content.msg_id,
+                               time_receive_ms=round(self.context.current_timestamp * 1000))
+        self.context.emit_event(event=event, event_source=self)
+
+        self.power_deviation_responses[meta['sender_addr']] = content.power_deviation_value_available
+
+        if len(self.power_deviation_responses) == len(self.flex_agent_addresses):
+            print('Received all responses')
+            total_received_deviation = sum(self.power_deviation_responses.values())
+            print(f'Requested deviation of {content.power_deviation_value_requested},'
+                  f' received {total_received_deviation}')
+            assigned_deviation = 0
+            requested_deviation = content.power_deviation_value_requested
+            for dev_agent, dev_value in self.power_deviation_responses.items():
+                if assigned_deviation >= requested_deviation:
+                    break
+                if (assigned_deviation + dev_value) < requested_deviation:
+                    # take everything
+                    assigned_deviation += dev_value
+                    self.individual_baselines[dev_agent] += dev_value
+                else:
+                    # only take part of deviation
+                    needed_dev = requested_deviation - assigned_deviation
+                    self.individual_baselines[dev_agent] += needed_dev
+                    break
+            self.context.schedule_instant_task(self.send_fixed_power(t_start=content.t_start))
+
+    def handle_infeasible_power_notification(self, content: InfeasiblePowerNotification, meta):
+        event = ReceiveMessage(msg_id=content.msg_id,
+                               time_receive_ms=round(self.context.current_timestamp * 1000))
+        self.context.emit_event(event=event, event_source=self)
+
+        self.context.schedule_instant_task(
+            self.request_power_deviation(
+                requested_power_deviation=content.power_value_requested - content.power_value_available,
+                t_start=content.t_start))
+
+    async def request_power_deviation(self, requested_power_deviation: int, t_start: int):
+        time_send = round(self.context.current_timestamp * 1000)
+
+        for flex_agent in self.flex_agent_addresses:
+            msg_id = f'{self.context.addr.protocol_addr}_power_deviation_request_{self._message_counter}'
+
+            await self.context.send_message(
+                PowerDeviationRequest(msg_id=msg_id,
+                                      power_deviation_value_requested=requested_power_deviation,
+                                      t_start=t_start),
+                receiver_addr=flex_agent,
+            )
+            # initialize event for results recording
+            event = SendMessage(sender=self.context.addr,
+                                receiver=flex_agent,
+                                msg_id=msg_id,
+                                payload_size_B=8,
+                                time_send_ms=time_send)
+            self.context.emit_event(event=event, event_source=self)
+
+            self._message_counter += 1
+
+    async def send_fixed_power(self, t_start: int = None):
+        if self.context.current_timestamp == 0:
+            return
+        logger.debug(f'Aggregator sends fixed power at time {self.context.current_timestamp / 60} minutes.')
+        time_send = round(self.context.current_timestamp * 1000)
+        if not t_start:
+            next_t_start = int((self.context.current_timestamp / 60) + (15 - ((self.context.current_timestamp / 60) % 15)))
+        else:
+            next_t_start = t_start
+
+        for flex_agent in self.flex_agent_addresses:
+            msg_id = f'{self.context.addr.protocol_addr}_fixed_power_{self._message_counter}'
+            if flex_agent.protocol_addr not in self.individual_baselines:
+                logger.warning(f'No baseline available for {flex_agent.protocol_addr}.')
+                continue
+
+            await self.context.send_message(
+                FixedPowerMessage(msg_id=msg_id,
+                                  power_value=self.individual_baselines[flex_agent.protocol_addr],
+                                  t_start=next_t_start),
+                receiver_addr=flex_agent,
+            )
+            # initialize event for results recording
+            event = SendMessage(sender=self.context.addr,
+                                receiver=flex_agent,
+                                msg_id=msg_id,
+                                payload_size_B=8,
+                                time_send_ms=time_send)
+            self.context.emit_event(event=event, event_source=self)
+
+            self._message_counter += 1
 
     def handle_planning_data(self, content: PlanningDataMessage, meta):
-        logger.debug(f'Planning Data received at time {self.context.current_timestamp/60} minutes.')
+        logger.debug(f'Planning Data received at time {self.context.current_timestamp / 60} minutes.')
         # initialize event for results recording
         event = ReceiveMessage(msg_id=content.msg_id,
                                time_receive_ms=round(self.context.current_timestamp * 1000))
         self.context.emit_event(event=event, event_source=self)
-        self.received_messages.append(content)
+
+        self.individual_baselines[meta['sender_addr']] = content.baseline
 
     def on_start(self):
         pass
