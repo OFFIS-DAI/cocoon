@@ -51,6 +51,11 @@ def generate_payload_with_byte_size(byte_size: int):
     return ''.join(choice(ascii_uppercase) for _ in range(byte_size))
 
 
+async def mock_calculation_time(calculation_time):
+    for _ in range(calculation_time):
+        await asyncio.sleep(1)
+
+
 class ConstantBitrateSenderRole(Role):
     def __init__(self, receiver_addresses: list, scenario_config: ScenarioConfiguration):
         super().__init__()
@@ -141,7 +146,7 @@ class ReceiverRole(Role):
 
 class FlexAgentRole(Role):
     def __init__(self, aggregator_address: AgentAddress, scenario_config: ScenarioConfiguration,
-                 can_provide_power: bool = True, flexibility_value: int = 0):
+                 can_provide_power: bool = True, flexibility_value: int = 0, baseline_value: int = 0):
         super().__init__()
 
         self.aggregator_address = aggregator_address
@@ -150,10 +155,12 @@ class FlexAgentRole(Role):
         # flag if this is an agent that cannot provide the requested power value
         self.can_provide_power = can_provide_power
         self.sent_notification_infeasible_power = False
-        self.calculation_time = random.random()
+
+        self.baseline_value = baseline_value
         self.flexibility_value = flexibility_value
 
         self.infeasible_requests = []
+        self.time_received_re_planning_message = None
 
         self._message_counter = 0
         self._periodic_task = None
@@ -178,16 +185,20 @@ class FlexAgentRole(Role):
     def handle_fixed_power(self, content: FixedPowerMessage, meta):
         logger.debug(f'Received fixed power of {content.power_value} W '
                      f'at time {self.context.current_timestamp / 60} minutes.')
+        if content.is_re_planning:
+            self.time_received_re_planning_message = self.context.current_timestamp / 60
         event = ReceiveMessage(msg_id=content.msg_id,
                                time_receive_ms=round(self.context.current_timestamp * 1000))
         self.context.emit_event(event=event, event_source=self)
 
-        self.context.schedule_instant_task(self.mock_calculation_time())
+        # assuming that the forecasts etc. take up to ten seconds
+        calculation_time = random.randint(0, 10)
+        self.context.schedule_instant_task(mock_calculation_time(calculation_time))
         if (self.context.current_timestamp / 60) >= content.t_start:
             # cannot control asset anymore
             print('Infeasible request!')
             self.infeasible_requests.append({'power_value': content.power_value, 't_start': content.t_start,
-                                             'cur_time': self.context.current_timestamp/60})
+                                             'cur_time': self.context.current_timestamp / 60})
             return
 
         if self.can_provide_power or self.sent_notification_infeasible_power:
@@ -251,9 +262,6 @@ class FlexAgentRole(Role):
         self._message_counter += 1
         self.sent_notification_infeasible_power = True
 
-    async def mock_calculation_time(self):
-        await asyncio.sleep(self.calculation_time)
-
     async def send_planning_data(self):
         if self.context.current_timestamp == 0:
             return  # skip the first iteration
@@ -263,7 +271,7 @@ class FlexAgentRole(Role):
 
         await self.context.send_message(
             PlanningDataMessage(msg_id=msg_id,
-                                baseline=0,
+                                baseline=self.baseline_value,
                                 min_p=0,
                                 max_p=1),
             receiver_addr=self.aggregator_address,
@@ -289,14 +297,14 @@ class FlexAgentRole(Role):
 
 
 class AggregatorAgentRole(Role):
-    def __init__(self, flex_agent_addresses: Optional[List[AgentAddress]]):
+    def __init__(self, flex_agent_addresses: Optional[List[AgentAddress]], x_minute_time_window=5):
         super().__init__()
         self.flex_agent_addresses = flex_agent_addresses
 
         self.individual_baselines = {}
 
         self._fix_power_tasks = []
-        self.x_minute_time_window = 5
+        self.x_minute_time_window = x_minute_time_window
 
         self._message_counter = 0
 
@@ -325,7 +333,8 @@ class AggregatorAgentRole(Role):
         self.power_deviation_responses[meta['sender_addr']] = content.power_deviation_value_available
 
         if len(self.power_deviation_responses) == len(self.flex_agent_addresses):
-            print('Received all responses')
+            print(f'Received all responses at time {self.context.current_timestamp / 60} minutes for interval start '
+                  f'{content.t_start} minutes.')
             total_received_deviation = sum(self.power_deviation_responses.values())
             print(f'Requested deviation of {content.power_deviation_value_requested},'
                   f' received {total_received_deviation}')
@@ -356,6 +365,8 @@ class AggregatorAgentRole(Role):
                 t_start=content.t_start))
 
     async def request_power_deviation(self, requested_power_deviation: int, t_start: int):
+        # get needed data
+        await mock_calculation_time(10)
         time_send = round(self.context.current_timestamp * 1000)
 
         for flex_agent in self.flex_agent_addresses:
@@ -383,7 +394,8 @@ class AggregatorAgentRole(Role):
         logger.debug(f'Aggregator sends fixed power at time {self.context.current_timestamp / 60} minutes.')
         time_send = round(self.context.current_timestamp * 1000)
         if not t_start:
-            next_t_start = int((self.context.current_timestamp / 60) + (15 - ((self.context.current_timestamp / 60) % 15)))
+            next_t_start = int(
+                (self.context.current_timestamp / 60) + (15 - ((self.context.current_timestamp / 60) % 15)))
         else:
             next_t_start = t_start
 
@@ -396,7 +408,8 @@ class AggregatorAgentRole(Role):
             await self.context.send_message(
                 FixedPowerMessage(msg_id=msg_id,
                                   power_value=self.individual_baselines[flex_agent.protocol_addr],
-                                  t_start=next_t_start),
+                                  t_start=next_t_start,
+                                  is_re_planning=False if not t_start else True),
                 receiver_addr=flex_agent,
             )
             # initialize event for results recording
@@ -517,6 +530,95 @@ class PoissonSenderRole(Role):
         """Clean shutdown."""
         self._running = False
         # Cancel all scheduled tasks
+        for task in self._scheduled_tasks:
+            if not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+
+
+class UnicastRole(Role):
+    def __init__(self, receiver_addresses: list, scenario_config: ScenarioConfiguration, start_at_s: int = 1):
+        super().__init__()
+        self.receiver_addresses = receiver_addresses
+        self.scenario_configuration = scenario_config
+        self._message_counter = 0
+        self._scheduled_tasks = []
+        self._running = False
+
+        # Configure time delay between unicast messages
+        self.delay_between_messages_s = self._get_delay_from_config()
+        self.start_at_s = start_at_s
+
+    def _get_delay_from_config(self) -> float:
+        """Map traffic configuration to delay between messages."""
+        if self.scenario_configuration.traffic_configuration == TrafficConfig.unicast_1s_delay:
+            return 1.0  # 1 second delay between each unicast message
+        elif self.scenario_configuration.traffic_configuration == TrafficConfig.unicast_5s_delay:
+            return 5.0  # 5 seconds delay between each unicast message
+        elif self.scenario_configuration.traffic_configuration == TrafficConfig.unicast_10s_delay:
+            return 10.0  # 10 seconds delay between each unicast message
+        else:
+            return 1.0  # Default: 1 second delay
+
+    def setup(self):
+        pass
+
+    def on_start(self):
+        pass
+
+    def on_ready(self):
+        self._running = True
+        self._schedule_unicast_messages()
+
+    def _schedule_unicast_messages(self):
+        """Schedule unicast messages to all receivers with delays between them."""
+        current_time = self.context.current_timestamp
+
+        for i, receiver_addr in enumerate(self.receiver_addresses):
+            # Calculate when to send this message (with delay between messages)
+            send_time = current_time + self.start_at_s + (i * self.delay_between_messages_s)
+
+            # Schedule the message sending task
+            task = self.context.schedule_timestamp_task(
+                timestamp=send_time,
+                coroutine=self._send_unicast_message(receiver_addr)
+            )
+            self._scheduled_tasks.append(task)
+
+    async def _send_unicast_message(self, receiver_addr):
+        """Send a single unicast message to the specified receiver."""
+        if not self._running:
+            return
+
+        time_send = round(self.context.current_timestamp * 1000)
+        msg_id = f'{self.context.addr.protocol_addr}_{self._message_counter}'
+
+        # Send message
+        payload = generate_payload_with_byte_size(self.scenario_configuration.payload_size.value)
+        await self.context.send_message(
+            TrafficMessage(msg_id=msg_id, payload=payload),
+            receiver_addr=receiver_addr,
+        )
+
+        # Record the sending event
+        event = SendMessage(
+            sender=self.context.addr,
+            receiver=receiver_addr,
+            msg_id=msg_id,
+            payload_size_B=self.scenario_configuration.payload_size.value,
+            time_send_ms=time_send
+        )
+        self.context.emit_event(event=event, event_source=self)
+
+        self._message_counter += 1
+        logger.debug(f'Sent unicast message to {receiver_addr} at time {self.context.current_timestamp}')
+
+    async def on_stop(self):
+        """Clean shutdown - cancel all scheduled tasks."""
+        self._running = False
         for task in self._scheduled_tasks:
             if not task.done():
                 task.cancel()

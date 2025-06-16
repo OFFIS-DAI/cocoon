@@ -1,5 +1,6 @@
 import asyncio
 import json
+import random
 import time
 
 import pandas as pd
@@ -14,8 +15,8 @@ from integration_environment.results_recorder import ResultsRecorder
 from integration_environment.roles import ConstantBitrateSenderRole, ReceiverRole, ResultsRecorderRole, \
     AggregatorAgentRole, FlexAgentRole
 from integration_environment.scenario_configuration import ScenarioConfiguration, PayloadSizeConfig, ModelType, \
-    ScenarioDuration, TrafficConfig, NumDevices
-from tests.integration_tests.utils import setup_logging, visualize_channel_model_graph, visualize_static_graph
+    ScenarioDuration, TrafficConfig, NumDevices, NetworkModelType
+from tests.integration_tests.utils import setup_logging
 
 logger = setup_logging()
 
@@ -27,7 +28,7 @@ for deer_message_class in deer_message_classes:
 
 @pytest.mark.asyncio
 async def test_run_deer_scenario_with_ideal_communication():
-    """Analysis 1: Baseline performance with ideal communication"""
+    """Analysis 2: Baseline performance with ideal communication"""
     scenario_configuration = ScenarioConfiguration(model_type=ModelType.ideal,
                                                    traffic_configuration=TrafficConfig.deer_use_case,
                                                    payload_size=PayloadSizeConfig.none,
@@ -41,7 +42,7 @@ async def test_run_deer_scenario_with_ideal_communication():
     container_mapping = {}
 
     container1 = create_external_coupling(addr='node1', codec=my_codec, clock=clock)
-    aggregator_role = AggregatorAgentRole(flex_agent_addresses=[AgentAddress('node2', 'agent0')])
+    aggregator_role = AggregatorAgentRole(flex_agent_addresses=None, x_minute_time_window=0.5)
     aggregator_agent = agent_composed_of(aggregator_role, ResultsRecorderRole(results_recorder))
     container1.register(aggregator_agent)
 
@@ -51,11 +52,16 @@ async def test_run_deer_scenario_with_ideal_communication():
     agent_addresses = []
     flex_agent_roles = []
 
+    baseline_values = [100] * num_flex_agents
+    flex_values = [random.randint(0, 100) for _ in range(num_flex_agents)]
+
     for i in range(2, num_flex_agents + 2):
         container2 = create_external_coupling(addr=f'node{i}', codec=my_codec, clock=clock)
         flex_agent_role = FlexAgentRole(aggregator_address=aggregator_agent.addr,
                                         scenario_config=scenario_configuration,
-                                        can_provide_power=False if i == 2 else True)
+                                        can_provide_power=False if i == 2 else True,
+                                        baseline_value=baseline_values[i - 2],
+                                        flexibility_value=flex_values[i - 2])
         flex_agent = agent_composed_of(flex_agent_role, ResultsRecorderRole(results_recorder))
         container2.register(flex_agent)
 
@@ -77,3 +83,136 @@ async def test_run_deer_scenario_with_ideal_communication():
     for flex_agent_role in flex_agent_roles:
         print('infeasible power request of: ', flex_agent_role.context.addr.protocol_addr,
               ': ', flex_agent_role.infeasible_requests)
+
+
+@pytest.mark.asyncio
+async def test_run_deer_scenario_with_simple_channel_model():
+    """Analysis 1: Performance with channel model communication"""
+    scenario_configuration = ScenarioConfiguration(model_type=ModelType.channel,
+                                                   traffic_configuration=TrafficConfig.deer_use_case,
+                                                   payload_size=PayloadSizeConfig.none,
+                                                   scenario_duration=ScenarioDuration.one_hour,
+                                                   num_devices=NumDevices.hundred,
+                                                   network_type=NetworkModelType.simbench_lte)
+
+    top_file = '../../integration_environment/model_comparison/network_definitions/channel_simbench_lte.json'
+    with open(top_file, 'r') as file:
+        data = json.load(file)
+        top_dict = data['topology']
+
+    results_recorder = ResultsRecorder(scenario_configuration=scenario_configuration)
+
+    clock = ExternalClock(start_time=0)
+
+    container_mapping = {}
+
+    container1 = create_external_coupling(addr='node0', codec=my_codec, clock=clock)
+    aggregator_role = AggregatorAgentRole(flex_agent_addresses=None, x_minute_time_window=0.5)
+    aggregator_agent = agent_composed_of(aggregator_role, ResultsRecorderRole(results_recorder))
+    container1.register(aggregator_agent)
+
+    container_mapping['node0'] = container1
+
+    num_flex_agents = scenario_configuration.num_devices.value - 1
+    agent_addresses = []
+    flex_agent_roles = []
+
+    baseline_values = [100] * num_flex_agents
+    flex_values = [random.randint(0, 100) for _ in range(num_flex_agents)]
+
+    for i in range(1, num_flex_agents + 1):
+        container2 = create_external_coupling(addr=f'node{i}', codec=my_codec, clock=clock)
+        flex_agent_role = FlexAgentRole(aggregator_address=aggregator_agent.addr,
+                                        scenario_config=scenario_configuration,
+                                        can_provide_power=False if i == 2 else True,
+                                        baseline_value=baseline_values[i - 2],
+                                        flexibility_value=flex_values[i - 2])
+        flex_agent = agent_composed_of(flex_agent_role, ResultsRecorderRole(results_recorder))
+        container2.register(flex_agent)
+
+        agent_addresses.append(flex_agent.addr)
+        flex_agent_roles.append(flex_agent_role)
+
+        container_mapping[f'node{i}'] = container2
+
+    aggregator_role.flex_agent_addresses = agent_addresses
+
+    communication_network_entity = ChannelModelScheduler(container_mapping=container_mapping,
+                                                         scenario_duration_ms=scenario_configuration.scenario_duration.value,
+                                                         topology_dict=top_dict)
+
+    async with activate([c for c in container_mapping.values()]) as _:
+        results_recorder.start_scenario_recording()
+        await communication_network_entity.scenario_finished
+    results_recorder.stop_scenario_recording()
+
+    for flex_agent_role in flex_agent_roles:
+        print('infeasible power request of: ', flex_agent_role.context.addr.protocol_addr,
+              ': ', flex_agent_role.infeasible_requests, ' and time of re-planning msg: ',
+              flex_agent_role.time_received_re_planning_message)
+
+
+@pytest.mark.asyncio
+async def test_run_deer_scenario_with_detailed_model():
+    """Analysis 1: Preparation for field trial"""
+    scenario_configuration = ScenarioConfiguration(model_type=ModelType.detailed,
+                                                   traffic_configuration=TrafficConfig.deer_use_case,
+                                                   payload_size=PayloadSizeConfig.none,
+                                                   scenario_duration=ScenarioDuration.one_hour,
+                                                   num_devices=NumDevices.ten,
+                                                   network_type=NetworkModelType.simbench_ethernet)
+
+    results_recorder = ResultsRecorder(scenario_configuration=scenario_configuration)
+
+    clock = ExternalClock(start_time=0)
+
+    container_mapping = {}
+
+    container1 = create_external_coupling(addr='node0', codec=my_codec, clock=clock)
+    aggregator_role = AggregatorAgentRole(flex_agent_addresses=None, x_minute_time_window=0.5)
+    aggregator_agent = agent_composed_of(aggregator_role, ResultsRecorderRole(results_recorder))
+    container1.register(aggregator_agent)
+
+    container_mapping['node0'] = container1
+
+    num_flex_agents = scenario_configuration.num_devices.value - 1
+    agent_addresses = []
+    flex_agent_roles = []
+
+    baseline_values = [100] * num_flex_agents
+    flex_values = [random.randint(0, 100) for _ in range(num_flex_agents)]
+
+    for i in range(1, num_flex_agents + 1):
+        container2 = create_external_coupling(addr=f'node{i}', codec=my_codec, clock=clock)
+        flex_agent_role = FlexAgentRole(aggregator_address=aggregator_agent.addr,
+                                        scenario_config=scenario_configuration,
+                                        can_provide_power=False if i == 2 else True,
+                                        baseline_value=baseline_values[i - 2],
+                                        flexibility_value=flex_values[i - 2])
+        flex_agent = agent_composed_of(flex_agent_role, ResultsRecorderRole(results_recorder))
+        container2.current_start_time_of_step = time.time()
+        container2.register(flex_agent)
+
+        agent_addresses.append(flex_agent.addr)
+        flex_agent_roles.append(flex_agent_role)
+
+        container_mapping[f'node{i}'] = container2
+
+    aggregator_role.flex_agent_addresses = agent_addresses
+
+    communication_network_entity = DetailedModelScheduler(container_mapping=container_mapping,
+                                                          inet_installation_path='/home/malin/cocoon_omnet_workspace/inet4.5/src',
+                                                          config_name=scenario_configuration.network_type.value,
+                                                          simu5G_installation_path='/home/malin/PycharmProjects/trace/Simu5G-1.2.2/src',
+                                                          omnet_project_path='/home/malin/PycharmProjects/cocoon_DAI/cocoon_omnet_project/',
+                                                          scenario_duration_ms=scenario_configuration.scenario_duration.value)
+
+    async with activate([c for c in container_mapping.values()]) as _:
+        results_recorder.start_scenario_recording()
+        await communication_network_entity.scenario_finished
+    results_recorder.stop_scenario_recording()
+
+    for flex_agent_role in flex_agent_roles:
+        print('infeasible power request of: ', flex_agent_role.context.addr.protocol_addr,
+              ': ', flex_agent_role.infeasible_requests, ' and time of re-planning msg: ',
+              flex_agent_role.time_received_re_planning_message)

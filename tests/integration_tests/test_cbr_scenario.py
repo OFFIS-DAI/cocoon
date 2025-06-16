@@ -1,4 +1,5 @@
 import asyncio
+import json
 import time
 
 import pandas as pd
@@ -53,39 +54,11 @@ async def run_scenario_with_ideal_communication():
 async def run_scenario_with_simple_channel_model():
     scenario_configuration = ScenarioConfiguration(model_type=ModelType.channel)
     results_recorder = ResultsRecorder(scenario_configuration=scenario_configuration)
-    topology = {
-        'nodes': [
-            {
-                'node_id': 'node1',
-                'position': [10, 100],
-                'processing_delay_ms': 500
-            },
-            {
-                'node_id': 'node2',
-                'position': [100, 10],
-                'processing_delay_ms': 400
-            },
-            {
-                'node_id': 'router1',
-                'position': [50, 50],
-                'processing_delay_ms': 400
-            }
-        ],
-        'links': [
-            {
-                "source": "node1",
-                "target": "router1",
-                "transmission_rate_bps": 1000000000,
-                "propagation_speed_mps": 200000000
-            },
-            {
-                "source": "router1",
-                "target": "node2",
-                "transmission_rate_bps": 1000000000,
-                "propagation_speed_mps": 200000000
-            }
-        ]
-    }
+
+    top_file = '../../integration_environment/model_comparison/network_definitions/channel_simbench_lte.json'
+    with open(top_file, 'r') as file:
+        data = json.load(file)
+        top_dict = data['topology']
     clock = ExternalClock(start_time=0)
 
     container1 = create_external_coupling(addr='node1', codec=my_codec, clock=clock)
@@ -102,9 +75,7 @@ async def run_scenario_with_simple_channel_model():
 
     communication_network_entity = ChannelModelScheduler(container_mapping={'node1': container1,
                                                                             'node2': container2},
-                                                         topology_dict=topology)
-
-    visualize_channel_model_graph(communication_network_entity.channel_model)
+                                                         topology_dict=top_dict)
 
     async with activate(container1, container2) as _:
         results_recorder.start_scenario_recording()
@@ -174,7 +145,8 @@ async def run_scenario_with_detailed_communication_simulation():
     communication_network_entity = DetailedModelScheduler(container_mapping={'node1': container1,
                                                                              'node2': container2},
                                                           inet_installation_path='/home/malin/cocoon_omnet_workspace/inet4.5/src',
-                                                          config_name='Ethernet',
+                                                          config_name='LTE',
+                                                          simu5G_installation_path='/home/malin/PycharmProjects/trace/Simu5G-1.2.2/src',
                                                           omnet_project_path='/home/malin/PycharmProjects/cocoon_DAI/cocoon_omnet_project/')
 
     cbr_receiver_role = ReceiverRole()

@@ -25,6 +25,7 @@ class FixedPowerMessage:
     msg_id: str
     power_value: int
     t_start: int
+    is_re_planning: bool
 
 
 @json_serializable
