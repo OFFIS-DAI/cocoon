@@ -3,6 +3,7 @@ import json
 import random
 import time
 
+import numpy as np
 import pandas as pd
 import pytest
 from mango import agent_composed_of, JSON, activate, ExternalClock, AgentAddress
@@ -86,21 +87,43 @@ async def test_run_deer_scenario_with_ideal_communication():
 
 
 @pytest.mark.asyncio
-async def test_run_deer_scenario_with_simple_channel_model():
-    """Analysis 1: Performance with channel model communication"""
-    scenario_configuration = ScenarioConfiguration(model_type=ModelType.channel,
+async def test_run_deer_scenario_with_static_delay_model():
+    """Analysis 2: Performance with static delay model communication"""
+    scenario_configuration = ScenarioConfiguration(model_type=ModelType.static_graph,
                                                    traffic_configuration=TrafficConfig.deer_use_case,
                                                    payload_size=PayloadSizeConfig.none,
                                                    scenario_duration=ScenarioDuration.one_hour,
-                                                   num_devices=NumDevices.hundred,
+                                                   num_devices=NumDevices.two,
                                                    network_type=NetworkModelType.simbench_lte)
 
-    top_file = '../../integration_environment/model_comparison/network_definitions/channel_simbench_lte.json'
-    with open(top_file, 'r') as file:
-        data = json.load(file)
-        top_dict = data['topology']
-
     results_recorder = ResultsRecorder(scenario_configuration=scenario_configuration)
+
+    topology = {'nodes': [],
+                'links': []}
+
+    for i in range(scenario_configuration.num_devices.value):
+        topology['nodes'].append({
+            'node_id': f'node{i}'
+        })
+
+    # Configuration parameters for delay distribution
+    mean_delay_ms = 15
+    std_delay_ms = 3
+
+    # Add links between all pairs of nodes with delay values
+    for i in range(scenario_configuration.num_devices.value):
+        for j in range(i + 1, scenario_configuration.num_devices.value):
+            # Generate delay from normal distribution
+            delay_ms = np.random.normal(mean_delay_ms, std_delay_ms)
+
+            # Ensure delay is positive (minimum 1ms)
+            delay_ms = max(1.0, delay_ms)
+
+            topology['links'].append({
+                "node_a": f"node{i}",
+                "node_b": f"node{j}",
+                "end-to-end-delay_ms": round(delay_ms, 2)  # Round to 2 decimal places
+            })
 
     clock = ExternalClock(start_time=0)
 
@@ -137,9 +160,9 @@ async def test_run_deer_scenario_with_simple_channel_model():
 
     aggregator_role.flex_agent_addresses = agent_addresses
 
-    communication_network_entity = ChannelModelScheduler(container_mapping=container_mapping,
-                                                         scenario_duration_ms=scenario_configuration.scenario_duration.value,
-                                                         topology_dict=top_dict)
+    communication_network_entity = StaticDelayGraphModelScheduler(container_mapping=container_mapping,
+                                                                  topology_dict=topology,
+                                                                  scenario_duration_ms=scenario_configuration.scenario_duration.value)
 
     async with activate([c for c in container_mapping.values()]) as _:
         results_recorder.start_scenario_recording()
