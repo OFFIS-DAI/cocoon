@@ -11,7 +11,6 @@ from mango.container.external_coupling import ExternalSchedulingContainer, Exter
 from integration_environment.network_models.channel_network_model import ChannelNetworkModel
 from integration_environment.network_models.cocoon_meta_model import CocoonMetaModel
 from integration_environment.network_models.detailed_network_model import DetailedNetworkModel
-from integration_environment.scenario_configuration import ScenarioDuration
 
 logger = logging.getLogger(__name__)
 
@@ -104,12 +103,15 @@ class CommunicationScheduler(ABC):
                 self.current_time = min(self._next_activities)
             elif not self._waiting_for_messages():
                 # no more activities or messages in mango or external simulation -> finalize scenario
+                logger.info('Finalize scenario because not waiting for messages.')
                 await self._on_scenario_finished()
                 self.scenario_finished.set_result(True)
                 break
 
-            if self.current_time >= self._duration_s:
+            if self.current_time > self._duration_s:
                 # simulation has reached the defined duration -> finalize scenario
+                logger.info(f'Finalize scenario because over simulation duration. Current time = {self.current_time},'
+                            f'Duration = {self._duration_s}. Messages left in message buffer: {len(self._message_buffer)}')
                 await self._on_scenario_finished()
                 self.scenario_finished.set_result(True)
                 break
@@ -185,7 +187,7 @@ class IdealCommunicationScheduler(CommunicationScheduler):
                     self._message_buffer[message.time] = []
                 self._message_buffer[message.time].append(message)
         self._next_activities.extend([na for na in next_activities if na is not None])
-        self._next_activities = [na for na in self._next_activities if na >= self.current_time]
+        self._next_activities = [na for na in self._next_activities if na > self.current_time]
 
 
 class ChannelModelScheduler(CommunicationScheduler):
