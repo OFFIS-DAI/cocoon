@@ -547,7 +547,10 @@ class DetailedNetworkModel:
         if not self.omnet_connection.running:
             return {}
         self.waiting_for_omnet = True
-        self.omnet_connection.send_waiting_message_to_omnet(max_advance_ms=max_advance_ms)
+        success = self.omnet_connection.send_waiting_message_to_omnet(max_advance_ms=max_advance_ms)
+        if not success:
+            return {}
+
         time_receive_to_message = {}
         while self.waiting_for_omnet:
             if not self.omnet_connection.socket_running:

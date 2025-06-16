@@ -274,6 +274,10 @@ class DetailedModelScheduler(CommunicationScheduler):
             next_activities = self._next_activities
         next_activities = [na for na in next_activities if na]  # get next activity values
         max_advance = min(next_activities) * 1000 if len(next_activities) > 0 else self._duration_s * 1000
+
+        time_of_next_msg = min(self._message_buffer.keys()) if len(self._message_buffer) > 0 else None
+        if time_of_next_msg:
+            max_advance = min(max_advance, time_of_next_msg)
         return max_advance
 
     def _waiting_for_messages(self):
@@ -281,6 +285,8 @@ class DetailedModelScheduler(CommunicationScheduler):
 
     async def handle_waiting(self):
         if not self.detailed_network_model.omnet_connection or not self.detailed_network_model.omnet_connection.running:
+            return
+        if len(self._message_buffer) > 0:
             return
         message_buffer = await self.detailed_network_model.handle_waiting_with_omnet(
             max_advance_ms=self._get_max_advance_in_ms())

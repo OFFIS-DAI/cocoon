@@ -51,11 +51,6 @@ def generate_payload_with_byte_size(byte_size: int):
     return ''.join(choice(ascii_uppercase) for _ in range(byte_size))
 
 
-async def mock_calculation_time(calculation_time):
-    for _ in range(calculation_time):
-        await asyncio.sleep(1)
-
-
 class ConstantBitrateSenderRole(Role):
     def __init__(self, receiver_addresses: list, scenario_config: ScenarioConfiguration):
         super().__init__()
@@ -191,9 +186,6 @@ class FlexAgentRole(Role):
                                time_receive_ms=round(self.context.current_timestamp * 1000))
         self.context.emit_event(event=event, event_source=self)
 
-        # assuming that the forecasts etc. take up to ten seconds
-        calculation_time = random.randint(0, 10)
-        self.context.schedule_instant_task(mock_calculation_time(calculation_time))
         if (self.context.current_timestamp / 60) >= content.t_start:
             # cannot control asset anymore
             print('Infeasible request!')
@@ -366,7 +358,6 @@ class AggregatorAgentRole(Role):
 
     async def request_power_deviation(self, requested_power_deviation: int, t_start: int):
         # get needed data
-        await mock_calculation_time(10)
         time_send = round(self.context.current_timestamp * 1000)
 
         for flex_agent in self.flex_agent_addresses:

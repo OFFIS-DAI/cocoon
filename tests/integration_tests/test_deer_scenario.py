@@ -93,7 +93,7 @@ async def test_run_deer_scenario_with_static_delay_model():
                                                    traffic_configuration=TrafficConfig.deer_use_case,
                                                    payload_size=PayloadSizeConfig.none,
                                                    scenario_duration=ScenarioDuration.one_hour,
-                                                   num_devices=NumDevices.two,
+                                                   num_devices=NumDevices.ten,
                                                    network_type=NetworkModelType.simbench_lte)
 
     results_recorder = ResultsRecorder(scenario_configuration=scenario_configuration)
