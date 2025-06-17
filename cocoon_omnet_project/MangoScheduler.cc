@@ -521,6 +521,7 @@ cEvent* MangoScheduler::takeNextEvent() {
     if (simTime() >= simulationDuration) {
         EV << "Simulation duration reached: " << simulationDuration.str() << std::endl;
         throw cTerminationException(E_ENDEDOK);
+        return nullptr;
     }
 
     // Look for the next event in the FES
