@@ -38,6 +38,7 @@ class NumDevices(Enum):
     ten = 10
     fifty = 50
     hundred = 100
+    thousand = 1000
     none = 0
 
 
