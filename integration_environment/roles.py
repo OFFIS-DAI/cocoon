@@ -289,7 +289,8 @@ class FlexAgentRole(Role):
 
 
 class AggregatorAgentRole(Role):
-    def __init__(self, flex_agent_addresses: Optional[List[AgentAddress]], x_minute_time_window=5):
+    def __init__(self, flex_agent_addresses: Optional[List[AgentAddress]], x_minute_time_window=5,
+                 reactive_scheduling_time: int = 0):
         super().__init__()
         self.flex_agent_addresses = flex_agent_addresses
 
@@ -297,6 +298,7 @@ class AggregatorAgentRole(Role):
 
         self._fix_power_tasks = []
         self.x_minute_time_window = x_minute_time_window
+        self.reactive_scheduling_time_s = reactive_scheduling_time
 
         self._message_counter = 0
 
@@ -344,6 +346,9 @@ class AggregatorAgentRole(Role):
                     needed_dev = requested_deviation - assigned_deviation
                     self.individual_baselines[dev_agent] += needed_dev
                     break
+            self.context.schedule_timestamp_task(self.send_fixed_power(content.t_start),
+                                                 timestamp=self.context.current_timestamp +
+                                                           self.reactive_scheduling_time_s)
             self.context.schedule_instant_task(self.send_fixed_power(t_start=content.t_start))
 
     def handle_infeasible_power_notification(self, content: InfeasiblePowerNotification, meta):

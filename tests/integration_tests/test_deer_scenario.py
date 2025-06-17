@@ -155,13 +155,13 @@ async def test_run_deer_scenario_with_ideal_communication():
 @pytest.mark.asyncio
 async def test_run_deer_scenario_with_static_delay_model():
     """Analysis 2: Performance with static delay model communication"""
-    for num_agents in [NumDevices.ten, NumDevices.fifty, NumDevices.hundred]:
+    for num_agents in [NumDevices.ten, NumDevices.hundred, NumDevices.thousand]:
         scenario_configuration = ScenarioConfiguration(model_type=ModelType.static_graph,
                                                        traffic_configuration=TrafficConfig.deer_use_case,
                                                        payload_size=PayloadSizeConfig.none,
                                                        scenario_duration=ScenarioDuration.one_hour,
                                                        num_devices=num_agents,
-                                                       network_type=NetworkModelType.simbench_lte)
+                                                       network_type=NetworkModelType.simbench_lte450)
 
         results_recorder = ResultsRecorder(scenario_configuration=scenario_configuration)
 
@@ -197,7 +197,15 @@ async def test_run_deer_scenario_with_static_delay_model():
         container_mapping = {}
 
         container1 = create_external_coupling(addr='node0', codec=my_codec, clock=clock)
-        aggregator_role = AggregatorAgentRole(flex_agent_addresses=None, x_minute_time_window=0.1)
+        reactive_scheduling_time = 0
+        if num_agents == NumDevices.ten:
+            reactive_scheduling_time = 21
+        elif num_agents == NumDevices.hundred:
+            reactive_scheduling_time = 162
+        elif num_agents == NumDevices.thousand:
+            reactive_scheduling_time = 1628
+        aggregator_role = AggregatorAgentRole(flex_agent_addresses=None, x_minute_time_window=3,
+                                              reactive_scheduling_time=reactive_scheduling_time)
         aggregator_agent = agent_composed_of(aggregator_role, ResultsRecorderRole(results_recorder))
         container1.register(aggregator_agent)
 
