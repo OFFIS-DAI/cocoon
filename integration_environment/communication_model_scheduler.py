@@ -354,6 +354,8 @@ class MetaModelScheduler(DetailedModelScheduler):
 
         stand_alone_meta_model_before = copy(self.meta_model_only)
         await self.meta_model.process_observations()
+        if self.meta_model.mode == CocoonMetaModel.Mode.TRAINING:
+            return
         self.meta_model_only = self.meta_model.substitution_threshold_reached
 
         if not stand_alone_meta_model_before and self.meta_model_only:
