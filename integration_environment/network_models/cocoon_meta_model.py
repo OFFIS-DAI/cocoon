@@ -310,7 +310,7 @@ class CocoonMetaModel:
         self.substitution_threshold_reached = False
         self.previous_node_count = 0
 
-    def get_messages_in_transit(self):
+    async def get_messages_in_transit(self):
         messages_in_transit = self.network_graph.get_messages_in_transit()
         messages_in_transit_with_delay = [{'msg_id': m.msg_id,
                                            'time_send_ms': m.time_send_ms,
@@ -352,9 +352,13 @@ class CocoonMetaModel:
             # Extract features (X) and target (y) for the current cluster
             X = cluster_data[self.model_features]
             y = cluster_data['actual_delay_ms']
-            reg = DecisionTreeRegressor(random_state=42)  # TODO: add grid search
+            reg = DecisionTreeRegressor(random_state=42)
 
             reg.fit(X, y)
+
+            # Store feature names for later use
+            reg.feature_names_in_ = np.array(self.model_features)
+
             self.model_for_cluster_id[cluster_id] = reg
 
         logger.info(f'EGG phase done. Resulting in a number of {len(self.model_for_cluster_id)} '
@@ -395,7 +399,7 @@ class CocoonMetaModel:
         variables_dict = self.get_all_state_variables_as_dict(sender_node, receiver_node)
         variables_dict.update({'payload_size_B': payload_size_B})
 
-        # Create feature vector for current message
+        # Create feature vector for current message (still use numpy for centroid distance)
         message_features = np.array([variables_dict[var] for var in self.object_variables])
 
         # OPTIMIZATION: Calculate distance only to cluster centroids (much faster!)
@@ -405,9 +409,13 @@ class CocoonMetaModel:
 
         # get regressor of closest cluster
         regressor_cluster = self.model_for_cluster_id[closest_cluster]
+
+        # Create DataFrame correctly with feature values as a dictionary
+        prediction_dict = {var: variables_dict[var] for var in self.model_features}
+        prediction_data = pd.DataFrame([prediction_dict])
+
         # predict message delay time with cluster regressor
-        d_cl_pred = \
-            regressor_cluster.predict(np.array([variables_dict[var] for var in self.model_features]).reshape(1, -1))[0]
+        d_cl_pred = regressor_cluster.predict(prediction_data)[0]
         logger.info(f'Predicted delay time with cluster regressor: d_cl_pred = {d_cl_pred}. ')
         return int(d_cl_pred)
 
@@ -452,9 +460,11 @@ class CocoonMetaModel:
 
         # Make online prediction if model exists
         if self.online_model is not None:
-            online_prediction = self.online_model.predict(
-                np.array([variables_dict[var] for var in self.model_features]).reshape(1, -1)
-            )[0]
+            # Create DataFrame correctly with feature values as a dictionary
+            prediction_dict = {var: variables_dict[var] for var in self.model_features}
+            prediction_data = pd.DataFrame([prediction_dict])
+
+            online_prediction = self.online_model.predict(prediction_data)[0]
             logger.info(f'Predicted delay time online: d_on_pred = {online_prediction}')
 
         # Calculate weighted prediction
@@ -603,7 +613,7 @@ class CocoonMetaModel:
 
             # Normalize distance (closer is better)
             # Using a reasonable maximum expected distance
-            max_expected_distance = self.clustering_distance_threshold * 10 # could be much higher than in training data
+            max_expected_distance = self.clustering_distance_threshold * 10  # could be much higher than in training data
             cluster_distance_factor = 1.0 - min(1.0, min_distance / max_expected_distance)
 
         else:
@@ -667,8 +677,8 @@ class CocoonMetaModel:
                 if len(self.cluster_prediction_errors) > 100:
                     self.cluster_prediction_errors = self.cluster_prediction_errors[-100:]
 
-    def process_sent_message(self, sender: str, receiver: str,
-                             payload_size_B: int, current_time_ms: int, msg_id: str):
+    async def process_sent_message(self, sender: str, receiver: str,
+                                   payload_size_B: int, current_time_ms: int, msg_id: str):
         """Process a message that was sent."""
         self.network_graph.register_sent_message(
             sender=sender,
@@ -687,10 +697,11 @@ class CocoonMetaModel:
             return
         observation = self.message_observations[msg_id]
         observation.time_receive_ms = current_time_ms
-        if self.mode == self.Mode.PRODUCTION and not self.substitution_threshold_reached:
+        if not self.substitution_threshold_reached:
             observation.actual_delay_ms = current_time_ms - observation.time_send_ms
-            # Update prediction errors for learning
-            self.update_prediction_errors(msg_id, observation.actual_delay_ms)
+            if self.mode == self.Mode.PRODUCTION:
+                # Update prediction errors for learning
+                self.update_prediction_errors(msg_id, observation.actual_delay_ms)
 
     async def process_observations(self) -> bool:
         """

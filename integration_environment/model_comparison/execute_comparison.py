@@ -43,8 +43,14 @@ def get_training_df(scenario_configuration: ScenarioConfiguration):
                                  if c.traffic_configuration != scenario_configuration.traffic_configuration]
     dataframes = []
     for c in different_traffic_configs:
-        dataframes.append(pd.read_csv(f'cocoon_training_data/{c.scenario_id}.csv'))
-    return pd.concat(dataframes)
+        try:
+            df = pd.read_csv(f'cocoon_training_data/{c.scenario_id}.csv')
+        except Exception as e:
+            continue
+        dataframes.append(df)
+    complete_df = pd.concat(dataframes)
+    complete_df.dropna(subset=['actual_delay_ms'], inplace=True)
+    return complete_df
 
 
 def get_scenario_configurations_for_meta_model_training():
@@ -140,7 +146,8 @@ def get_scheduler(scenario_configuration: ScenarioConfiguration,
                                   inet_installation_path='/home/malin/cocoon_omnet_workspace/inet4.5/src',
                                   simu5G_installation_path='/home/malin/PycharmProjects/trace/Simu5G-1.2.2/src',
                                   omnet_project_path='/home/malin/PycharmProjects/cocoon_DAI/cocoon_omnet_project/',
-                                  training_df=get_training_df(scenario_configuration)
+                                  training_df=get_training_df(scenario_configuration),
+                                  in_training_mode=False
                                   )
     elif scenario_configuration.model_type == ModelType.meta_model_training:
         return MetaModelScheduler(container_mapping=container_mapping,
@@ -338,9 +345,25 @@ async def run_benchmark_suite():
 
         if scheduler is not None:
             print(f'Running scenario with config: {scenario_configuration.scenario_id}')
-            await run_scenario(container_mapping=container_mapping,
-                               results_recorder=results_recorder,
-                               scheduler=scheduler)
+
+            timeout_seconds = 300  # 5 minutes timeout
+
+            try:
+                await asyncio.wait_for(
+                    run_scenario(container_mapping=container_mapping,
+                                 results_recorder=results_recorder,
+                                 scheduler=scheduler),
+                    timeout=timeout_seconds
+                )
+                print(f'Scenario {scenario_configuration.scenario_id} completed successfully')
+            except asyncio.TimeoutError:
+                print(f'ERROR: Scenario {scenario_configuration.scenario_id} timed out after {timeout_seconds} seconds')
+                results_recorder.record_timeout(
+                    timeout_seconds=timeout_seconds,
+                    error_message=f"Scenario execution exceeded {timeout_seconds} second timeout"
+                )
+            except Exception as e:
+                print(f'ERROR: Scenario {scenario_configuration.scenario_id} failed with error: {e}')
 
 
 if __name__ == "__main__":
