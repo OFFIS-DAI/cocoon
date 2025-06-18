@@ -58,3 +58,10 @@ Massive MIMO and beamforming (efficient gNB processing)
 5G Core: 0.01-0.02 ms vs LTE Core: 0.05-0.1 ms vs LTE450: 0.1 ms
 
 # Static Delay Graphs
+The static delay graphs are generated as a post-processing step from the detailed communication simulation results. 
+This process transforms the dynamic simulation data into simplified network models that capture the essential 
+end-to-end delay characteristics between communicating nodes.
+1. unicast message exchange is simulated between a set of 10 nodes for each network technology
+2. the resulting delay times are extracted 
+3. a graph with a set of 100 nodes is generated 
+4. the end-to-end delay between two nodes is defined by the mean delay measured in the simulation between the nodes or if there was no connection, the global mean delay time is used
