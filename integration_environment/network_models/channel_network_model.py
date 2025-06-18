@@ -171,5 +171,6 @@ class ChannelNetworkModel:
         """
         with open(file_path, 'r') as f:
             topology_data = json.load(f)
+            top_dict = topology_data['topology']
 
-        return cls.from_dict(topology_data)
+        return cls.from_dict(top_dict)
