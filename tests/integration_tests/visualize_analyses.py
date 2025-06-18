@@ -101,9 +101,6 @@ def plot_termination_analysis(max_termination, x_to_duration):
     ax.set_xlabel('x-value (minutes)', fontsize=25)
     ax.set_ylabel('Termination (minutes)', fontsize=25)
 
-    # Set x-axis to log scale for better visualization
-    # .set_xscale('log')
-
     # Add legend
     ax.legend(loc='upper right')
 
@@ -147,12 +144,12 @@ def load_and_process_csv(csv_file, agent_count):
     df['agent_count'] = agent_count
     df['scenario'] = f'{agent_count} agents'
 
-    df = df[(df['time_send_min'] >= 10) & (df['time_send_min'] <= 20)]
+    df = df[(df['time_send_min'] >= 10) & (df['time_send_min'] <= 60)]
 
     return df
 
 
-def plot_message_types_comparison(csv_files, agent_counts, output_filename='message_types_comparison.png'):
+def plot_message_types_comparison(csv_files, agent_counts, output_filename='message_types_comparison.pdf'):
     """
     Plot message types over time for multiple CSV files with different agent counts.
 
@@ -180,22 +177,25 @@ def plot_message_types_comparison(csv_files, agent_counts, output_filename='mess
         print("No data loaded successfully")
         return
 
+    sns.set()
+    sns.set_style("whitegrid")
+
     # Combine all dataframes
     combined_df = pd.concat(all_data, ignore_index=True)
-
+    combined_df = combined_df[combined_df['message_type'] != 'planning data']
     # Set style and font size
-    plt.rcParams.update({'font.size': 16})
+    plt.rcParams.update({'font.size': 25})
 
-    # Create subplots - one for each agent count
+    # Create subplots - arranged in columns (1 row, n columns)
     n_scenarios = len(all_data)
-    fig, axes = plt.subplots(n_scenarios, 1, figsize=(14, 6 * n_scenarios))
+    fig, axes = plt.subplots(1, n_scenarios, figsize=(7 * n_scenarios, 6))
 
     # Handle case of single subplot
     if n_scenarios == 1:
         axes = [axes]
 
     # Get unique message types and assign consistent colors
-    all_message_types = combined_df['message_type'].unique()
+    all_message_types = [ 'fixed power',  'power deviation response', 'power deviation request', 'infeasible power']
     colors = plt.cm.Set3(np.linspace(0, 1, len(all_message_types)))
     color_map = dict(zip(all_message_types, colors))
 
@@ -204,32 +204,35 @@ def plot_message_types_comparison(csv_files, agent_counts, output_filename='mess
         ax = axes[i]
 
         # Create timeline plot
-        for msg_type in df['message_type'].unique():
+        for msg_type in all_message_types:
             type_data = df[df['message_type'] == msg_type]
             ax.scatter(type_data['time_send_min'], [msg_type] * len(type_data),
-                       c=[color_map[msg_type]], label=msg_type, alpha=0.7, s=50)
+                       c=[color_map[msg_type]], label=msg_type, alpha=0.7, s=150)
 
         # Add vertical line at minute 15 with deadline label
         ax.axvline(x=15, color='red', linestyle='--', linewidth=2, alpha=0.8)
-        ax.text(15.1, ax.get_ylim()[1] * 0.95, 'deadline', rotation=0,
-                fontsize=14, color='red', fontweight='bold')
+        ax.text(15.1, ax.get_ylim()[1] * 0.9, 'deadline', rotation=0,
+                fontsize=20, color='red', fontweight='bold')
 
-        ax.set_title(f'Message Types Over Time - {agent_count} Agents',
+        ax.set_title(f'{agent_count} Agents',
                      fontsize=18, fontweight='bold')
-        ax.set_xlabel('Time (minutes)', fontsize=16)
-        ax.set_ylabel('Message Type', fontsize=16)
-        ax.set_xlim(10, 20)  # Set x-axis limits to 10-20 minutes
-        ax.tick_params(left=False, labelleft=True, labelsize=14)
+        ax.set_xlabel('Time (minutes)', fontsize=25)
+
+        # Only show y-axis label and ticks on the leftmost subplot
+        if i == 0:
+            ax.set_ylabel('Message Type', fontsize=25)
+            ax.tick_params(left=True, labelleft=True, labelsize=25)
+        else:
+            ax.tick_params(left=False, labelleft=False, labelsize=25)
+
+        ax.set_xlim(11, 16)  # Set x-axis limits to 10-20 minutes
         ax.grid(True, alpha=0.3)
 
-        # Add legend only for the first subplot
-        if i == 0:
-            ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=12)
 
     plt.tight_layout()
 
     # Save the plot
-    plt.savefig(output_filename, dpi=300, bbox_inches='tight')
+    plt.savefig(output_filename, dpi=300, bbox_inches='tight', format='pdf')
     plt.close()
 
     print(f"Comparison plot saved as '{output_filename}'")
@@ -286,9 +289,9 @@ def main():
     csv_files = [
         "results/messages_static_graph-ten-none-one_hour-deer_use_case-simbench_lte450.csv",
         "results/messages_static_graph-hundred-none-one_hour-deer_use_case-simbench_lte450.csv",
-        "results/messages_static_graph-thousand-none-one_hour-deer_use_case-simbench_lte450.csv"
+        #"results/messages_static_graph-thousand-none-one_hour-deer_use_case-simbench_lte450.csv"
     ]
-    agent_counts = [10, 100, 1000]
+    agent_counts = [10, 100]
 
     plot_message_types_comparison(csv_files, agent_counts)
 
