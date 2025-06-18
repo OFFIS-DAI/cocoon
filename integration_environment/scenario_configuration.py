@@ -30,6 +30,7 @@ class ModelType(Enum):
     static_graph = "static_graph"
     detailed = "detailed"
     meta_model = "meta_model"
+    meta_model_training = "meta_model_training"
     none = ""
 
 
@@ -71,3 +72,18 @@ class ScenarioConfiguration:
         """Create a scenario ID that includes all configuration parameters."""
         return (f"{self.model_type.name}-{self.num_devices.name}-{self.payload_size.name}-{self.scenario_duration.name}"
                 f"-{self.traffic_configuration.name}-{self.network_type.name}")
+
+    @classmethod
+    def from_scenario_id(cls, scenario_id: str) -> 'ScenarioConfiguration':
+        try:
+            model_str, devices_str, payload_str, duration_str, traffic_str, network_str = scenario_id.split('-')
+            return cls(
+                model_type=ModelType[model_str],
+                num_devices=NumDevices[devices_str],
+                payload_size=PayloadSizeConfig[payload_str],
+                scenario_duration=ScenarioDuration[duration_str],
+                traffic_configuration=TrafficConfig[traffic_str],
+                network_type=NetworkModelType[network_str]
+            )
+        except (ValueError, KeyError) as e:
+            raise ValueError(f"Invalid scenario_id format or value: {scenario_id}") from e
