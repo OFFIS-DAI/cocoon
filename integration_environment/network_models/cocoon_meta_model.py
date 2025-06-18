@@ -731,13 +731,14 @@ class CocoonMetaModel:
                                                                            receiver_node_state=receiver_node_state,
                                                                            network_state=network_state,
                                                                            predicted_delay_ms=final_prediction)
-            if self.mode == self.Mode.PRODUCTION and self.message_index >= self.i_pupa:
-                if self.substitution_threshold_reached:
-                    # threshold has already been reached -> return True
-                    return True
-                return self.execute_butterfly_phase()
-            else:
-                return False
+
+        if self.mode == self.Mode.PRODUCTION and self.message_index >= self.i_pupa:
+            if self.substitution_threshold_reached:
+                # threshold has already been reached -> return True
+                return True
+            return self.execute_butterfly_phase()
+        else:
+            return False
 
     def get_observations_as_df(self):
         observations_data = []
