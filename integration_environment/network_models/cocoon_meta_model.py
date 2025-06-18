@@ -342,7 +342,6 @@ class CocoonMetaModel:
         # Add cluster labels to the dataframe
         training_df['cluster_cen'] = label_cen.tolist()
 
-        # OPTIMIZATION: Compute cluster centroids
         self.compute_cluster_centroids(training_df)
 
         # Train a regression model for each cluster
@@ -388,7 +387,7 @@ class CocoonMetaModel:
                             payload_size_B: int) -> int:
         """
         ------------
-        LARVA phase - OPTIMIZED
+        LARVA phase
         ------------
         Assign current message to closest cluster using centroid distance calculation only.
         This is much faster than calculating distances to all training samples.
@@ -688,7 +687,7 @@ class CocoonMetaModel:
             return
         observation = self.message_observations[msg_id]
         observation.time_receive_ms = current_time_ms
-        if not self.substitution_threshold_reached:
+        if self.mode == self.Mode.PRODUCTION and not self.substitution_threshold_reached:
             observation.actual_delay_ms = current_time_ms - observation.time_send_ms
             # Update prediction errors for learning
             self.update_prediction_errors(msg_id, observation.actual_delay_ms)
@@ -707,18 +706,21 @@ class CocoonMetaModel:
             receiver_node_state = receiver_node.update_state(time_ms=message.time_send_ms)
             network_state = self.network_graph.update_state(time_ms=message.time_send_ms)
 
-            # LARVA phase - get cluster prediction (now optimized with centroids)
-            d_cl_pred = self.execute_larva_phase(sender_node, receiver_node, payload_size_B=message.payload_size_B)
+            final_prediction = None
 
-            final_prediction = d_cl_pred
+            if self.mode == self.Mode.PRODUCTION:
+                # LARVA phase - get cluster prediction (now optimized with centroids)
+                d_cl_pred = self.execute_larva_phase(sender_node, receiver_node, payload_size_B=message.payload_size_B)
 
-            if self.message_index >= self.i_pupa:
-                # PUPA phase - get weighted prediction
-                final_prediction = self.execute_pupa_phase(
-                    sender_node, receiver_node,
-                    payload_size_B=message.payload_size_B,
-                    cluster_prediction=d_cl_pred
-                )
+                final_prediction = d_cl_pred
+
+                if self.message_index >= self.i_pupa:
+                    # PUPA phase - get weighted prediction
+                    final_prediction = self.execute_pupa_phase(
+                        sender_node, receiver_node,
+                        payload_size_B=message.payload_size_B,
+                        cluster_prediction=d_cl_pred
+                    )
 
             self.message_observations[message.msg_id] = MessageObservation(sender=message.sender,
                                                                            receiver=message.receiver,
@@ -729,7 +731,7 @@ class CocoonMetaModel:
                                                                            receiver_node_state=receiver_node_state,
                                                                            network_state=network_state,
                                                                            predicted_delay_ms=final_prediction)
-            if self.message_index >= self.i_pupa:
+            if self.mode == self.Mode.PRODUCTION and self.message_index >= self.i_pupa:
                 if self.substitution_threshold_reached:
                     # threshold has already been reached -> return True
                     return True
