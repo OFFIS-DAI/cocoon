@@ -343,8 +343,8 @@ void MangoScheduler::processMessage(const std::string& message) {
                     simtime_t currentTime = simTime();
                     if (eventTime < currentTime) {
                         EV << "Warning: Event time " << eventTime.str()
-                                           << " is in the past (current: " << currentTime.str()
-                                           << "). Adjusting to current time." << std::endl;
+                                                           << " is in the past (current: " << currentTime.str()
+                                                           << "). Adjusting to current time." << std::endl;
                         eventTime = currentTime;
                     }
                     mangoMsg->setCreationTime(eventTime);
@@ -392,15 +392,18 @@ void MangoScheduler::processMessage(const std::string& message) {
 
             // Extract max_advance (shared for all messages in this batch)
             double max_advance = data["max_advance"];
-            maxTimeAdvance = max_advance / 1000; // convert from ms to s
+            maxTimeAdvance = SimTime(max_advance, SIMTIME_MS); // convert from ms to s
+
+            // Create a special event that will send acknowledgment when processed
             AdvanceTimeEvent *dummyEvent = new AdvanceTimeEvent();
-            dummyEvent->setSchedulingPriority(-1); // lowest priority
+            dummyEvent->setSchedulingPriority(1);
             cModule* advancer = getSimulation()->getModuleByPath("timeAdvancer");
 
             dummyEvent->setArrival(advancer->getId(), -1, maxTimeAdvance);
             getSimulation()->getFES()->insert(dummyEvent);
 
-            EV << "Scheduled dummy event to advance time to " << maxTimeAdvance << std::endl;
+            // Send immediate acknowledgment that we've scheduled the time advance
+            sendMessage("WAITING_ACK|Time advance scheduled");
         }
         else {
             EV << "Unhandled message type: " << type << std::endl;
@@ -413,7 +416,7 @@ void MangoScheduler::processMessage(const std::string& message) {
 }
 
 void MangoScheduler::sendMessage(const std::string& message) {
-    maxTimeAdvance = simTime();
+    //maxTimeAdvance = simTime();
     if (clientSocket >= 0) {
         // Add newline delimiter to separate messages
         std::string delimitedMessage = message + "\n";
@@ -523,33 +526,37 @@ cEvent* MangoScheduler::takeNextEvent() {
         throw cTerminationException(E_ENDEDOK);
         return nullptr;
     }
-
     // Look for the next event in the FES
     cEvent* event = sim->getFES()->peekFirst();
 
     // Check if the next event would exceed max time advance
     if (event) {
-        simtime_t currentTime = simTime();
-        simtime_t eventTime = event->getArrivalTime();
-        simtime_t timeAdvance = eventTime - currentTime;
+        // Check if this is our dummy time advance event
+        AdvanceTimeEvent* advanceEvent = dynamic_cast<AdvanceTimeEvent*>(event);
+        if (advanceEvent) {
+            // Send completion message to Python
+            sendMessage("WAITING_COMPLETE|Time advance completed");
+        } else {
+            simtime_t currentTime = simTime();
+            simtime_t eventTime = event->getArrivalTime();
 
-        if (eventTime > maxTimeAdvance) {
-            sendMessage("WAITING");
-            // Next event is beyond max advance - we need to wait for Python
-            EV << "Next event at " << eventTime.str()
-                                                      << " exceeds max advance limit of " << maxTimeAdvance.str()
-                                                      << " from current time " << currentTime.str()
-                                                      << ". Waiting for Python..." << std::endl;
+            if (eventTime > maxTimeAdvance) {
+                sendMessage("WAITING");
+                // Next event is beyond max advance - we need to wait for Python
+                EV << "Next event at " << eventTime.str()
+                                                                                  << " exceeds max advance limit of " << maxTimeAdvance.str()
+                                                                                  << " from current time " << currentTime.str()
+                                                                                  << ". Waiting for Python..." << std::endl;
 
-            // Don't process this event yet - wait for Python messages
-            event = nullptr;
+                // Don't process this event yet - wait for Python messages
+                event = nullptr;
+            }
         }
     }
 
     if (!event) {
         // No events in FES within allowed time range - wait for Python messages
         if (!terminationReceived) {
-            EV << "No events within max advance limit. Waiting for Python messages at time " << simTime() << std::endl;
             sendMessage("WAITING");
 
             // Wait for messages with periodic checks

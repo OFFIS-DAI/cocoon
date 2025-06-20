@@ -41,7 +41,7 @@ class CommunicationScheduler(ABC):
         # create Future in order to wait for scenario finalization
         self.scenario_finished = asyncio.Future()
 
-    def get_incoming_messages_for_container(self, container_name) -> list:
+    async def get_incoming_messages_for_container(self, container_name) -> list:
         """
         Retrieve all pending messages intended for a specific container.
 
@@ -84,10 +84,14 @@ class CommunicationScheduler(ABC):
             container_messages_dict = {}
             next_activities_in_current_step = []
             for container_name, container in self._container_mapping.items():
-                incoming_messages_for_container = self.get_incoming_messages_for_container(container_name)
-
+                step_time = self.current_time
+                if self.current_time < container.clock.time:
+                    logger.error(f'Trying to set current time to {self.current_time}.'
+                                   f'But time is {container.clock.time}.')
+                    step_time = container.clock.time
+                incoming_messages_for_container = await self.get_incoming_messages_for_container(container_name)
                 output = await container.step(incoming_messages=incoming_messages_for_container,
-                                              simulation_time=self.current_time)
+                                              simulation_time=step_time)
                 container_messages_dict[container_name] = output.messages
                 next_activities_in_current_step.append(output.next_activity)
 
@@ -98,8 +102,12 @@ class CommunicationScheduler(ABC):
                 await self.handle_waiting()
 
             if len(self._message_buffer) > 0:
+                if self.current_time > min(self._message_buffer.keys()):
+                    print(f'current time is {self.current_time} and key is {min(self._message_buffer.keys())}')
                 self.current_time = min(self._message_buffer.keys())
             elif len(self._next_activities) > 0:
+                if self.current_time > min(self._next_activities):
+                    print(f'current time is {self.current_time} and key is {min(self._next_activities)}')
                 self.current_time = min(self._next_activities)
             elif not self._waiting_for_messages():
                 # no more activities or messages in mango or external simulation -> finalize scenario
@@ -344,11 +352,11 @@ class MetaModelScheduler(DetailedModelScheduler):
                     self.msg_id_to_msg[self.meta_model_msg_counter] = message
                     self.meta_model_msg_counter += 1
                 if msg_id:
-                    self.meta_model.process_sent_message(sender=container_name,
-                                                         receiver=message.receiver,
-                                                         payload_size_B=len(message.message),
-                                                         current_time_ms=int(self.current_time * 1000),
-                                                         msg_id=msg_id)
+                    await self.meta_model.process_sent_message(sender=container_name,
+                                                               receiver=message.receiver,
+                                                               payload_size_B=len(message.message),
+                                                               current_time_ms=int(self.current_time * 1000),
+                                                               msg_id=msg_id)
                 else:
                     logger.warning('ID of message cannot be resolved.')
 
@@ -367,7 +375,7 @@ class MetaModelScheduler(DetailedModelScheduler):
             await asyncio.sleep(0.1)  # wait to terminate OMNeT++
 
         if self.meta_model_only:
-            messages_in_transit = self.meta_model.get_messages_in_transit()
+            messages_in_transit = await self.meta_model.get_messages_in_transit()
             for message_in_transit in messages_in_transit:
                 if ('msg_id' not in message_in_transit
                         or 'time_send_ms' not in message_in_transit

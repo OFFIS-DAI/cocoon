@@ -543,23 +543,104 @@ class DetailedNetworkModel:
         return time_receive_to_message
 
     async def handle_waiting_with_omnet(self, max_advance_ms):
-        logger.info('Handle waiting')
+        logger.info(f'Handle waiting for max advance {max_advance_ms/1000}.')
         if not self.omnet_connection.running:
+            logger.error('Error when handling waiting. ')
             return {}
+
         self.waiting_for_omnet = True
         success = self.omnet_connection.send_waiting_message_to_omnet(max_advance_ms=max_advance_ms)
         if not success:
+            logger.error('Error when sending waiting message. ')
             return {}
 
+        # Wait for acknowledgment that OMNeT++ has scheduled the time advance
+        waiting_ack_received = False
+        waiting_complete_received = False
         time_receive_to_message = {}
-        while self.waiting_for_omnet:
-            if not self.omnet_connection.socket_running:
+
+        # First wait for WAITING_ACK
+        while not waiting_ack_received and self.omnet_connection.socket_running:
+            messages = self.omnet_connection.get_all_messages()
+            for message in messages:
+                if message.startswith("WAITING_ACK"):
+                    waiting_ack_received = True
+                    logger.info("Received WAITING_ACK from OMNeT++")
+                    break
+
+            if not waiting_ack_received:
+                await asyncio.sleep(0.01)  # Small delay before checking again
+
+        if not waiting_ack_received:
+            logger.error("Did not receive WAITING_ACK from OMNeT++")
+            self.waiting_for_omnet = False
+            return {}
+
+        # Now wait for WAITING_COMPLETE and collect any received messages
+        while not waiting_complete_received and self.omnet_connection.socket_running:
+            messages = self.omnet_connection.get_all_messages()
+            for message in messages:
+                if message.startswith("WAITING"):
+                    waiting_complete_received = True
+                    logger.info("Received WAITING_COMPLETE from OMNeT++")
+                    break
+                else:
+                    # Process any received messages during waiting
+                    time_receive_to_message_new = await self._process_single_message(message)
+                    for delivery_time, msgs in time_receive_to_message_new.items():
+                        if delivery_time not in time_receive_to_message:
+                            time_receive_to_message[delivery_time] = []
+                        time_receive_to_message[delivery_time].extend(msgs)
+
+            if not waiting_complete_received:
+                await asyncio.sleep(0.01)  # Small delay before checking again
+
+        if not waiting_complete_received:
+            logger.error("Did not receive WAITING_COMPLETE from OMNeT++")
+
+        self.waiting_for_omnet = False
+        return time_receive_to_message
+
+    async def _process_single_message(self, message: str) -> Dict[int, List[ExternalAgentMessage]]:
+        """Helper method to process a single message and return any received messages"""
+        time_receive_to_message = {}
+        try:
+            # Skip non-data messages (INIT, TERM, etc.)
+            if '|' not in message:
                 return time_receive_to_message
-            time_receive_to_message_new = await self.get_received_messages_from_omnet_connection()
-            for delivery_time, messages in time_receive_to_message_new.items():
-                if delivery_time not in time_receive_to_message:
-                    time_receive_to_message[delivery_time] = []
-                time_receive_to_message[delivery_time].extend(messages)
+
+            # Split message type and payload
+            msg_type, payload = message.split('|', 1)
+
+            # Process different message types
+            if msg_type == 'SCHEDULED':
+                # These are acknowledgment messages, not delivered messages
+                logger.debug(f'Scheduled messages: {payload}.')
+
+            elif msg_type == 'RECEIVED':
+                # This would be the actual received message from OMNeT++
+                # Parse the delivered message data
+                import json
+                data = json.loads(payload)
+
+                delivery_time = data.get('time_received', 0) / 1000  # Convert to seconds
+                msg_id = data.get('msg_id')
+
+                # Track that this message was received
+                if msg_id:
+                    if len(msg_id.split('_')) == 2:
+                        # Get ExternalAgentMessage
+                        external_msg = self.msg_id_to_msg[int(msg_id.split('_')[1])]
+                        if delivery_time not in time_receive_to_message.keys():
+                            time_receive_to_message[delivery_time] = []
+                        time_receive_to_message[delivery_time].append(external_msg)
+
+                    self.omnet_connection.message_ids_received.append(msg_id)
+
+        except Exception as e:
+            logger.error(f"Error processing message from OMNeT++: {e}")
+            logger.debug(f"Problematic message: {message}")
+
         return time_receive_to_message
 
     def cleanup(self):
