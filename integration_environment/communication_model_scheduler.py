@@ -102,12 +102,8 @@ class CommunicationScheduler(ABC):
                 await self.handle_waiting()
 
             if len(self._message_buffer) > 0:
-                if self.current_time > min(self._message_buffer.keys()):
-                    print(f'current time is {self.current_time} and key is {min(self._message_buffer.keys())}')
                 self.current_time = min(self._message_buffer.keys())
             elif len(self._next_activities) > 0:
-                if self.current_time > min(self._next_activities):
-                    print(f'current time is {self.current_time} and key is {min(self._next_activities)}')
                 self.current_time = min(self._next_activities)
             elif not self._waiting_for_messages():
                 # no more activities or messages in mango or external simulation -> finalize scenario
