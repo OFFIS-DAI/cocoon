@@ -542,61 +542,102 @@ class DetailedNetworkModel:
 
         return time_receive_to_message
 
-    async def handle_waiting_with_omnet(self, max_advance_ms):
-        logger.info(f'Handle waiting for max advance {max_advance_ms/1000}.')
+    async def handle_waiting_with_omnet(self, max_advance_ms, timeout_seconds=30):
+        logger.info(f'Handle waiting for max advance {max_advance_ms / 1000}.')
         if not self.omnet_connection.running:
             logger.error('Error when handling waiting. ')
             return {}
 
         self.waiting_for_omnet = True
-        success = self.omnet_connection.send_waiting_message_to_omnet(max_advance_ms=max_advance_ms)
-        if not success:
-            logger.error('Error when sending waiting message. ')
-            return {}
 
-        # Wait for acknowledgment that OMNeT++ has scheduled the time advance
-        waiting_ack_received = False
-        waiting_complete_received = False
-        time_receive_to_message = {}
+        for retry_count in range(3):
+            if retry_count > 0:
+                logger.warning(f"Retrying waiting message for max advance {max_advance_ms/1000} "
+                               f"(attempt {retry_count + 1}/{3})")
 
-        # First wait for WAITING_ACK
-        while not waiting_ack_received and self.omnet_connection.socket_running:
-            messages = self.omnet_connection.get_all_messages()
-            for message in messages:
-                if message.startswith("WAITING_ACK"):
-                    waiting_ack_received = True
-                    logger.info("Received WAITING_ACK from OMNeT++")
+            success = self.omnet_connection.send_waiting_message_to_omnet(max_advance_ms=max_advance_ms)
+            if not success:
+                logger.error(f'Error when sending waiting message (attempt {retry_count + 1}). ')
+                if retry_count == 3 - 1:  # Last attempt
+                    self.waiting_for_omnet = False
+                    return {}
+                await asyncio.sleep(1)  # Wait before retry
+                continue
+
+            # Wait for acknowledgment that OMNeT++ has scheduled the time advance
+            waiting_ack_received = False
+            waiting_complete_received = False
+            time_receive_to_message = {}
+
+            start_time = time.time()
+            ack_timeout = min(timeout_seconds / 2, 10)  # Use half the total timeout for ACK, max 10 seconds
+
+            # First wait for WAITING_ACK with timeout
+            while not waiting_ack_received and self.omnet_connection.socket_running:
+                if time.time() - start_time > ack_timeout:
+                    logger.warning(f"Timeout waiting for WAITING_ACK after {ack_timeout} seconds")
                     break
+
+                messages = self.omnet_connection.get_all_messages()
+                for message in messages:
+                    if message.startswith("WAITING_ACK"):
+                        waiting_ack_received = True
+                        logger.info("Received WAITING_ACK from OMNeT++")
+                        break
+
+                if not waiting_ack_received:
+                    await asyncio.sleep(0.01)  # Small delay before checking again
 
             if not waiting_ack_received:
-                await asyncio.sleep(0.01)  # Small delay before checking again
-
-        if not waiting_ack_received:
-            logger.error("Did not receive WAITING_ACK from OMNeT++")
-            self.waiting_for_omnet = False
-            return {}
-
-        # Now wait for WAITING_COMPLETE and collect any received messages
-        while not waiting_complete_received and self.omnet_connection.socket_running:
-            messages = self.omnet_connection.get_all_messages()
-            for message in messages:
-                if message.startswith("WAITING"):
-                    waiting_complete_received = True
-                    logger.info("Received WAITING_COMPLETE from OMNeT++")
-                    break
+                logger.warning(f"Did not receive WAITING_ACK from OMNeT++ (attempt {retry_count + 1})")
+                if retry_count < 3 - 1:  # Not the last attempt
+                    continue  # Retry
                 else:
-                    # Process any received messages during waiting
-                    time_receive_to_message_new = await self._process_single_message(message)
-                    for delivery_time, msgs in time_receive_to_message_new.items():
-                        if delivery_time not in time_receive_to_message:
-                            time_receive_to_message[delivery_time] = []
-                        time_receive_to_message[delivery_time].extend(msgs)
+                    logger.error("Failed to receive WAITING_ACK after all retries")
+                    self.waiting_for_omnet = False
+                    return {}
 
-            if not waiting_complete_received:
-                await asyncio.sleep(0.01)  # Small delay before checking again
+            # Reset timer for WAITING_COMPLETE
+            start_time = time.time()
+            complete_timeout = timeout_seconds - ack_timeout
 
+            # Now wait for WAITING_COMPLETE and collect any received messages
+            while not waiting_complete_received and self.omnet_connection.socket_running:
+                if time.time() - start_time > complete_timeout:
+                    logger.warning(f"Timeout waiting for WAITING_COMPLETE after {complete_timeout} seconds")
+                    break
+
+                messages = self.omnet_connection.get_all_messages()
+                for message in messages:
+                    if message.startswith("WAITING"):
+                        waiting_complete_received = True
+                        logger.info("Received WAITING_COMPLETE from OMNeT++")
+                        break
+                    else:
+                        # Process any received messages during waiting
+                        time_receive_to_message_new = await self._process_single_message(message)
+                        for delivery_time, msgs in time_receive_to_message_new.items():
+                            if delivery_time not in time_receive_to_message:
+                                time_receive_to_message[delivery_time] = []
+                            time_receive_to_message[delivery_time].extend(msgs)
+
+                if not waiting_complete_received:
+                    await asyncio.sleep(0.01)  # Small delay before checking again
+
+            if waiting_complete_received:
+                # Success! Break out of retry loop
+                logger.info("Successfully completed waiting cycle")
+                break
+            else:
+                logger.warning(f"Did not receive WAITING_COMPLETE from OMNeT++ (attempt {retry_count + 1})")
+                if retry_count < 3 - 1:  # Not the last attempt
+                    # Reset state for retry
+                    time_receive_to_message = {}
+                    continue
+
+        # Final check if we succeeded
         if not waiting_complete_received:
-            logger.error("Did not receive WAITING_COMPLETE from OMNeT++")
+            logger.error("Failed to receive WAITING_COMPLETE after all retries")
 
         self.waiting_for_omnet = False
         return time_receive_to_message
