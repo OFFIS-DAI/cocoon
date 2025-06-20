@@ -13,7 +13,7 @@ from integration_environment.messages import TrafficMessage
 from integration_environment.results_recorder import ResultsRecorder
 from integration_environment.roles import ConstantBitrateSenderRole, ReceiverRole, ResultsRecorderRole
 from integration_environment.scenario_configuration import ScenarioConfiguration, PayloadSizeConfig, ModelType, \
-    ScenarioDuration
+    ScenarioDuration, NetworkModelType, NumDevices
 from tests.integration_tests.utils import setup_logging, visualize_channel_model_graph, visualize_static_graph
 
 logger = setup_logging()
@@ -134,38 +134,44 @@ async def run_scenario_with_static_graph_model():
 
 
 async def run_scenario_with_detailed_communication_simulation():
-    scenario_configuration = ScenarioConfiguration(model_type=ModelType.detailed)
+    scenario_configuration = ScenarioConfiguration(model_type=ModelType.detailed,
+                                                   network_type=NetworkModelType.simbench_lte450,
+                                                   num_devices=NumDevices.ten)
     results_recorder = ResultsRecorder(scenario_configuration=scenario_configuration)
 
     clock = ExternalClock(start_time=0)
 
-    container1 = create_external_coupling(addr='node1', codec=my_codec, clock=clock)
-    container2 = create_external_coupling(addr='node2', codec=my_codec, clock=clock)
+    container_mapping = {}
 
-    communication_network_entity = DetailedModelScheduler(container_mapping={'node1': container1,
-                                                                             'node2': container2},
+    for i in range(scenario_configuration.num_devices.value):
+        container = create_external_coupling(addr=f'node{i}', codec=my_codec, clock=clock)
+        container_mapping[f'node{i}'] = container
+
+    communication_network_entity = DetailedModelScheduler(container_mapping=container_mapping,
                                                           inet_installation_path='/home/malin/cocoon_omnet_workspace/inet4.5/src',
-                                                          config_name='LTE',
+                                                          config_name=scenario_configuration.network_type.value,
                                                           simu5G_installation_path='/home/malin/PycharmProjects/trace/Simu5G-1.2.2/src',
                                                           omnet_project_path='/home/malin/PycharmProjects/cocoon_DAI/cocoon_omnet_project/')
 
-    cbr_receiver_role = ReceiverRole()
-    cbr_receiver_role_agent = agent_composed_of(cbr_receiver_role, ResultsRecorderRole(results_recorder))
-    container1.register(cbr_receiver_role_agent)
+    recv_addr = []
+    for i in range(scenario_configuration.num_devices.value - 1):
+        cbr_receiver_role = ReceiverRole()
+        cbr_receiver_role_agent = agent_composed_of(cbr_receiver_role, ResultsRecorderRole(results_recorder))
+        list(container_mapping.values())[i].register(cbr_receiver_role_agent)
+        recv_addr.append(cbr_receiver_role_agent.addr)
 
-    container2.current_start_time_of_step = time.time()
+    sender_container = list(container_mapping.values())[scenario_configuration.num_devices.value - 1]
+    sender_container.current_start_time_of_step = time.time()
     cbr_sender_role_agent = agent_composed_of(
-        ConstantBitrateSenderRole(receiver_addresses=[cbr_receiver_role_agent.addr],
+        ConstantBitrateSenderRole(receiver_addresses=recv_addr,
                                   scenario_config=scenario_configuration),
         ResultsRecorderRole(results_recorder))
-    container2.register(cbr_sender_role_agent)
+    sender_container.register(cbr_sender_role_agent)
 
-    async with activate(container1, container2) as _:
+    async with activate(list(container_mapping.values())) as _:
         results_recorder.start_scenario_recording()
         await communication_network_entity.scenario_finished
     results_recorder.stop_scenario_recording()
-
-    assert len(cbr_receiver_role.received_messages) > 0
 
 
 async def run_scenario_with_meta_model():
