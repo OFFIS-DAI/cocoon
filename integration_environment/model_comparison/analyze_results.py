@@ -11,18 +11,12 @@ import pandas as pd
 import numpy as np
 import json
 from pathlib import Path
-import argparse
 from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
 
 from integration_environment.scenario_configuration import (
     ScenarioConfiguration,
-    ModelType,
-    NetworkModelType,
-    PayloadSizeConfig,
-    ScenarioDuration,
-    NumDevices,
-    TrafficConfig
+    ModelType
 )
 
 
