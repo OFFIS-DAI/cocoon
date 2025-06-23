@@ -294,10 +294,20 @@ async def run_scenario(container_mapping: Dict[str, ExternalSchedulingContainer]
     async with activate([c for c in container_mapping.values()]) as _:
         results_recorder.start_scenario_recording()
         await scheduler.scenario_finished
+    if hasattr(scheduler, 'meta_model') and scheduler.meta_model:
+        substitution_info = scheduler.meta_model.substitution_info
+        if substitution_info.occurred:
+            results_recorder.record_meta_model_substitution(
+                substitution_time_s=substitution_info.current_time_s,
+                message_index=substitution_info.message_index,
+                additional_info=substitution_info.additional_metrics,
+                confidence_score=substitution_info.confidence_score
+            )
     results_recorder.stop_scenario_recording()
 
 
 async def run_benchmark_suite():
+    num_repetitions = 3
     # clean up result folder first
     for f in [f for f in os.listdir('results')]:
         os.remove(os.path.join('results', f))
@@ -308,62 +318,66 @@ async def run_benchmark_suite():
     print(f'Start running {len(meta_model_training_configs)} scenarios for meta-model training. '
           f'Afterwards, {len(evaluation_configs)} scenarios for model comparison will be executed. ')
 
-    for scenario_configuration in (meta_model_training_configs + evaluation_configs):
-        results_recorder = ResultsRecorder(scenario_configuration=scenario_configuration)
-        clock = ExternalClock(start_time=0)
+    for r in range(num_repetitions):
+        for scenario_configuration in (meta_model_training_configs + evaluation_configs):
+            scenario_configuration.run = r
 
-        container_mapping = {}
-        if scenario_configuration.traffic_configuration in [TrafficConfig.cbr_broadcast_1_mps,
-                                                            TrafficConfig.cbr_broadcast_1_mpm,
-                                                            TrafficConfig.cbr_broadcast_4_mph]:
-            container_mapping = \
-                await initialize_constant_bitrate_broadcast_agents(clock=clock,
-                                                                   results_recorder=results_recorder,
-                                                                   scenario_configuration=scenario_configuration)
-        elif scenario_configuration.traffic_configuration in [TrafficConfig.poisson_broadcast_1_mps,
-                                                              TrafficConfig.poisson_broadcast_1_mpm,
-                                                              TrafficConfig.poisson_broadcast_4_mph]:
-            container_mapping = \
-                await initialize_poisson_broadcast_agents(clock=clock,
-                                                          results_recorder=results_recorder,
-                                                          scenario_configuration=scenario_configuration)
-        elif scenario_configuration.traffic_configuration in [TrafficConfig.unicast_1s_delay,
-                                                              TrafficConfig.unicast_5s_delay,
-                                                              TrafficConfig.unicast_10s_delay]:
-            container_mapping = \
-                await initialize_unicast_communication_agents(clock=clock,
+            results_recorder = ResultsRecorder(scenario_configuration=scenario_configuration)
+            clock = ExternalClock(start_time=0)
+
+            container_mapping = {}
+            if scenario_configuration.traffic_configuration in [TrafficConfig.cbr_broadcast_1_mps,
+                                                                TrafficConfig.cbr_broadcast_1_mpm,
+                                                                TrafficConfig.cbr_broadcast_4_mph]:
+                container_mapping = \
+                    await initialize_constant_bitrate_broadcast_agents(clock=clock,
+                                                                       results_recorder=results_recorder,
+                                                                       scenario_configuration=scenario_configuration)
+            elif scenario_configuration.traffic_configuration in [TrafficConfig.poisson_broadcast_1_mps,
+                                                                  TrafficConfig.poisson_broadcast_1_mpm,
+                                                                  TrafficConfig.poisson_broadcast_4_mph]:
+                container_mapping = \
+                    await initialize_poisson_broadcast_agents(clock=clock,
                                                               results_recorder=results_recorder,
                                                               scenario_configuration=scenario_configuration)
-        elif scenario_configuration.traffic_configuration == TrafficConfig.deer_use_case:
-            container_mapping = \
-                await initialize_deer_use_case_agents(clock=clock,
-                                                      results_recorder=results_recorder,
-                                                      scenario_configuration=scenario_configuration)
+            elif scenario_configuration.traffic_configuration in [TrafficConfig.unicast_1s_delay,
+                                                                  TrafficConfig.unicast_5s_delay,
+                                                                  TrafficConfig.unicast_10s_delay]:
+                container_mapping = \
+                    await initialize_unicast_communication_agents(clock=clock,
+                                                                  results_recorder=results_recorder,
+                                                                  scenario_configuration=scenario_configuration)
+            elif scenario_configuration.traffic_configuration == TrafficConfig.deer_use_case:
+                container_mapping = \
+                    await initialize_deer_use_case_agents(clock=clock,
+                                                          results_recorder=results_recorder,
+                                                          scenario_configuration=scenario_configuration)
 
-        scheduler = get_scheduler(scenario_configuration=scenario_configuration,
-                                  container_mapping=container_mapping)
+            scheduler = get_scheduler(scenario_configuration=scenario_configuration,
+                                      container_mapping=container_mapping)
 
-        if scheduler is not None:
-            print(f'Running scenario with config: {scenario_configuration.scenario_id}')
+            if scheduler is not None:
+                print(f'Running scenario with config: {scenario_configuration.scenario_id}')
 
-            timeout_seconds = 300  # 5 minutes timeout
+                timeout_seconds = 300  # 5 minutes timeout
 
-            try:
-                await asyncio.wait_for(
-                    run_scenario(container_mapping=container_mapping,
-                                 results_recorder=results_recorder,
-                                 scheduler=scheduler),
-                    timeout=timeout_seconds
-                )
-                print(f'Scenario {scenario_configuration.scenario_id} completed successfully')
-            except asyncio.TimeoutError:
-                print(f'ERROR: Scenario {scenario_configuration.scenario_id} timed out after {timeout_seconds} seconds')
-                results_recorder.record_timeout(
-                    timeout_seconds=timeout_seconds,
-                    error_message=f"Scenario execution exceeded {timeout_seconds} second timeout"
-                )
-            except Exception as e:
-                print(f'ERROR: Scenario {scenario_configuration.scenario_id} failed with error: {e}')
+                try:
+                    await asyncio.wait_for(
+                        run_scenario(container_mapping=container_mapping,
+                                     results_recorder=results_recorder,
+                                     scheduler=scheduler),
+                        timeout=timeout_seconds
+                    )
+
+                    print(f'Scenario {scenario_configuration.scenario_id} completed successfully')
+                except asyncio.TimeoutError:
+                    print(f'ERROR: Scenario {scenario_configuration.scenario_id} timed out after {timeout_seconds} seconds')
+                    results_recorder.record_timeout(
+                        timeout_seconds=timeout_seconds,
+                        error_message=f"Scenario execution exceeded {timeout_seconds} second timeout"
+                    )
+                except Exception as e:
+                    print(f'ERROR: Scenario {scenario_configuration.scenario_id} failed with error: {e}')
 
 
 if __name__ == "__main__":
