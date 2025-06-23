@@ -8,7 +8,7 @@ from mango.container.factory import create_external_coupling
 from integration_environment.communication_model_scheduler import DetailedModelScheduler, IdealCommunicationScheduler
 from integration_environment.messages import TrafficMessage
 from integration_environment.results_recorder import ResultsRecorder
-from integration_environment.roles import ConstantBitrateSenderRole, ReceiverRole, ResultsRecorderRole, \
+from integration_environment.roles import ReceiverRole, ResultsRecorderRole, \
     PoissonSenderRole
 from integration_environment.scenario_configuration import ScenarioConfiguration, ModelType, \
     ScenarioDuration, NumDevices, TrafficConfig
