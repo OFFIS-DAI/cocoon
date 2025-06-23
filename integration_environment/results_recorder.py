@@ -36,6 +36,8 @@ class ResultsRecorder:
         self._memory_monitoring_task = None
         self._stop_monitoring = False
 
+        self.substitution_event = None  # Will store substitution information
+
     def start_scenario_recording(self):
         self.execution_start_time = time.time()
         self._stop_monitoring = False
@@ -104,6 +106,11 @@ class ResultsRecorder:
             'execution_run_time_s': self.execution_runtime,
             'memory_statistics': memory_stats
         }
+
+        if self.substitution_event:
+            statistics['meta_model_substitution'] = self.substitution_event
+        else:
+            statistics['meta_model_substitution'] = {'substitution_occurred': False}
 
         with open(statistics_file, 'w') as outfile:
             json.dump(statistics, outfile, indent=2)
@@ -221,3 +228,33 @@ class ResultsRecorder:
         logger.info(f"Timeout results saved to {summary_file} and {statistics_file}")
         logger.info(f"Partial results: {len(self.send_message_events)} sent, "
                     f"{len(self.receive_message_events)} received")
+
+    # Add this method to your ResultsRecorder class
+
+    def record_meta_model_substitution(self, substitution_time_s: int, message_index: int,
+                                       additional_info: dict = None, confidence_score=0):
+        """
+        Record when the meta-model substitutes the detailed simulation.
+
+        Args:
+            substitution_time_ms: Simulation time when substitution occurred
+            message_index: Message index when substitution occurred
+            additional_info: Optional dictionary with additional substitution metrics
+        """
+        substitution_data = {
+            'substitution_occurred': True,
+            'substitution_time_s': substitution_time_s,
+            'substitution_message_index': message_index,
+            'substitution_real_time': time.time(),  # Real-world timestamp
+            'substitution_runtime_s': time.time() - self.execution_start_time,
+            'confidence_score': confidence_score
+        }
+
+        # Add any additional information provided
+        if additional_info:
+            substitution_data.update(additional_info)
+
+        self.substitution_event = substitution_data
+
+        logger.info(f"Meta-model substitution recorded at simulation time {substitution_time_s}s, "
+                    f"message index {message_index}, runtime {substitution_data['substitution_runtime_s']:.2f}s")
