@@ -53,11 +53,10 @@ class CommunicationScheduler(ABC):
         """
         container_msgs = []
         for time, messages in self._message_buffer.items():
-            if time <= self.current_time:
-                for message in messages:
-                    if message.receiver == container_name:
-                        container_msgs.append(message.message)
-                self._message_buffer[time] = [m for m in self._message_buffer[time] if m.message not in container_msgs]
+            for message in messages:
+                if message.receiver == container_name:
+                    container_msgs.append(message.message)
+            self._message_buffer[time] = [m for m in self._message_buffer[time] if m.message not in container_msgs]
 
         times_without_messages = [time for time, obj in self._message_buffer.items() if len(obj) == 0]
         for time in times_without_messages:
