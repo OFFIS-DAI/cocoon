@@ -410,20 +410,10 @@ void MangoScheduler::processMessage(const std::string& message) {
 
                 if (advancer) {
                     dummyEvent->setArrival(advancer->getId(), -1, maxTimeAdvance);
+                    getSimulation()->getFES()->insert(dummyEvent);
+                    // Send immediate acknowledgment that we've scheduled the time advance
+                    sendMessage("WAITING_ACK|Time advance scheduled");
 
-                    // Thread-safe FES insert with termination check
-                    {
-                        std::lock_guard<std::mutex> lock(fesMutex);
-                        if (!simulationTerminating && getSimulation() && getSimulation()->getFES()) {
-                            getSimulation()->getFES()->insert(dummyEvent);
-                            // Send immediate acknowledgment that we've scheduled the time advance
-                            sendMessage("WAITING_ACK|Time advance scheduled");
-                        } else {
-                            EV << "Simulation terminating, discarding dummy event" << std::endl;
-                            delete dummyEvent; // Clean up the event
-                            sendMessage("ERROR|Simulation terminating");
-                        }
-                    }
                 } else {
                     delete dummyEvent;
                     sendMessage("ERROR|No valid module found for time advance");
