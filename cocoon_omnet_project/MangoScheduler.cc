@@ -321,10 +321,12 @@ void MangoScheduler::processMessage(const std::string& message) {
                 int receiverPort = 8345; // default
 
                 // Try to get the localPort parameter from the receiver's TCP app
-                cPar& portPar = receiverModule->par("localPort");
-                if (portPar.isSet()) {
-                    receiverPort = portPar.intValue();
-                    EV << "Found receiver port: " << receiverPort << std::endl;
+                if (receiverModule) {
+                    cPar& portPar = receiverModule->par("localPort");
+                    if (portPar.isSet()) {
+                        receiverPort = portPar.intValue();
+                        EV << "Found receiver port: " << receiverPort << std::endl;
+                    }
                 }
 
                 if (senderModule) {
@@ -388,22 +390,49 @@ void MangoScheduler::processMessage(const std::string& message) {
         }
         else if (type == "WAITING") {
             EV << "Received waiting message" << endl;
-            json data = json::parse(payload);
 
-            // Extract max_advance (shared for all messages in this batch)
-            double max_advance = data["max_advance"];
-            maxTimeAdvance = SimTime(max_advance, SIMTIME_MS); // convert from ms to s
+            try {
+                json data = json::parse(payload);
 
-            // Create a special event that will send acknowledgment when processed
-            AdvanceTimeEvent *dummyEvent = new AdvanceTimeEvent();
-            dummyEvent->setSchedulingPriority(1);
-            cModule* advancer = getSimulation()->getModuleByPath("timeAdvancer");
+                // Extract max_advance (shared for all messages in this batch)
+                double max_advance = data["max_advance"];
+                maxTimeAdvance = SimTime(max_advance, SIMTIME_MS); // convert from ms to s
 
-            dummyEvent->setArrival(advancer->getId(), -1, maxTimeAdvance);
-            getSimulation()->getFES()->insert(dummyEvent);
+                // Create a special event that will send acknowledgment when processed
+                AdvanceTimeEvent *dummyEvent = new AdvanceTimeEvent();
+                dummyEvent->setSchedulingPriority(1);
 
-            // Send immediate acknowledgment that we've scheduled the time advance
-            sendMessage("WAITING_ACK|Time advance scheduled");
+                cModule* advancer = getSimulation()->getModuleByPath("timeAdvancer");
+                if (!advancer) {
+                    EV << "Warning: timeAdvancer module not found, using system module" << std::endl;
+                    advancer = getSimulation()->getSystemModule();
+                }
+
+                if (advancer) {
+                    dummyEvent->setArrival(advancer->getId(), -1, maxTimeAdvance);
+
+                    // Thread-safe FES insert with termination check
+                    {
+                        std::lock_guard<std::mutex> lock(fesMutex);
+                        if (!simulationTerminating && getSimulation() && getSimulation()->getFES()) {
+                            getSimulation()->getFES()->insert(dummyEvent);
+                            // Send immediate acknowledgment that we've scheduled the time advance
+                            sendMessage("WAITING_ACK|Time advance scheduled");
+                        } else {
+                            EV << "Simulation terminating, discarding dummy event" << std::endl;
+                            delete dummyEvent; // Clean up the event
+                            sendMessage("ERROR|Simulation terminating");
+                        }
+                    }
+                } else {
+                    delete dummyEvent;
+                    sendMessage("ERROR|No valid module found for time advance");
+                }
+            }
+            catch (const std::exception& e) {
+                std::cerr << "Error processing WAITING message: " << e.what() << std::endl;
+                sendMessage("ERROR|" + std::string(e.what()));
+            }
         }
         else {
             EV << "Unhandled message type: " << type << std::endl;
