@@ -57,6 +57,12 @@ class TrafficConfig(Enum):
     deer_use_case = 10
 
 
+class ClusterDistanceThreshold(Enum):
+    none = 0
+    one = 1
+    three = 3
+    five = 5
+
 
 @dataclass
 class ScenarioConfiguration:
@@ -67,23 +73,31 @@ class ScenarioConfiguration:
     traffic_configuration: TrafficConfig = TrafficConfig.none
     network_type: NetworkModelType = NetworkModelType.none
 
+    cluster_distance_threshold: ClusterDistanceThreshold = ClusterDistanceThreshold.none
+
+    run: int = 0
+
     @property
     def scenario_id(self):
         """Create a scenario ID that includes all configuration parameters."""
         return (f"{self.model_type.name}-{self.num_devices.name}-{self.payload_size.name}-{self.scenario_duration.name}"
-                f"-{self.traffic_configuration.name}-{self.network_type.name}")
+                f"-{self.traffic_configuration.name}-{self.network_type.name}-{self.cluster_distance_threshold.name}"
+                f"-{self.run}")
 
     @classmethod
     def from_scenario_id(cls, scenario_id: str) -> 'ScenarioConfiguration':
         try:
-            model_str, devices_str, payload_str, duration_str, traffic_str, network_str = scenario_id.split('-')
+            model_str, devices_str, payload_str, duration_str, traffic_str, network_str, cl_thr_str, run \
+                = scenario_id.split('-')
             return cls(
                 model_type=ModelType[model_str],
                 num_devices=NumDevices[devices_str],
                 payload_size=PayloadSizeConfig[payload_str],
                 scenario_duration=ScenarioDuration[duration_str],
                 traffic_configuration=TrafficConfig[traffic_str],
-                network_type=NetworkModelType[network_str]
+                network_type=NetworkModelType[network_str],
+                cluster_distance_threshold=ClusterDistanceThreshold[cl_thr_str],
+                run=run
             )
         except (ValueError, KeyError) as e:
             raise ValueError(f"Invalid scenario_id format or value: {scenario_id}") from e
