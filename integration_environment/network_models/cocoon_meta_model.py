@@ -2,6 +2,7 @@ import copy
 import logging
 import math
 import statistics
+import time
 from dataclasses import dataclass
 from enum import Enum
 from typing import Dict, Optional, Any
@@ -32,6 +33,15 @@ class MessageObservation:
     sender_node_state: Optional['NodeState'] = None
     receiver_node_state: Optional['NodeState'] = None
     network_state: Optional['NetworkState'] = None
+
+
+@dataclass
+class SubstitutionInfo:
+    occurred: bool = False
+    message_index: int = 0
+    confidence_score: float = 0.0
+    current_time_s: float = 0.0
+    additional_metrics: dict = None
 
 
 @dataclass
@@ -275,6 +285,8 @@ class CocoonMetaModel:
         self.output_file_name = output_file_name
         self.mode = mode
         self.network_graph = CocoonNetworkGraph()
+
+        self.substitution_info = SubstitutionInfo()
 
         # DataFrame containing training data for the regressors
         self.training_df = None
@@ -649,6 +661,20 @@ class CocoonMetaModel:
         # Determine if substitution threshold is reached
         threshold_value = 0.65  # Required threshold to trigger substitution
         self.substitution_threshold_reached = combined_score >= threshold_value
+
+        if self.substitution_threshold_reached and not self.substitution_info.occurred:
+            print('SUBSTITUTION')
+            self.substitution_info = SubstitutionInfo(
+                occurred=True,
+                message_index=self.message_index,
+                confidence_score=combined_score,
+                current_time_s=time.time(),
+                additional_metrics={
+                    'total_messages_processed': len(self.message_observations),
+                    'cluster_prediction_errors_count': len(self.cluster_prediction_errors),
+                    'online_prediction_errors_count': len(self.online_prediction_errors)
+                }
+            )
 
         # Log the results if logger is available
         if logger:
