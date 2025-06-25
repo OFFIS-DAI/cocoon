@@ -102,7 +102,7 @@ class CommunicationScheduler(ABC):
 
             if len(self._message_buffer) > 0:
                 self.current_time = min(self._message_buffer.keys())
-            elif len(self._next_activities) > 0:
+            elif len(self._next_activities) > 0 and sum(len(m) for m in container_messages_dict.values()) == 0:
                 self.current_time = min(self._next_activities)
             elif not self._waiting_for_messages():
                 # no more activities or messages in mango or external simulation -> finalize scenario
@@ -110,6 +110,15 @@ class CommunicationScheduler(ABC):
                 await self._on_scenario_finished()
                 self.scenario_finished.set_result(True)
                 break
+            # Display progress
+            progress = min(self.current_time / self._duration_s, 1.0)
+            bar_length = 40
+            filled_length = int(bar_length * progress)
+            bar = '=' * filled_length + '-' * (bar_length - filled_length)
+            print(
+                f"\rSimulation Progress: |{bar}| {progress * 100:.1f}% ({self.current_time:.1f}s / {self._duration_s}s)",
+                end='')
+            print()
 
             if self.current_time > self._duration_s:
                 # simulation has reached the defined duration -> finalize scenario
@@ -258,8 +267,13 @@ class DetailedModelScheduler(CommunicationScheduler):
 
         max_advance = self._get_max_advance_in_ms(self._next_activities)
         if sum([len(values) for values in container_messages_dict.values()]) > 0:
-            await self.detailed_network_model.simulate_message_dispatch(sender_message_dict=container_messages_dict,
-                                                                        max_advance_ms=max_advance)
+            success = await self.detailed_network_model.simulate_message_dispatch(
+                sender_message_dict=container_messages_dict,
+                max_advance_ms=max_advance)
+            if not success:
+                logger.warning('Terminate simulation as error occurred in message dispatch. ')
+                await self._on_scenario_finished()
+                self.scenario_finished.set_result(True)
 
         if self.detailed_network_model.waiting_for_messages_from_omnet():
             message_buffer = await self.detailed_network_model.get_received_messages_from_omnet_connection()
@@ -308,7 +322,7 @@ class MetaModelScheduler(DetailedModelScheduler):
                  simu5G_installation_path: str,
                  config_name: str, omnet_project_path: str, output_file_name: str = 'cocoon_output.csv',
                  in_training_mode: bool = True, training_df: Optional[pd.DataFrame] = None,
-                 cluster_distance_threshold: float = 5, scenario_duration_ms: int = 200 * 1000):
+                 cluster_distance_threshold: float = 5, scenario_duration_ms: int = 200 * 1000, i_pupa: int = 100):
         super().__init__(container_mapping=container_mapping,
                          inet_installation_path=inet_installation_path,
                          simu5G_installation_path=simu5G_installation_path,
@@ -319,7 +333,8 @@ class MetaModelScheduler(DetailedModelScheduler):
         self.meta_model = CocoonMetaModel(output_file_name=output_file_name,
                                           mode=CocoonMetaModel.Mode.TRAINING
                                           if in_training_mode else CocoonMetaModel.Mode.PRODUCTION,
-                                          cluster_distance_threshold=cluster_distance_threshold)
+                                          cluster_distance_threshold=cluster_distance_threshold,
+                                          i_pupa=i_pupa)
         self.meta_model_only = False
         self.msg_id_to_msg = None
         self.meta_model_msg_counter = 0
