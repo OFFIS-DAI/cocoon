@@ -435,6 +435,9 @@ void MangoScheduler::processMessage(const std::string& message) {
 }
 
 void MangoScheduler::sendMessage(const std::string& message) {
+    if (message.find("RECEIVED|") == 0) {
+        maxTimeAdvance = simTime();
+    }
     //maxTimeAdvance = simTime();
     if (clientSocket >= 0) {
         // Add newline delimiter to separate messages
@@ -592,9 +595,8 @@ cEvent* MangoScheduler::takeNextEvent() {
                 if (event) {
                     simtime_t currentTime = simTime();
                     simtime_t eventTime = event->getArrivalTime();
-                    simtime_t timeAdvance = eventTime - currentTime;
 
-                    if (timeAdvance <= maxTimeAdvance) {
+                    if (eventTime <= maxTimeAdvance) {
                         // Found an event within allowed range
                         EV << "Found event within max advance limit after waiting" << std::endl;
                         break;

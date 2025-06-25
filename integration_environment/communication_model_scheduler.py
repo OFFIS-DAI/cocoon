@@ -190,7 +190,7 @@ class IdealCommunicationScheduler(CommunicationScheduler):
                     self._message_buffer[message.time] = []
                 self._message_buffer[message.time].append(message)
         self._next_activities.extend([na for na in next_activities if na is not None])
-        self._next_activities = [na for na in self._next_activities if na > self.current_time]
+        self._next_activities = [na for na in self._next_activities if na >= self.current_time]
 
 
 class ChannelModelScheduler(CommunicationScheduler):
