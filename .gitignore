@@ -174,3 +174,8 @@ cython_debug/
 .pypirc
 /cocoon_omnet_project/out/
 /cocoon_omnet_project/results/
+/cocoon_omnet_project/.cproject
+/cocoon_omnet_project/.project
+/cocoon_omnet_project/.oppbuildspec
+/cocoon_omnet_project/.qtenvrc
+/cocoon_omnet_project/build_script.sh
