@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import math
+import time
 from abc import ABC, abstractmethod
 from copy import copy
 from typing import Optional
@@ -35,6 +36,7 @@ class CommunicationScheduler(ABC):
         self._next_activities = []
         self.current_time = 0
         self._duration_s = scenario_duration_ms / 1000
+        self.time_advancement = {}  # real time (in sec): simulation step time (in sec)
 
         self._message_buffer = {}  # time (in sec): message
 
@@ -80,6 +82,8 @@ class CommunicationScheduler(ABC):
                 await asyncio.sleep(1)
 
         while True:
+            self.time_advancement[time.time()] = self.current_time
+
             container_messages_dict = {}
             next_activities_in_current_step = []
             for container_name, container in self._container_mapping.items():
@@ -398,13 +402,15 @@ class MetaModelScheduler(DetailedModelScheduler):
                 else:
                     logger.warning('ID of message cannot be resolved.')
                     continue
-                time_receive = (message_in_transit['time_send_ms'] + message_in_transit['delay_ms']) / 1000
+                # time receive must be at minimum the current time
+                time_receive = max(self.current_time, (message_in_transit['time_send_ms']
+                                                       + message_in_transit['delay_ms']) / 1000)
                 if time_receive not in self._message_buffer:
                     self._message_buffer[time_receive] = []
                 self._message_buffer[time_receive].append(self.msg_id_to_msg[msg_id_num])
             # Update next activities
             self._next_activities.extend([na for na in next_activities if na is not None])
-            self._next_activities = [na for na in self._next_activities if na >= self.current_time]
+            self._next_activities = [na for na in self._next_activities if na > self.current_time]
 
         for time_s, messages in self._message_buffer.items():
             for message in messages:
