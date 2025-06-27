@@ -343,6 +343,8 @@ class MetaModelScheduler(DetailedModelScheduler):
         self.meta_model_msg_counter = 0
 
     async def _on_scenario_start(self):
+        while not hasattr(self, 'meta_model'):
+            await asyncio.sleep(0.1)
         if self.meta_model.mode == CocoonMetaModel.Mode.PRODUCTION:
             if not isinstance(self.training_df, pd.DataFrame):
                 logger.warning('No training data provided for meta-model in production phase.')
