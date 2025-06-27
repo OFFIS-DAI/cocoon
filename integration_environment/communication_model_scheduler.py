@@ -89,9 +89,8 @@ class CommunicationScheduler(ABC):
             for container_name, container in self._container_mapping.items():
                 step_time = self.current_time
                 if self.current_time < container.clock.time:
-                    logger.error(f'Trying to set current time to {self.current_time}.'
-                                   f'But time is {container.clock.time}.')
-                    step_time = container.clock.time
+                    raise ValueError(f'Trying to set current time to {self.current_time}.'
+                                     f'But time is {container.clock.time}.')
                 incoming_messages_for_container = await self.get_incoming_messages_for_container(container_name)
                 output = await container.step(incoming_messages=incoming_messages_for_container,
                                               simulation_time=step_time)
