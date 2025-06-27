@@ -10,6 +10,7 @@ import psutil
 
 import os
 
+from integration_environment.communication_model_scheduler import CommunicationScheduler
 from integration_environment.scenario_configuration import ScenarioConfiguration
 
 logger = logging.getLogger(__name__)
@@ -37,6 +38,11 @@ class ResultsRecorder:
         self._stop_monitoring = False
 
         self.substitution_event = None  # Will store substitution information
+
+        self.scheduler = None
+
+    def set_scheduler(self, scheduler: CommunicationScheduler):
+        self.scheduler = scheduler
 
     def start_scenario_recording(self):
         self.execution_start_time = time.time()
@@ -70,6 +76,8 @@ class ResultsRecorder:
         logger.debug(f'Stop scenario. Execution took {self.execution_runtime} seconds.')
         logger.debug(f'Collected {len(self.memory_measurements)} memory measurements.')
 
+        self.record_meta_model_substitution()
+        self.record_time_advancement()
         self._create_summary_csv()
 
     def _create_summary_csv(self):
@@ -229,32 +237,79 @@ class ResultsRecorder:
         logger.info(f"Partial results: {len(self.send_message_events)} sent, "
                     f"{len(self.receive_message_events)} received")
 
-    # Add this method to your ResultsRecorder class
+    def record_time_advancement(self):
+        """
+        Record time advancement data from the scheduler.
+        Saves both to statistics JSON and as a separate CSV file.
+        """
+        if hasattr(self.scheduler, 'time_advancement') and self.scheduler.time_advancement:
+            time_advancement_data = self.scheduler.time_advancement
 
-    def record_meta_model_substitution(self, substitution_time_s: int, message_index: int,
-                                       additional_info: dict = None, confidence_score=0):
+            # Save as separate CSV file for detailed analysis
+            time_advancement_file = self.output_dir / f"time_advancement_{self.scenario_configuration.scenario_id}.csv"
+
+            # Convert to DataFrame for easy CSV export
+            time_advancement_list = []
+            for real_time, sim_time in time_advancement_data.items():
+                time_advancement_list.append({
+                    'real_timestamp': real_time,
+                    'real_datetime': str(datetime.datetime.fromtimestamp(real_time)),
+                    'simulation_time_s': sim_time,
+                    'relative_real_time_s': real_time - self.execution_start_time if self.execution_start_time else 0
+                })
+
+            df_time_advancement = pd.DataFrame(time_advancement_list)
+            df_time_advancement = df_time_advancement.sort_values('real_timestamp')
+            df_time_advancement.to_csv(time_advancement_file, index=False)
+
+            # Also add summary statistics to the main statistics file
+            time_advancement_stats = {
+                'total_data_points': len(time_advancement_data),
+                'simulation_start_time_s': min(time_advancement_data.values()) if time_advancement_data else 0,
+                'simulation_end_time_s': max(time_advancement_data.values()) if time_advancement_data else 0,
+                'total_simulation_duration_s': max(time_advancement_data.values()) - min(
+                    time_advancement_data.values()) if time_advancement_data else 0,
+                'real_start_timestamp': min(time_advancement_data.keys()) if time_advancement_data else 0,
+                'real_end_timestamp': max(time_advancement_data.keys()) if time_advancement_data else 0,
+                'total_real_duration_s': max(time_advancement_data.keys()) - min(
+                    time_advancement_data.keys()) if time_advancement_data else 0
+            }
+
+            # Store for inclusion in statistics JSON
+            self.time_advancement_stats = time_advancement_stats
+
+            logger.info(f"Time advancement data saved to {time_advancement_file}")
+            logger.info(f"Time advancement summary: {len(time_advancement_data)} data points, "
+                        f"simulation time from {time_advancement_stats['simulation_start_time_s']:.2f}s "
+                        f"to {time_advancement_stats['simulation_end_time_s']:.2f}s")
+        else:
+            logger.debug("No time advancement data available from scheduler")
+            self.time_advancement_stats = None
+
+    def record_meta_model_substitution(self):
         """
         Record when the meta-model substitutes the detailed simulation.
-
-        Args:
-            substitution_time_ms: Simulation time when substitution occurred
-            message_index: Message index when substitution occurred
-            additional_info: Optional dictionary with additional substitution metrics
         """
-        substitution_data = {
-            'substitution_occurred': True,
-            'substitution_time_s': substitution_time_s,
-            'substitution_message_index': message_index,
-            'substitution_real_time': time.time(),  # Real-world timestamp
-            'substitution_runtime_s': time.time() - self.execution_start_time,
-            'confidence_score': confidence_score
-        }
+        if hasattr(self.scheduler, 'meta_model') and self.scheduler.meta_model:
+            substitution_info = self.scheduler.meta_model.substitution_info
+            if substitution_info.occurred:
+                substitution_time_s = substitution_info.current_time_s
+                message_index = substitution_info.message_index
+                additional_info = substitution_info.additional_metrics
+                confidence_score = substitution_info.confidence_score
 
-        # Add any additional information provided
-        if additional_info:
-            substitution_data.update(additional_info)
+                substitution_data = {
+                    'substitution_occurred': True,
+                    'substitution_time_s': substitution_time_s,
+                    'substitution_message_index': message_index,
+                    'confidence_score': confidence_score
+                }
 
-        self.substitution_event = substitution_data
+                # Add any additional information provided
+                if additional_info:
+                    substitution_data.update(additional_info)
 
-        logger.info(f"Meta-model substitution recorded at simulation time {substitution_time_s}s, "
-                    f"message index {message_index}, runtime {substitution_data['substitution_runtime_s']:.2f}s")
+                self.substitution_event = substitution_data
+
+                logger.info(f"Meta-model substitution recorded at simulation time {substitution_time_s}s, "
+                            f"message index {message_index}")
