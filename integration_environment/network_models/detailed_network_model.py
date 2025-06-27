@@ -127,7 +127,10 @@ class OmnetConnection:
                    f'-f {self.ini_file_name} '
                    f'-c {self.config_name} '
                    f'--cmdenv-express-mode=true '
-                   f'--cmdenv-status-frequency=0s')
+                   f'--cmdenv-status-frequency=0s '
+                   f'--record-eventlog=false '
+                   f'--cmdenv-event-banners=false '
+                   f'> /dev/null 2>&1')  # Redirect all output
 
         try:
             omnet_ini_path = self.omnet_project_path
@@ -488,9 +491,10 @@ class DetailedNetworkModel:
             "messages": message_list,
             "max_advance": max_advance_ms
         }
-        self.omnet_connection.send_message_to_omnet(payload=payload, msg_ids=msg_ids)
+        success = self.omnet_connection.send_message_to_omnet(payload=payload, msg_ids=msg_ids)
         # Add small delay before any subsequent communication
         await asyncio.sleep(0.01)  # 10ms delay
+        return success
 
     def waiting_for_messages_from_omnet(self) -> bool:
         messages_sent_but_not_received = [m for m in self.omnet_connection.message_ids_sent
