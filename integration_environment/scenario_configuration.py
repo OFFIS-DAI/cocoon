@@ -21,6 +21,7 @@ class ScenarioDuration(Enum):
     one_min = 60 * 1000
     five_min = 5 * 60 * 1000
     one_hour = 60 * 60 * 1000
+    one_day = 60 * 60 * 1000 * 24
     none = 0
 
 
@@ -59,9 +60,17 @@ class TrafficConfig(Enum):
 
 class ClusterDistanceThreshold(Enum):
     none = 0
+    half = 0.5
     one = 1
     three = 3
     five = 5
+
+
+class BatchSizeIPupa(Enum):
+    none = 0
+    ten = 10
+    fifty = 50
+    hundred = 1000
 
 
 @dataclass
@@ -73,6 +82,7 @@ class ScenarioConfiguration:
     traffic_configuration: TrafficConfig = TrafficConfig.none
     network_type: NetworkModelType = NetworkModelType.none
 
+    i_pupa: BatchSizeIPupa = BatchSizeIPupa.none
     cluster_distance_threshold: ClusterDistanceThreshold = ClusterDistanceThreshold.none
 
     run: int = 0
@@ -81,13 +91,13 @@ class ScenarioConfiguration:
     def scenario_id(self):
         """Create a scenario ID that includes all configuration parameters."""
         return (f"{self.model_type.name}-{self.num_devices.name}-{self.payload_size.name}-{self.scenario_duration.name}"
-                f"-{self.traffic_configuration.name}-{self.network_type.name}-{self.cluster_distance_threshold.name}"
-                f"-{self.run}")
+                f"-{self.traffic_configuration.name}-{self.network_type.name}-{self.cluster_distance_threshold.name}-"
+                f"{self.i_pupa.name}-{self.run}")
 
     @classmethod
     def from_scenario_id(cls, scenario_id: str) -> 'ScenarioConfiguration':
         try:
-            model_str, devices_str, payload_str, duration_str, traffic_str, network_str, cl_thr_str, run \
+            model_str, devices_str, payload_str, duration_str, traffic_str, network_str, cl_thr_str, i_pupa, run \
                 = scenario_id.split('-')
             return cls(
                 model_type=ModelType[model_str],
@@ -97,6 +107,7 @@ class ScenarioConfiguration:
                 traffic_configuration=TrafficConfig[traffic_str],
                 network_type=NetworkModelType[network_str],
                 cluster_distance_threshold=ClusterDistanceThreshold[cl_thr_str],
+                i_pupa=BatchSizeIPupa[i_pupa],
                 run=run
             )
         except (ValueError, KeyError) as e:
