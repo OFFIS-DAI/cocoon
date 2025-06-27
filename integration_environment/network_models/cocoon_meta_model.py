@@ -28,7 +28,9 @@ class MessageObservation:
     time_receive_ms: int = math.inf
 
     actual_delay_ms: int = math.inf
-    predicted_delay_ms: int = math.inf
+    cluster_predicted_delay_ms: int = math.inf
+    online_predicted_delay_ms: int = math.inf
+    weighted_predicted_delay_ms: int = math.inf
 
     sender_node_state: Optional['NodeState'] = None
     receiver_node_state: Optional['NodeState'] = None
@@ -314,6 +316,7 @@ class CocoonMetaModel:
         self.alpha = alpha  # EWMA smoothing parameter
         self.cluster_prediction_errors = []  # Track cluster prediction errors
         self.online_prediction_errors = []  # Track online prediction errors
+        self.weighted_prediction_errors = []  # Track weighted prediction errors
 
         # OPTIMIZATION: Store cluster centroids for fast distance calculation
         self.cluster_centroids = {}  # {cluster_id: centroid_vector}
@@ -326,7 +329,7 @@ class CocoonMetaModel:
         messages_in_transit = self.network_graph.get_messages_in_transit()
         messages_in_transit_with_delay = [{'msg_id': m.msg_id,
                                            'time_send_ms': m.time_send_ms,
-                                           'delay_ms': self.message_observations[m.msg_id].predicted_delay_ms}
+                                           'delay_ms': self.message_observations[m.msg_id].weighted_predicted_delay_ms}
                                           for m in messages_in_transit]
 
         return messages_in_transit_with_delay
@@ -476,27 +479,21 @@ class CocoonMetaModel:
             prediction_dict = {var: variables_dict[var] for var in self.model_features}
             prediction_data = pd.DataFrame([prediction_dict])
 
-            online_prediction = self.online_model.predict(prediction_data)[0]
+            online_prediction = int(self.online_model.predict(prediction_data)[0])
             logger.info(f'Predicted delay time online: d_on_pred = {online_prediction}')
 
+        weighted_pred = None
         # Calculate weighted prediction
         if cluster_prediction is not None and online_prediction is not None:
-            weighted_pred = self.weighted_prediction(
+            weighted_pred = int(self.weighted_prediction(
                 alpha=self.alpha,
                 abs_error_cluster_predictions=self.cluster_prediction_errors,
                 abs_error_online_predictions=self.online_prediction_errors,
                 cluster_prediction=cluster_prediction,
                 online_prediction=online_prediction
-            )
+            ))
             logger.info(f'Weighted prediction: d_w_pred = {weighted_pred}')
-            return int(weighted_pred)
-        elif cluster_prediction is not None:
-            return int(cluster_prediction)
-        elif online_prediction is not None:
-            return int(online_prediction)
-        else:
-            logger.warning("No predictions available")
-            return 0
+        return online_prediction, weighted_pred
 
     def train_decision_tree_regressor_online(self, cluster_model: DecisionTreeRegressor,
                                              state_df: pd.DataFrame,
@@ -578,21 +575,27 @@ class CocoonMetaModel:
         reached sufficient performance/stability.
         """
         # 1. Error trend of weighted predictions
-        if len(self.cluster_prediction_errors) >= 3:
-            # Calculate error trend over recent predictions
-            recent_errors = self.cluster_prediction_errors[-3:]
-            error_trend = (recent_errors[2] - recent_errors[0]) / 2
+        if len(self.weighted_prediction_errors) >= self.i_pupa:
+            # Recent prediction errors
+            recent_errors = self.weighted_prediction_errors[-self.i_pupa:]
+            # 1. Error Trend Factor (slope over all points)
+            x = np.arange(len(recent_errors))
+            y = np.array(recent_errors)
+            # Linear regression: y = a * x + b
+            slope, _ = np.polyfit(x, y, 1)
+            if slope >= 0:
+                error_trend_factor = 0.0
+            else:
+                error_trend_factor = min(1.0, abs(slope) / 50.0)
 
-            # Normalize error trend (negative slope means improving predictions)
-            recent_mean_error = sum(recent_errors) / len(recent_errors)
+            expected_max_error = 100.0
+            recent_mean_error = np.mean(recent_errors)
+            error_level_factor = 1.0 - min(1.0, recent_mean_error / expected_max_error)
 
-            # Higher score for lower errors and improving trends
-            error_trend_factor = 1.0 - min(1.0, max(0.0,
-                                                    (recent_mean_error / 100) * 0.5 +
-                                                    max(0, error_trend / 50)))
         else:
             # Not enough history to determine trend
-            error_trend_factor = 0.3  # Neutral starting value
+            error_trend_factor = 0.3
+            error_level_factor = 0.3
 
         # 2. Distance towards nearest cluster
         # Calculate for the most recent message observation
@@ -625,7 +628,7 @@ class CocoonMetaModel:
 
             # Normalize distance (closer is better)
             # Using a reasonable maximum expected distance
-            max_expected_distance = self.clustering_distance_threshold * 10  # could be much higher than in training data
+            max_expected_distance = self.clustering_distance_threshold * 100  # could be much higher than in training data
             cluster_distance_factor = 1.0 - min(1.0, min_distance / max_expected_distance)
 
         else:
@@ -647,23 +650,25 @@ class CocoonMetaModel:
 
         # Calculate combined threshold using weighted factors
         weights = {
-            'error_trend': 0.45,  # Error trend is primary indicator
-            'cluster_distance': 0.35,  # Cluster proximity is important
-            'network_topology': 0.20  # Network stability is supplementary
+            'error_trend': 0.1,
+            'error_level': 0.4,
+            'cluster_distance': 0.3,
+            'network_topology': 0.2
         }
 
         combined_score = (
                 weights['error_trend'] * error_trend_factor +
+                weights['error_level'] * error_level_factor +
                 weights['cluster_distance'] * cluster_distance_factor +
                 weights['network_topology'] * network_topology_factor
         )
 
         # Determine if substitution threshold is reached
-        threshold_value = 0.65  # Required threshold to trigger substitution
+        threshold_value = 0.75  # Required threshold to trigger substitution
         self.substitution_threshold_reached = combined_score >= threshold_value
 
         if self.substitution_threshold_reached and not self.substitution_info.occurred:
-            print('SUBSTITUTION')
+            print('--------------SUBSTITUTION--------------')
             self.substitution_info = SubstitutionInfo(
                 occurred=True,
                 message_index=self.message_index,
@@ -680,6 +685,7 @@ class CocoonMetaModel:
         if logger:
             logger.info(f"Butterfly Phase Results:")
             logger.info(f"  Error Trend Factor: {error_trend_factor:.4f}")
+            logger.info(f"  Error Level Factor: {error_level_factor:.4f}")
             logger.info(f"  Cluster Distance Factor: {cluster_distance_factor:.4f}")
             logger.info(f"  Network Topology Factor: {network_topology_factor:.4f}")
             logger.info(f"  Combined Score: {combined_score:.4f} (required: {threshold_value})")
@@ -694,14 +700,14 @@ class CocoonMetaModel:
         if msg_id in self.message_observations:
             observation = self.message_observations[msg_id]
 
-            # Calculate cluster prediction error if available
-            if observation.predicted_delay_ms != math.inf:
-                cluster_error = abs(actual_delay - observation.predicted_delay_ms)
-                self.cluster_prediction_errors.append(cluster_error)
+            if observation.cluster_predicted_delay_ms and observation.cluster_predicted_delay_ms != math.inf:
+                self.cluster_prediction_errors.append(abs(actual_delay - observation.cluster_predicted_delay_ms))
 
-                # Keep only recent errors (e.g., last 100)
-                if len(self.cluster_prediction_errors) > 100:
-                    self.cluster_prediction_errors = self.cluster_prediction_errors[-100:]
+            if observation.online_predicted_delay_ms and observation.online_predicted_delay_ms != math.inf:
+                self.online_prediction_errors.append(abs(actual_delay - observation.online_predicted_delay_ms))
+
+            if observation.weighted_predicted_delay_ms and observation.weighted_predicted_delay_ms != math.inf:
+                self.weighted_prediction_errors.append(abs(actual_delay - observation.weighted_predicted_delay_ms))
 
     async def process_sent_message(self, sender: str, receiver: str,
                                    payload_size_B: int, current_time_ms: int, msg_id: str):
@@ -743,17 +749,17 @@ class CocoonMetaModel:
             receiver_node_state = receiver_node.update_state(time_ms=message.time_send_ms)
             network_state = self.network_graph.update_state(time_ms=message.time_send_ms)
 
-            final_prediction = None
+            d_cl_pred = None
+            d_on_pred = None
+            d_w_pred = None
 
             if self.mode == self.Mode.PRODUCTION:
                 # LARVA phase - get cluster prediction (now optimized with centroids)
                 d_cl_pred = self.execute_larva_phase(sender_node, receiver_node, payload_size_B=message.payload_size_B)
 
-                final_prediction = d_cl_pred
-
                 if self.message_index >= self.i_pupa:
                     # PUPA phase - get weighted prediction
-                    final_prediction = self.execute_pupa_phase(
+                    d_on_pred, d_w_pred = self.execute_pupa_phase(
                         sender_node, receiver_node,
                         payload_size_B=message.payload_size_B,
                         cluster_prediction=d_cl_pred
@@ -767,7 +773,9 @@ class CocoonMetaModel:
                                                                            sender_node_state=sender_node_state,
                                                                            receiver_node_state=receiver_node_state,
                                                                            network_state=network_state,
-                                                                           predicted_delay_ms=final_prediction)
+                                                                           cluster_predicted_delay_ms=d_cl_pred,
+                                                                           online_predicted_delay_ms=d_on_pred,
+                                                                           weighted_predicted_delay_ms=d_w_pred)
 
         if self.mode == self.Mode.PRODUCTION and self.message_index >= self.i_pupa:
             if self.substitution_threshold_reached:
@@ -788,7 +796,7 @@ class CocoonMetaModel:
                 'time_send_ms': msg_obs.time_send_ms,
                 'time_receive_ms': msg_obs.time_receive_ms if msg_obs.time_receive_ms != math.inf else None,
                 'actual_delay_ms': msg_obs.actual_delay_ms if msg_obs.actual_delay_ms != math.inf else None,
-                'predicted_delay_ms': msg_obs.predicted_delay_ms if msg_obs.predicted_delay_ms != math.inf else None
+                'predicted_delay_ms': msg_obs.weighted_predicted_delay_ms if msg_obs.weighted_predicted_delay_ms != math.inf else None
             }
             obs_dict.update(msg_obs.sender_node_state.get_as_sender_node_dict())
             obs_dict.update(msg_obs.receiver_node_state.get_as_receiver_node_dict())
@@ -808,7 +816,7 @@ class CocoonMetaModel:
                 'time_send_ms': msg_obs.time_send_ms,
                 'time_receive_ms': msg_obs.time_receive_ms if msg_obs.time_receive_ms != math.inf else None,
                 'actual_delay_ms': msg_obs.actual_delay_ms if msg_obs.actual_delay_ms != math.inf else None,
-                'predicted_delay_ms': msg_obs.predicted_delay_ms if msg_obs.predicted_delay_ms != math.inf else None
+                'predicted_delay_ms': msg_obs.weighted_predicted_delay_ms if msg_obs.weighted_predicted_delay_ms != math.inf else None
             }
             obs_dict.update(msg_obs.sender_node_state.get_as_sender_node_dict())
             obs_dict.update(msg_obs.receiver_node_state.get_as_receiver_node_dict())
