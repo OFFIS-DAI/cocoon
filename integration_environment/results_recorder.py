@@ -148,6 +148,112 @@ class ResultsRecorder:
     def record_message_receive_event(self, event):
         self.receive_message_events.append(event)
 
+    def record_error(self, error_message: str = None, exception: Exception = None):
+        """
+        Record an error scenario.
+
+        Args:
+            error_message: Optional custom error message
+            exception: Optional exception object that caused the error
+        """
+        self.execution_end_time = time.time()
+        self.execution_runtime = self.execution_end_time - self.execution_start_time
+
+        # Stop memory monitoring
+        self._stop_monitoring = True
+        if self._memory_monitoring_task:
+            self._memory_monitoring_task.cancel()
+
+        # Format error information
+        error_info = {
+            'error_occurred': True,
+            'error_message': error_message,
+            'error_type': type(exception).__name__ if exception else 'Unknown',
+            'error_details': str(exception) if exception else error_message
+        }
+
+        logger.error(f'Scenario {self.scenario_configuration.scenario_id} failed: {error_info["error_details"]}')
+        logger.error(f'Runtime before failure: {self.execution_runtime:.2f}s')
+
+        # Create error-specific files
+        self._create_error_summary(error_info)
+
+    def _create_error_summary(self, error_info: dict):
+        """Create summary files for a failed scenario."""
+        summary_file = self.output_dir / f"messages_{self.scenario_configuration.scenario_id}.csv"
+        statistics_file = self.output_dir / f"statistics_{self.scenario_configuration.scenario_id}.json"
+
+        # Create CSV with whatever messages we have so far
+        message_delays = []
+        for send_event in self.send_message_events:
+            # Try to find matching receive event
+            receive_event = None
+            for recv_event in self.receive_message_events:
+                if send_event.msg_id == recv_event.msg_id:
+                    receive_event = recv_event
+                    break
+
+            if receive_event:
+                # Complete message with delay
+                delay_ms = receive_event.time_receive_ms - send_event.time_send_ms
+                message_delays.append({
+                    'msg_id': send_event.msg_id,
+                    'sender': send_event.sender.protocol_addr,
+                    'receiver': send_event.receiver.protocol_addr,
+                    'size_B': send_event.payload_size_B,
+                    'time_send_ms': send_event.time_send_ms,
+                    'time_receive_ms': receive_event.time_receive_ms,
+                    'delay_ms': delay_ms
+                })
+            else:
+                # Incomplete message (sent but not received)
+                message_delays.append({
+                    'msg_id': send_event.msg_id,
+                    'sender': send_event.sender.protocol_addr,
+                    'receiver': send_event.receiver.protocol_addr,
+                    'size_B': send_event.payload_size_B,
+                    'time_send_ms': send_event.time_send_ms,
+                    'time_receive_ms': None,  # Not received
+                    'delay_ms': None  # Cannot calculate delay
+                })
+
+        df = pd.DataFrame(message_delays)
+        df.to_csv(summary_file, index=False)
+
+        # Calculate memory statistics
+        memory_stats = self._calculate_memory_statistics()
+
+        # Create statistics with error information
+        statistics = {
+            'scenario_id': self.scenario_configuration.scenario_id,
+            'execution_start_time': str(datetime.datetime.fromtimestamp(self.execution_start_time)),
+            'execution_end_time': str(datetime.datetime.fromtimestamp(self.execution_end_time)),
+            'execution_run_time_s': self.execution_runtime,
+            'error_occurred': True,
+            'error_info': error_info,
+            'messages_sent': len(self.send_message_events),
+            'messages_received': len(self.receive_message_events),
+            'messages_completed': len([msg for msg in message_delays if msg['delay_ms'] is not None]),
+            'memory_statistics': memory_stats
+        }
+
+        # Add meta-model substitution info if available
+        if self.substitution_event:
+            statistics['meta_model_substitution'] = self.substitution_event
+        else:
+            statistics['meta_model_substitution'] = {'substitution_occurred': False}
+
+        # Add time advancement stats if available
+        if hasattr(self, 'time_advancement_stats') and self.time_advancement_stats:
+            statistics['time_advancement_statistics'] = self.time_advancement_stats
+
+        with open(statistics_file, 'w') as outfile:
+            json.dump(statistics, outfile, indent=2)
+
+        logger.info(f"Error results saved to {summary_file} and {statistics_file}")
+        logger.info(f"Partial results: {len(self.send_message_events)} sent, "
+                    f"{len(self.receive_message_events)} received")
+
     def record_timeout(self, timeout_seconds: int, error_message: str = None):
         """
         Record a timeout event for the current scenario.
