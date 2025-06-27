@@ -2,7 +2,7 @@
 # OMNeT++/OMNEST Makefile for cocoon_omnet_project
 #
 # This file was generated with the command:
-#  opp_makemake -f --deep -O out -KINET4_5_PROJ=/home/malin/cocoon_omnet_workspace/inet4.5 -DINET_IMPORT -I. -I$$\(INET4_5_PROJ\)/src -L$$\(INET4_5_PROJ\)/src -lINET$$\(D\) -- -lpthread
+#  opp_makemake -f --deep -O out -KINET4_5_PROJ=/home/malin/cocoon_omnet_workspace/inet4.5 -KSIMU5G_PROJ=/home/malin/PycharmProjects/trace/Simu5G-1.2.2 -DINET_IMPORT -I. -I$$\(INET4_5_PROJ\)/src -I$$\(SIMU5G_PROJ\)/src -L$$\(INET4_5_PROJ\)/src -L$$\(SIMU5G_PROJ\)/src -lINET$$\(D\) -lsimu5g$$\(D\) -- -lpthread
 #
 
 # Name of target to be created (-o option)
@@ -19,13 +19,13 @@ USERIF_LIBS = $(ALL_ENV_LIBS) # that is, $(QTENV_LIBS) $(CMDENV_LIBS)
 #USERIF_LIBS = $(QTENV_LIBS)
 
 # C++ include paths (with -I)
-INCLUDE_PATH = -I. -I$(INET4_5_PROJ)/src
+INCLUDE_PATH = -I. -I$(INET4_5_PROJ)/src -I$(SIMU5G_PROJ)/src
 
 # Additional object and library files to link with
 EXTRA_OBJS = -lpthread
 
 # Additional libraries (-L, -l options)
-LIBS = $(LDFLAG_LIBPATH)$(INET4_5_PROJ)/src  -lINET$(D)
+LIBS = $(LDFLAG_LIBPATH)$(INET4_5_PROJ)/src $(LDFLAG_LIBPATH)$(SIMU5G_PROJ)/src  -lINET$(D) -lsimu5g$(D)
 
 # Output directory
 PROJECT_OUTPUT_DIR = out
@@ -52,6 +52,7 @@ SMFILES =
 
 # Other makefile variables (-K)
 INET4_5_PROJ=/home/malin/cocoon_omnet_workspace/inet4.5
+SIMU5G_PROJ=/home/malin/PycharmProjects/trace/Simu5G-1.2.2
 
 #------------------------------------------------------------------------------
 
@@ -72,7 +73,7 @@ include $(CONFIGFILE)
 # Simulation kernel and user interface libraries
 OMNETPP_LIBS = $(OPPMAIN_LIB) $(USERIF_LIBS) $(KERNEL_LIBS) $(SYS_LIBS)
 ifneq ($(PLATFORM),win32)
-LIBS += -Wl,-rpath,$(abspath $(INET4_5_PROJ)/src)
+LIBS += -Wl,-rpath,$(abspath $(INET4_5_PROJ)/src) -Wl,-rpath,$(abspath $(SIMU5G_PROJ)/src)
 endif
 
 COPTS = $(CFLAGS) $(IMPORT_DEFINES) -DINET_IMPORT $(INCLUDE_PATH) -I$(OMNETPP_INCL_DIR)
