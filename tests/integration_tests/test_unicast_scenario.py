@@ -9,7 +9,7 @@ from integration_environment.communication_model_scheduler import DetailedModelS
 from integration_environment.messages import TrafficMessage
 from integration_environment.results_recorder import ResultsRecorder
 from integration_environment.roles import ConstantBitrateSenderRole, ReceiverRole, ResultsRecorderRole, \
-    PoissonSenderRole, UnicastRole
+    PoissonSenderRole, UnicastSenderRole
 from integration_environment.scenario_configuration import ScenarioConfiguration, ModelType, \
     ScenarioDuration, NumDevices, TrafficConfig, NetworkModelType
 from tests.integration_tests.utils import setup_logging
@@ -49,8 +49,8 @@ async def run_with_ideal_communication():
 
         container2.current_start_time_of_step = time.time()
         cbr_sender_role_agent = agent_composed_of(
-            UnicastRole(receiver_addresses=receiver_addr,
-                        scenario_config=scenario_configuration),
+            UnicastSenderRole(receiver_addresses=receiver_addr,
+                              scenario_config=scenario_configuration),
             ResultsRecorderRole(results_recorder))
         container2.register(cbr_sender_role_agent)
 
@@ -93,9 +93,9 @@ async def run_with_detailed_communication():
                 receiver_addresses = [addr for j, addr in enumerate(all_agent_addresses) if j != i]
 
                 # Add UnicastRole to the existing agent
-                unicast_role = UnicastRole(receiver_addresses=receiver_addresses,
-                                           scenario_config=scenario_configuration,
-                                           start_at_s=i*10+1)
+                unicast_role = UnicastSenderRole(receiver_addresses=receiver_addresses,
+                                                 scenario_config=scenario_configuration,
+                                                 start_at_s=i*10+1)
                 agent.add_role(unicast_role)
 
             communication_network_entity = DetailedModelScheduler(container_mapping=container_mapping,
