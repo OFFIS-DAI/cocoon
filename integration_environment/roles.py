@@ -346,10 +346,12 @@ class AggregatorAgentRole(Role):
                     needed_dev = requested_deviation - assigned_deviation
                     self.individual_baselines[dev_agent] += needed_dev
                     break
-            self.context.schedule_timestamp_task(self.send_fixed_power(content.t_start),
-                                                 timestamp=self.context.current_timestamp +
-                                                           self.reactive_scheduling_time_s)
-            self.context.schedule_instant_task(self.send_fixed_power(t_start=content.t_start))
+            if self.reactive_scheduling_time_s > 0:
+                self.context.schedule_timestamp_task(self.send_fixed_power(content.t_start),
+                                                     timestamp=self.context.current_timestamp +
+                                                               self.reactive_scheduling_time_s)
+            else:
+                self.context.schedule_instant_task(self.send_fixed_power(t_start=content.t_start))
 
     def handle_infeasible_power_notification(self, content: InfeasiblePowerNotification, meta):
         event = ReceiveMessage(msg_id=content.msg_id,
@@ -535,7 +537,7 @@ class PoissonSenderRole(Role):
                     pass
 
 
-class UnicastRole(Role):
+class UnicastSenderRole(Role):
     def __init__(self, receiver_addresses: list, scenario_config: ScenarioConfiguration, start_at_s: int = 1):
         super().__init__()
         self.receiver_addresses = receiver_addresses
