@@ -15,9 +15,8 @@ from integration_environment.communication_model_scheduler import IdealCommunica
 from integration_environment.messages import TrafficMessage, deer_message_classes
 from integration_environment.results_recorder import ResultsRecorder
 from integration_environment.roles import ConstantBitrateSenderRole, ReceiverRole, ResultsRecorderRole, \
-    PoissonSenderRole, UnicastRole, FlexAgentRole, AggregatorAgentRole
-from integration_environment.scenario_configuration import ScenarioConfiguration, PayloadSizeConfig, ModelType, \
-    ScenarioDuration, NumDevices, TrafficConfig, NetworkModelType
+    PoissonSenderRole, UnicastSenderRole, FlexAgentRole, AggregatorAgentRole
+from integration_environment.scenario_configuration import *
 
 my_codec = JSON()
 my_codec.add_serializer(*TrafficMessage.__serializer__())
@@ -36,15 +35,23 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def get_training_df(scenario_configuration: ScenarioConfiguration):
+def get_training_df(scenario_configuration: ScenarioConfiguration, same_technology=True):
+    # Get the directory where this script is located
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    training_data_path = os.path.join(current_dir, 'cocoon_training_data')
+
     existing_configurations = [ScenarioConfiguration.from_scenario_id(f.split('.')[0])
-                               for f in os.listdir('cocoon_training_data')]
+                               for f in os.listdir(training_data_path)]
     different_traffic_configs = [c for c in existing_configurations
                                  if c.traffic_configuration != scenario_configuration.traffic_configuration]
+    if same_technology:
+        different_traffic_configs = [c for c in different_traffic_configs
+                                     if c.network_type == scenario_configuration.network_type]
     dataframes = []
     for c in different_traffic_configs:
         try:
-            df = pd.read_csv(f'cocoon_training_data/{c.scenario_id}.csv')
+            csv_path = os.path.join(training_data_path, f'{c.scenario_id}.csv')
+            df = pd.read_csv(csv_path)
         except Exception as e:
             continue
         dataframes.append(df)
@@ -62,58 +69,77 @@ def get_scenario_configurations_for_meta_model_training():
             PayloadSizeConfig.medium,
             # PayloadSizeConfig.large
         ]:
-            for scenario_duration in [ScenarioDuration.one_min,
-                                      # ScenarioDuration.five_min,
-                                      # ScenarioDuration.one_hour
-                                      ]:
-                for n_devices in [NumDevices.ten]:  # , NumDevices.two, NumDevices.fifty, NumDevices.hundred]:
-                    for traffic_config in [TrafficConfig.cbr_broadcast_1_mps,
-                                           # TrafficConfig.cbr_broadcast_1_mpm,
-                                           # TrafficConfig.cbr_broadcast_4_mph,
-                                           TrafficConfig.poisson_broadcast_1_mps,
-                                           # TrafficConfig.poisson_broadcast_1_mpm,
-                                           # TrafficConfig.poisson_broadcast_4_mph,
-                                           TrafficConfig.unicast_1s_delay,
-                                           # TrafficConfig.unicast_5s_delay,
-                                           # TrafficConfig.unicast_10s_delay,
-                                           TrafficConfig.deer_use_case]:
-                        config = ScenarioConfiguration(payload_size=payload_size,
-                                                       num_devices=n_devices,
-                                                       model_type=ModelType.meta_model_training,
-                                                       scenario_duration=scenario_duration,
-                                                       traffic_configuration=traffic_config,
-                                                       network_type=network)
-                        if config.scenario_id not in existing_configuration_ids:
-                            scenario_configurations.append(config)
+            for n_devices in [NumDevices.ten]:  # , NumDevices.two, NumDevices.fifty, NumDevices.hundred]:
+                for traffic_config, scenario_duration in \
+                        [(TrafficConfig.cbr_broadcast_1_mps, ScenarioDuration.one_min),
+                         # (TrafficConfig.cbr_broadcast_1_mpm, ScenarioDuration.five_min),
+                         # TrafficConfig.cbr_broadcast_4_mph,
+                         (TrafficConfig.poisson_broadcast_1_mps, ScenarioDuration.one_min),
+                         # (TrafficConfig.poisson_broadcast_1_mpm, ScenarioDuration.five_min),
+                         # TrafficConfig.poisson_broadcast_4_mph,
+                         (TrafficConfig.unicast_1s_delay, ScenarioDuration.one_min),
+                         # TrafficConfig.unicast_5s_delay,
+                         # TrafficConfig.unicast_10s_delay,
+                         # TrafficConfig.deer_use_case
+                         ]:
+                    config = ScenarioConfiguration(payload_size=payload_size,
+                                                   num_devices=n_devices,
+                                                   model_type=ModelType.meta_model_training,
+                                                   scenario_duration=scenario_duration,
+                                                   traffic_configuration=traffic_config,
+                                                   network_type=network)
+                    if config.scenario_id not in existing_configuration_ids:
+                        scenario_configurations.append(config)
     return scenario_configurations
 
 
 def get_scenario_configurations():
     scenario_configurations = []
-    for network in [NetworkModelType.simbench_lte450, NetworkModelType.simbench_ethernet,
-                    NetworkModelType.simbench_lte, NetworkModelType.simbench_5g]:
-        for payload_size in [PayloadSizeConfig.small, PayloadSizeConfig.medium, PayloadSizeConfig.large]:
-            for model_type in [ModelType.channel, ModelType.ideal, ModelType.static_graph,
-                               ModelType.detailed, ModelType.meta_model]:
-                for scenario_duration in [ScenarioDuration.one_min, ScenarioDuration.five_min,
-                                          ScenarioDuration.one_hour]:
+    for network in [  # NetworkModelType.simbench_lte450, NetworkModelType.simbench_ethernet,
+        # NetworkModelType.simbench_lte,
+        NetworkModelType.simbench_5g]:
+        for payload_size in [PayloadSizeConfig.small]:  # , PayloadSizeConfig.medium, PayloadSizeConfig.large]:
+            for model_type in [ModelType.meta_model, ModelType.channel, ModelType.ideal, ModelType.static_graph,
+                               ModelType.detailed]:
+                for scenario_duration in [ScenarioDuration.one_min]:  # , ScenarioDuration.five_min,
+                    # ScenarioDuration.one_hour]:
                     for n_devices in [NumDevices.ten]:  # , NumDevices.two, NumDevices.fifty, NumDevices.hundred]:
-                        for traffic_config in [TrafficConfig.cbr_broadcast_1_mps,
-                                               TrafficConfig.cbr_broadcast_1_mpm,
-                                               TrafficConfig.cbr_broadcast_4_mph,
-                                               TrafficConfig.poisson_broadcast_1_mps,
-                                               TrafficConfig.poisson_broadcast_1_mpm,
-                                               TrafficConfig.poisson_broadcast_4_mph,
-                                               TrafficConfig.unicast_1s_delay,
-                                               TrafficConfig.unicast_5s_delay,
-                                               TrafficConfig.unicast_10s_delay,
-                                               TrafficConfig.deer_use_case]:
-                            scenario_configurations.append(ScenarioConfiguration(payload_size=payload_size,
-                                                                                 num_devices=n_devices,
-                                                                                 model_type=model_type,
-                                                                                 scenario_duration=scenario_duration,
-                                                                                 traffic_configuration=traffic_config,
-                                                                                 network_type=network))
+                        for traffic_config in [  # TrafficConfig.cbr_broadcast_1_mps,
+                            # TrafficConfig.cbr_broadcast_1_mpm,
+                            # TrafficConfig.cbr_broadcast_4_mph,
+                            # TrafficConfig.poisson_broadcast_1_mps,
+                            # TrafficConfig.poisson_broadcast_1_mpm,
+                            # TrafficConfig.poisson_broadcast_4_mph,
+                            TrafficConfig.unicast_1s_delay,
+                            # TrafficConfig.unicast_5s_delay,
+                            # TrafficConfig.unicast_10s_delay,
+                            # TrafficConfig.deer_use_case
+                        ]:
+                            if model_type == ModelType.meta_model:
+                                for cluster_distance_threshold in [ClusterDistanceThreshold.half,
+                                                                   ClusterDistanceThreshold.one,
+                                                                   ClusterDistanceThreshold.three,
+                                                                   ClusterDistanceThreshold.five]:
+                                    for i_pupa in [BatchSizeIPupa.ten,
+                                                   BatchSizeIPupa.fifty,
+                                                   BatchSizeIPupa.hundred]:
+                                        scenario_configurations.append(
+                                            ScenarioConfiguration(payload_size=payload_size,
+                                                                  num_devices=n_devices,
+                                                                  model_type=model_type,
+                                                                  scenario_duration=scenario_duration,
+                                                                  traffic_configuration=traffic_config,
+                                                                  network_type=network,
+                                                                  cluster_distance_threshold=cluster_distance_threshold,
+                                                                  i_pupa=i_pupa))
+                            else:
+                                scenario_configurations.append(
+                                    ScenarioConfiguration(payload_size=payload_size,
+                                                          num_devices=n_devices,
+                                                          model_type=model_type,
+                                                          scenario_duration=scenario_duration,
+                                                          traffic_configuration=traffic_config,
+                                                          network_type=network))
     return scenario_configurations
 
 
@@ -147,7 +173,10 @@ def get_scheduler(scenario_configuration: ScenarioConfiguration,
                                   simu5G_installation_path='/home/malin/PycharmProjects/trace/Simu5G-1.2.2/src',
                                   omnet_project_path='/home/malin/PycharmProjects/cocoon_DAI/cocoon_omnet_project/',
                                   training_df=get_training_df(scenario_configuration),
-                                  in_training_mode=False
+                                  in_training_mode=False,
+                                  output_file_name=f'results/cocoon_{scenario_configuration.scenario_id}.csv',
+                                  cluster_distance_threshold=scenario_configuration.cluster_distance_threshold.value,
+                                  i_pupa=scenario_configuration.i_pupa.value
                                   )
     elif scenario_configuration.model_type == ModelType.meta_model_training:
         return MetaModelScheduler(container_mapping=container_mapping,
@@ -239,9 +268,9 @@ async def initialize_unicast_communication_agents(clock: ExternalClock,
         receiver_addresses = [addr for j, addr in enumerate(receiver_addr) if j != i]
 
         # Add UnicastRole to the existing agent
-        unicast_role = UnicastRole(receiver_addresses=receiver_addresses,
-                                   scenario_config=scenario_configuration,
-                                   start_at_s=i * 10 + 1)
+        unicast_role = UnicastSenderRole(receiver_addresses=receiver_addresses,
+                                         scenario_config=scenario_configuration,
+                                         start_at_s=i * 10 + 1)
         agent.add_role(unicast_role)
 
     return container_mapping
@@ -291,23 +320,15 @@ async def initialize_deer_use_case_agents(clock: ExternalClock,
 async def run_scenario(container_mapping: Dict[str, ExternalSchedulingContainer],
                        results_recorder: ResultsRecorder,
                        scheduler: CommunicationScheduler):
+    results_recorder.set_scheduler(scheduler)
     async with activate([c for c in container_mapping.values()]) as _:
         results_recorder.start_scenario_recording()
         await scheduler.scenario_finished
-    if hasattr(scheduler, 'meta_model') and scheduler.meta_model:
-        substitution_info = scheduler.meta_model.substitution_info
-        if substitution_info.occurred:
-            results_recorder.record_meta_model_substitution(
-                substitution_time_s=substitution_info.current_time_s,
-                message_index=substitution_info.message_index,
-                additional_info=substitution_info.additional_metrics,
-                confidence_score=substitution_info.confidence_score
-            )
     results_recorder.stop_scenario_recording()
 
 
 async def run_benchmark_suite():
-    num_repetitions = 3
+    num_repetitions = 1
     # clean up result folder first
     for f in [f for f in os.listdir('results')]:
         os.remove(os.path.join('results', f))
@@ -371,7 +392,8 @@ async def run_benchmark_suite():
 
                     print(f'Scenario {scenario_configuration.scenario_id} completed successfully')
                 except asyncio.TimeoutError:
-                    print(f'ERROR: Scenario {scenario_configuration.scenario_id} timed out after {timeout_seconds} seconds')
+                    print(
+                        f'ERROR: Scenario {scenario_configuration.scenario_id} timed out after {timeout_seconds} seconds')
                     results_recorder.record_timeout(
                         timeout_seconds=timeout_seconds,
                         error_message=f"Scenario execution exceeded {timeout_seconds} second timeout"
