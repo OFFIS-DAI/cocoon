@@ -16,7 +16,7 @@ from dataclasses import dataclass
 
 from integration_environment.scenario_configuration import (
     ScenarioConfiguration,
-    ModelType
+    ModelType, ClusterDistanceThreshold
 )
 
 
@@ -30,16 +30,53 @@ class PerformanceMetrics:
 
 
 @dataclass
+class SubstitutionInfo:
+    """Container for meta-model substitution information."""
+    substitution_occurred: bool
+    substitution_time_s: Optional[float] = None
+    substitution_message_index: Optional[int] = None
+    substitution_runtime_s: Optional[float] = None
+    confidence_score: Optional[float] = None
+    additional_info: Optional[dict] = None
+
+
+@dataclass
+class MetaModelPredictionMetrics:
+    """Container for meta-model prediction analysis."""
+    prediction_rmse: float
+    prediction_mae: float
+    prediction_correlation: float
+    num_predictions: int
+    mean_actual_delay: float
+    mean_predicted_delay: float
+    prediction_bias: float  # mean(predicted - actual)
+    before_substitution_prediction_rmse: Optional[float] = None
+    before_substitution_prediction_mae: Optional[float] = None
+    after_substitution_prediction_rmse: Optional[float] = None
+    after_substitution_prediction_mae: Optional[float] = None
+
+
+@dataclass
 class EvaluationResult:
     """Container for evaluation metrics."""
     scenario_config: ScenarioConfiguration
     model_type: ModelType
     rmse: Optional[float]  # None for detailed simulations (baseline)
-    mae: Optional[float]   # None for detailed simulations (baseline)
+    mae: Optional[float]  # None for detailed simulations (baseline)
     num_messages: int
     mean_delay_detailed: Optional[float]  # None for non-detailed simulations
     mean_delay_model: float
     performance_metrics: Optional[PerformanceMetrics] = None
+    substitution_info: Optional[SubstitutionInfo] = None
+    # Before/after substitution metrics
+    before_substitution_rmse: Optional[float] = None
+    before_substitution_mae: Optional[float] = None
+    before_substitution_messages: Optional[int] = None
+    after_substitution_rmse: Optional[float] = None
+    after_substitution_mae: Optional[float] = None
+    after_substitution_messages: Optional[int] = None
+    # Meta-model prediction metrics
+    meta_model_metrics: Optional[MetaModelPredictionMetrics] = None
 
 
 def parse_filename_to_config(filename: str) -> Optional[ScenarioConfiguration]:
@@ -74,38 +111,134 @@ def load_simulation_data(file_path: Path) -> Optional[pd.DataFrame]:
     try:
         df = pd.read_csv(file_path)
 
-        # Validate required columns
-        required_columns = ['msg_id', 'sender', 'receiver', 'delay_ms']
-        missing_columns = [col for col in required_columns if col not in df.columns]
+        # Check if this is a detailed meta-model file (has prediction columns)
+        if 'actual_delay_ms' in df.columns and 'predicted_delay_ms' in df.columns:
+            # This is a meta-model prediction file
+            # Rename columns to match standard format for compatibility
+            df['delay_ms'] = df['actual_delay_ms']
+            # Keep both actual and predicted for analysis
+            return df
+        else:
+            # Standard message file
+            # Validate required columns
+            required_columns = ['msg_id', 'sender', 'receiver', 'delay_ms']
+            missing_columns = [col for col in required_columns if col not in df.columns]
 
-        if missing_columns:
-            print(f"Warning: File {file_path} missing required columns: {missing_columns}")
-            return None
+            if missing_columns:
+                print(f"Warning: File {file_path} missing required columns: {missing_columns}")
+                return None
 
         return df
     except Exception as e:
+        print(f"Error loading {file_path}: {e}")
         return None
 
 
-def load_performance_data(file_path: Path) -> Optional[PerformanceMetrics]:
-    """Load performance statistics from JSON file."""
+def analyze_meta_model_predictions(df: pd.DataFrame,
+                                   substitution_message_index: Optional[int] = None) -> MetaModelPredictionMetrics:
+    """
+    Analyze meta-model prediction accuracy.
+
+    Args:
+        df: DataFrame with actual_delay_ms and predicted_delay_ms columns
+        substitution_message_index: Optional message index for before/after analysis
+
+    Returns:
+        MetaModelPredictionMetrics object
+    """
+    # Remove rows with missing predictions or actual values
+    valid_data = df.dropna(subset=['actual_delay_ms', 'predicted_delay_ms'])
+
+    if len(valid_data) == 0:
+        raise ValueError("No valid prediction data found")
+
+    actual = valid_data['actual_delay_ms'].values
+    predicted = valid_data['predicted_delay_ms'].values
+
+    # Calculate overall prediction metrics
+    prediction_errors = predicted - actual
+    prediction_rmse = np.sqrt(np.mean(prediction_errors ** 2))
+    prediction_mae = np.mean(np.abs(prediction_errors))
+    prediction_correlation = np.corrcoef(actual, predicted)[0, 1] if len(actual) > 1 else 0.0
+    prediction_bias = np.mean(prediction_errors)
+
+    # Initialize before/after metrics
+    before_pred_rmse = before_pred_mae = None
+    after_pred_rmse = after_pred_mae = None
+
+    # Calculate before/after substitution prediction metrics if applicable
+    if substitution_message_index is not None:
+        try:
+            # Convert msg_id to integer for comparison
+            valid_data_copy = valid_data.copy()
+            # Split data based on substitution
+            before_sub = valid_data_copy[:substitution_message_index]
+            after_sub = valid_data_copy[substitution_message_index:]
+
+            if len(before_sub) > 0:
+                before_errors = before_sub['predicted_delay_ms'] - before_sub['actual_delay_ms']
+                before_pred_rmse = np.sqrt(np.mean(before_errors ** 2))
+                before_pred_mae = np.mean(np.abs(before_errors))
+
+            if len(after_sub) > 0:
+                after_errors = after_sub['predicted_delay_ms'] - after_sub['actual_delay_ms']
+                after_pred_rmse = np.sqrt(np.mean(after_errors ** 2))
+                after_pred_mae = np.mean(np.abs(after_errors))
+
+        except Exception as e:
+            print(f"Warning: Could not calculate before/after prediction metrics: {e}")
+
+    return MetaModelPredictionMetrics(
+        prediction_rmse=prediction_rmse,
+        prediction_mae=prediction_mae,
+        prediction_correlation=prediction_correlation,
+        num_predictions=len(valid_data),
+        mean_actual_delay=np.mean(actual),
+        mean_predicted_delay=np.mean(predicted),
+        prediction_bias=prediction_bias,
+        before_substitution_prediction_rmse=before_pred_rmse,
+        before_substitution_prediction_mae=before_pred_mae,
+        after_substitution_prediction_rmse=after_pred_rmse,
+        after_substitution_prediction_mae=after_pred_mae
+    )
+
+
+def load_performance_and_substitution_data(file_path: Path) -> Tuple[
+    Optional[PerformanceMetrics], Optional[SubstitutionInfo]]:
+    """Load performance statistics and substitution info from JSON file."""
     try:
         with open(file_path, 'r') as f:
             data = json.load(f)
 
-        return PerformanceMetrics(
+        # Load performance metrics
+        perf_metrics = PerformanceMetrics(
             execution_time_s=data.get('execution_run_time_s', 0.0),
             memory_peak_mb=data.get('memory_statistics', {}).get('peak_memory_mb', 0.0),
             memory_avg_mb=data.get('memory_statistics', {}).get('avg_memory_mb', 0.0),
             memory_change_mb=data.get('memory_statistics', {}).get('memory_change_mb', 0.0)
         )
+
+        # Load substitution info
+        substitution_data = data.get('meta_model_substitution', {})
+        substitution_info = SubstitutionInfo(
+            substitution_occurred=substitution_data.get('substitution_occurred', False),
+            substitution_time_s=substitution_data.get('substitution_time_s'),
+            substitution_message_index=substitution_data.get('substitution_message_index'),
+            substitution_runtime_s=substitution_data.get('substitution_runtime_s'),
+            confidence_score=substitution_data.get('confidence_score'),
+            additional_info={k: v for k, v in substitution_data.items()
+                             if k not in ['substitution_occurred', 'substitution_time_s',
+                                          'substitution_message_index', 'substitution_runtime_s', 'confidence_score']}
+        )
+
+        return perf_metrics, substitution_info
     except Exception as e:
-        print(f"Warning: Could not load performance data from {file_path}: {e}")
-        return None
+        print(f"Warning: Could not load performance/substitution data from {file_path}: {e}")
+        return None, None
 
 
 def find_matching_detailed_simulation(config: ScenarioConfiguration, detailed_results: Dict[str, pd.DataFrame]) -> \
-        Optional[pd.DataFrame]:
+Optional[pd.DataFrame]:
     """Find the detailed simulation result that matches the given configuration."""
     # Create a detailed version of the config
     detailed_config = ScenarioConfiguration(
@@ -149,6 +282,62 @@ def calculate_metrics(detailed_df: pd.DataFrame, model_df: pd.DataFrame) -> Tupl
     return rmse, mae, len(common_indices)
 
 
+def calculate_metrics_before_after_substitution(detailed_df: pd.DataFrame, model_df: pd.DataFrame,
+                                                substitution_message_index: int) -> Tuple[dict, dict]:
+    """
+    Calculate RMSE and MAE before and after substitution based on message index.
+
+    Note: msg_id is a string, so we need to convert substitution_message_index to string for comparison.
+
+    Returns:
+        Tuple of (before_metrics, after_metrics) where each is a dict with 'rmse', 'mae', 'num_messages'
+    """
+    # Align messages by msg_id, sender, receiver for comparison
+    detailed_delays = detailed_df.set_index(['msg_id', 'sender', 'receiver'])['delay_ms']
+    model_delays = model_df.set_index(['msg_id', 'sender', 'receiver'])['delay_ms']
+
+    # Find common messages
+    common_indices = detailed_delays.index.intersection(model_delays.index)
+
+    if len(common_indices) == 0:
+        raise ValueError("No common messages found between detailed and model simulations")
+
+    detailed_common = detailed_delays.loc[common_indices]
+    model_common = model_delays.loc[common_indices]
+
+    # Create a temporary dataframe to work with message ordering
+    temp_df = pd.DataFrame({
+        'detailed': detailed_common,
+        'model': model_common
+    }).reset_index()
+
+    # Split data based on substitution message index
+    before_substitution = temp_df[:substitution_message_index]
+    after_substitution = temp_df[substitution_message_index:]
+
+    # Calculate metrics for before substitution
+    before_metrics = {'rmse': None, 'mae': None, 'num_messages': 0}
+    if len(before_substitution) > 0:
+        before_diff = before_substitution['model'] - before_substitution['detailed']
+        before_metrics = {
+            'rmse': np.sqrt(np.mean(before_diff ** 2)),
+            'mae': np.mean(np.abs(before_diff)),
+            'num_messages': len(before_substitution)
+        }
+
+    # Calculate metrics for after substitution
+    after_metrics = {'rmse': None, 'mae': None, 'num_messages': 0}
+    if len(after_substitution) > 0:
+        after_diff = after_substitution['model'] - after_substitution['detailed']
+        after_metrics = {
+            'rmse': np.sqrt(np.mean(after_diff ** 2)),
+            'mae': np.mean(np.abs(after_diff)),
+            'num_messages': len(after_substitution)
+        }
+
+    return before_metrics, after_metrics
+
+
 def analyze_results(results_folder: str, output_file: Optional[str] = None) -> List[EvaluationResult]:
     """
     Analyze all simulation results in the given folder.
@@ -168,14 +357,20 @@ def analyze_results(results_folder: str, output_file: Optional[str] = None) -> L
     csv_files = list(results_path.glob("messages_*.csv"))
     json_files = list(results_path.glob("statistics_*.json"))
 
-    print(f"Found {len(csv_files)} CSV files and {len(json_files)} JSON files in {results_folder}")
+    # Also look for meta-model detail files (different naming pattern)
+    meta_model_files = list(results_path.glob("cocoon_meta_model*.csv"))
+
+    print(
+        f"Found {len(csv_files)} standard CSV files, {len(meta_model_files)} meta-model detail files, and {len(json_files)} JSON files in {results_folder}")
 
     # Load all simulation data and performance data
     all_results = {}
     detailed_results = {}
     performance_data = {}
+    substitution_data = {}
+    meta_model_detailed_data = {}
 
-    # Load CSV files (message data)
+    # Load standard CSV files (message data)
     for csv_file in csv_files:
         config = parse_filename_to_config(csv_file.name)
         if config is None:
@@ -192,22 +387,56 @@ def analyze_results(results_folder: str, output_file: Optional[str] = None) -> L
         if config.model_type == ModelType.detailed:
             detailed_results[scenario_id] = df
 
-    # Load JSON files (performance data)
+    # Load meta-model detail files
+    for meta_file in meta_model_files:
+        # Parse filename to get scenario info - these have different naming pattern
+        filename = meta_file.name
+        try:
+            # Extract scenario ID from filename like "cocoon_meta_modeltensmallone_mincbr_broadcast_1_mpssimbench_lte450half0.csv"
+            if filename.startswith('cocoon_meta_model'):
+                scenario_part = filename[18:]  # Remove 'cocoon_meta_model' prefix
+                if scenario_part.endswith('.csv'):
+                    scenario_part = scenario_part[:-4]  # Remove .csv extension
+
+                # Try to find matching scenario in all_results
+                matching_scenario = None
+                for existing_scenario_id in all_results.keys():
+                    if ('meta_model' in existing_scenario_id and
+                            scenario_part in existing_scenario_id):
+                        matching_scenario = existing_scenario_id
+                        break
+
+                if matching_scenario:
+                    df = load_simulation_data(meta_file)
+                    if df is not None:
+                        meta_model_detailed_data[matching_scenario] = df
+                        print(f"Loaded meta-model detail file for {matching_scenario}")
+
+        except Exception as e:
+            print(f"Warning: Could not parse meta-model file {filename}: {e}")
+            continue
+
+    # Load JSON files (performance and substitution data)
     for json_file in json_files:
         config = parse_filename_to_config(json_file.name)
         if config is None:
             continue
 
-        perf_data = load_performance_data(json_file)
-        if perf_data is None:
+        perf_data, sub_data = load_performance_and_substitution_data(json_file)
+        if perf_data is None and sub_data is None:
             continue
 
         scenario_id = config.scenario_id
-        performance_data[scenario_id] = perf_data
+        if perf_data:
+            performance_data[scenario_id] = perf_data
+        if sub_data:
+            substitution_data[scenario_id] = sub_data
 
     print(f"Successfully loaded {len(all_results)} simulation results")
     print(f"Found {len(detailed_results)} detailed simulation baselines")
     print(f"Loaded {len(performance_data)} performance statistics")
+    print(f"Loaded {len(substitution_data)} substitution records")
+    print(f"Loaded {len(meta_model_detailed_data)} meta-model detail files")
 
     # Process all simulations (including detailed ones)
     evaluation_results = []
@@ -216,8 +445,9 @@ def analyze_results(results_folder: str, output_file: Optional[str] = None) -> L
         try:
             config = ScenarioConfiguration.from_scenario_id(scenario_id)
 
-            # Get performance metrics if available
+            # Get performance metrics and substitution info if available
             perf_metrics = performance_data.get(scenario_id)
+            sub_info = substitution_data.get(scenario_id)
 
             if config.model_type == ModelType.detailed:
                 # For detailed simulations, we don't calculate RMSE/MAE (they are the baseline)
@@ -225,18 +455,20 @@ def analyze_results(results_folder: str, output_file: Optional[str] = None) -> L
                     scenario_config=config,
                     model_type=config.model_type,
                     rmse=None,  # No RMSE for baseline
-                    mae=None,   # No MAE for baseline
+                    mae=None,  # No MAE for baseline
                     num_messages=len(model_df),
                     mean_delay_detailed=None,  # Not applicable
                     mean_delay_model=model_df['delay_ms'].mean(),
-                    performance_metrics=perf_metrics
+                    performance_metrics=perf_metrics,
+                    substitution_info=sub_info
                 )
 
                 perf_str = ""
                 if perf_metrics:
                     perf_str = f", Runtime={perf_metrics.execution_time_s:.2f}s, Memory={perf_metrics.memory_peak_mb:.1f}MB"
 
-                print(f"✓ {scenario_id} (BASELINE): Messages={len(model_df)}, Mean Delay={model_df['delay_ms'].mean():.2f}ms{perf_str}")
+                print(
+                    f"✓ {scenario_id} (BASELINE): Messages={len(model_df)}, Mean Delay={model_df['delay_ms'].mean():.2f}ms{perf_str}")
 
             else:
                 # For non-detailed simulations, calculate accuracy metrics
@@ -245,12 +477,43 @@ def analyze_results(results_folder: str, output_file: Optional[str] = None) -> L
                     print(f"Warning: No matching detailed simulation found for {scenario_id}")
                     continue
 
-                # Calculate metrics
+                # Calculate overall metrics
                 rmse, mae, num_messages = calculate_metrics(detailed_df, model_df)
 
                 # Calculate mean delays for reference
                 mean_delay_detailed = detailed_df['delay_ms'].mean()
                 mean_delay_model = model_df['delay_ms'].mean()
+
+                # Initialize before/after metrics
+                before_sub_rmse = before_sub_mae = before_sub_msgs = None
+                after_sub_rmse = after_sub_mae = after_sub_msgs = None
+
+                # Calculate before/after substitution metrics if substitution occurred
+                if (sub_info and sub_info.substitution_occurred and
+                        sub_info.substitution_message_index is not None):
+                    try:
+                        before_metrics, after_metrics = calculate_metrics_before_after_substitution(
+                            detailed_df, model_df, sub_info.substitution_message_index
+                        )
+                        before_sub_rmse = before_metrics['rmse']
+                        before_sub_mae = before_metrics['mae']
+                        before_sub_msgs = before_metrics['num_messages']
+                        after_sub_rmse = after_metrics['rmse']
+                        after_sub_mae = after_metrics['mae']
+                        after_sub_msgs = after_metrics['num_messages']
+                    except Exception as e:
+                        print(f"Warning: Could not calculate before/after metrics for {scenario_id}: {e}")
+
+                # Analyze meta-model predictions if available
+                meta_model_pred_metrics = None
+                if scenario_id in meta_model_detailed_data:
+                    try:
+                        meta_df = meta_model_detailed_data[scenario_id]
+                        substitution_idx = sub_info.substitution_message_index if (
+                                    sub_info and sub_info.substitution_occurred) else None
+                        meta_model_pred_metrics = analyze_meta_model_predictions(meta_df, substitution_idx)
+                    except Exception as e:
+                        print(f"Warning: Could not analyze meta-model predictions for {scenario_id}: {e}")
 
                 result = EvaluationResult(
                     scenario_config=config,
@@ -260,14 +523,33 @@ def analyze_results(results_folder: str, output_file: Optional[str] = None) -> L
                     num_messages=num_messages,
                     mean_delay_detailed=mean_delay_detailed,
                     mean_delay_model=mean_delay_model,
-                    performance_metrics=perf_metrics
+                    performance_metrics=perf_metrics,
+                    substitution_info=sub_info,
+                    before_substitution_rmse=before_sub_rmse,
+                    before_substitution_mae=before_sub_mae,
+                    before_substitution_messages=before_sub_msgs,
+                    after_substitution_rmse=after_sub_rmse,
+                    after_substitution_mae=after_sub_mae,
+                    after_substitution_messages=after_sub_msgs,
+                    meta_model_metrics=meta_model_pred_metrics
                 )
 
                 perf_str = ""
                 if perf_metrics:
                     perf_str = f", Runtime={perf_metrics.execution_time_s:.2f}s, Memory={perf_metrics.memory_peak_mb:.1f}MB"
 
-                print(f"✓ {scenario_id}: RMSE={rmse:.2f}ms, MAE={mae:.2f}ms, Messages={num_messages}{perf_str}")
+                sub_str = ""
+                if sub_info and sub_info.substitution_occurred:
+                    sub_str = f", SUBSTITUTION at {sub_info.substitution_time_s:.1f}s (msg #{sub_info.substitution_message_index})"
+                    if before_sub_rmse is not None and after_sub_rmse is not None:
+                        sub_str += f", Before RMSE={before_sub_rmse:.2f}ms, After RMSE={after_sub_rmse:.2f}ms"
+
+                pred_str = ""
+                if meta_model_pred_metrics:
+                    pred_str = f", Pred RMSE={meta_model_pred_metrics.prediction_rmse:.2f}ms, Corr={meta_model_pred_metrics.prediction_correlation:.3f}"
+
+                print(
+                    f"✓ {scenario_id}: RMSE={rmse:.2f}ms, MAE={mae:.2f}ms, Messages={num_messages}{perf_str}{sub_str}{pred_str}")
 
             evaluation_results.append(result)
 
@@ -299,7 +581,8 @@ def save_detailed_results(results: List[EvaluationResult], output_file: str):
             'num_messages': result.num_messages,
             'mean_delay_detailed_ms': result.mean_delay_detailed,
             'mean_delay_model_ms': result.mean_delay_model,
-            'relative_error_percent': ((result.mean_delay_model - result.mean_delay_detailed) / result.mean_delay_detailed * 100) if result.mean_delay_detailed and result.mean_delay_detailed > 0 else None
+            'relative_error_percent': ((
+                                                   result.mean_delay_model - result.mean_delay_detailed) / result.mean_delay_detailed * 100) if result.mean_delay_detailed and result.mean_delay_detailed > 0 else None
         }
 
         # Add performance metrics if available
@@ -318,11 +601,318 @@ def save_detailed_results(results: List[EvaluationResult], output_file: str):
                 'memory_change_mb': None
             })
 
+        # Add substitution info if available
+        if result.substitution_info:
+            row.update({
+                'substitution_occurred': result.substitution_info.substitution_occurred,
+                'substitution_time_s': result.substitution_info.substitution_time_s,
+                'substitution_message_index': result.substitution_info.substitution_message_index,
+                'substitution_runtime_s': result.substitution_info.substitution_runtime_s,
+                'confidence_score': result.substitution_info.confidence_score,
+                'before_substitution_rmse_ms': result.before_substitution_rmse,
+                'before_substitution_mae_ms': result.before_substitution_mae,
+                'before_substitution_messages': result.before_substitution_messages,
+                'after_substitution_rmse_ms': result.after_substitution_rmse,
+                'after_substitution_mae_ms': result.after_substitution_mae,
+                'after_substitution_messages': result.after_substitution_messages
+            })
+        else:
+            row.update({
+                'substitution_occurred': False,
+                'substitution_time_s': None,
+                'substitution_message_index': None,
+                'substitution_runtime_s': None,
+                'confidence_score': None,
+                'before_substitution_rmse_ms': None,
+                'before_substitution_mae_ms': None,
+                'before_substitution_messages': None,
+                'after_substitution_rmse_ms': None,
+                'after_substitution_mae_ms': None,
+                'after_substitution_messages': None
+            })
+
+        # Add meta-model prediction metrics if available
+        if result.meta_model_metrics:
+            row.update({
+                'prediction_rmse_ms': result.meta_model_metrics.prediction_rmse,
+                'prediction_mae_ms': result.meta_model_metrics.prediction_mae,
+                'prediction_correlation': result.meta_model_metrics.prediction_correlation,
+                'prediction_bias_ms': result.meta_model_metrics.prediction_bias,
+                'num_predictions': result.meta_model_metrics.num_predictions,
+                'mean_actual_delay_ms': result.meta_model_metrics.mean_actual_delay,
+                'mean_predicted_delay_ms': result.meta_model_metrics.mean_predicted_delay,
+                'before_sub_prediction_rmse_ms': result.meta_model_metrics.before_substitution_prediction_rmse,
+                'before_sub_prediction_mae_ms': result.meta_model_metrics.before_substitution_prediction_mae,
+                'after_sub_prediction_rmse_ms': result.meta_model_metrics.after_substitution_prediction_rmse,
+                'after_sub_prediction_mae_ms': result.meta_model_metrics.after_substitution_prediction_mae
+            })
+        else:
+            row.update({
+                'prediction_rmse_ms': None,
+                'prediction_mae_ms': None,
+                'prediction_correlation': None,
+                'prediction_bias_ms': None,
+                'num_predictions': None,
+                'mean_actual_delay_ms': None,
+                'mean_predicted_delay_ms': None,
+                'before_sub_prediction_rmse_ms': None,
+                'before_sub_prediction_mae_ms': None,
+                'after_sub_prediction_rmse_ms': None,
+                'after_sub_prediction_mae_ms': None
+            })
+
         data.append(row)
 
     df = pd.DataFrame(data)
     df.to_csv(output_file, index=False)
     print(f"Detailed results saved to: {output_file}")
+
+
+def print_meta_model_prediction_analysis(results: List[EvaluationResult]):
+    """Print meta-model prediction analysis."""
+    print(f"\n" + "=" * 80)
+    print("META-MODEL PREDICTION ANALYSIS")
+    print("=" * 80)
+
+    # Filter meta-model results with prediction data
+    meta_model_results = [r for r in results if r.model_type == ModelType.meta_model and r.meta_model_metrics]
+
+    if not meta_model_results:
+        print("No meta-model results with prediction data found.")
+        return
+
+    print(f"Analyzing {len(meta_model_results)} meta-model scenarios with prediction data")
+
+    # Overall prediction accuracy
+    pred_rmse_values = [r.meta_model_metrics.prediction_rmse for r in meta_model_results]
+    pred_mae_values = [r.meta_model_metrics.prediction_mae for r in meta_model_results]
+    pred_corr_values = [r.meta_model_metrics.prediction_correlation for r in meta_model_results]
+    pred_bias_values = [r.meta_model_metrics.prediction_bias for r in meta_model_results]
+
+    print(f"\nOVERALL PREDICTION ACCURACY:")
+    print("-" * 50)
+    print(f"  Prediction RMSE (ms): Mean={np.mean(pred_rmse_values):.2f}, Std={np.std(pred_rmse_values):.2f}")
+    print(f"                        Min={np.min(pred_rmse_values):.2f}, Max={np.max(pred_rmse_values):.2f}")
+    print(f"  Prediction MAE (ms):  Mean={np.mean(pred_mae_values):.2f}, Std={np.std(pred_mae_values):.2f}")
+    print(f"                        Min={np.min(pred_mae_values):.2f}, Max={np.max(pred_mae_values):.2f}")
+    print(f"  Correlation:          Mean={np.mean(pred_corr_values):.3f}, Std={np.std(pred_corr_values):.3f}")
+    print(f"                        Min={np.min(pred_corr_values):.3f}, Max={np.max(pred_corr_values):.3f}")
+    print(f"  Bias (ms):            Mean={np.mean(pred_bias_values):.2f}, Std={np.std(pred_bias_values):.2f}")
+
+    # Compare prediction accuracy vs simulation accuracy
+    print(f"\nPREDICTION vs SIMULATION ACCURACY:")
+    print("-" * 50)
+
+    simulation_rmse = [r.rmse for r in meta_model_results if r.rmse is not None]
+    simulation_mae = [r.mae for r in meta_model_results if r.mae is not None]
+
+    if simulation_rmse and pred_rmse_values:
+        print(f"  Simulation RMSE vs Detailed: Mean={np.mean(simulation_rmse):.2f}ms")
+        print(f"  Prediction RMSE vs Actual:   Mean={np.mean(pred_rmse_values):.2f}ms")
+        print(f"  Ratio (Pred/Sim):            {np.mean(pred_rmse_values) / np.mean(simulation_rmse):.2f}")
+
+    # Analyze before/after substitution prediction accuracy
+    before_pred_results = [r for r in meta_model_results
+                           if (r.meta_model_metrics.before_substitution_prediction_rmse is not None)]
+    after_pred_results = [r for r in meta_model_results
+                          if (r.meta_model_metrics.after_substitution_prediction_rmse is not None)]
+
+    if before_pred_results and after_pred_results:
+        print(f"\nBEFORE vs AFTER SUBSTITUTION PREDICTION ACCURACY:")
+        print("-" * 50)
+
+        before_pred_rmse = [r.meta_model_metrics.before_substitution_prediction_rmse for r in before_pred_results]
+        after_pred_rmse = [r.meta_model_metrics.after_substitution_prediction_rmse for r in after_pred_results]
+        before_pred_mae = [r.meta_model_metrics.before_substitution_prediction_mae for r in before_pred_results]
+        after_pred_mae = [r.meta_model_metrics.after_substitution_prediction_mae for r in after_pred_results]
+
+        print(f"  BEFORE substitution (learning phase):")
+        print(f"    Prediction RMSE: Mean={np.mean(before_pred_rmse):.2f}ms, Std={np.std(before_pred_rmse):.2f}ms")
+        print(f"    Prediction MAE:  Mean={np.mean(before_pred_mae):.2f}ms, Std={np.std(before_pred_mae):.2f}ms")
+
+        print(f"  AFTER substitution (pure prediction phase):")
+        print(f"    Prediction RMSE: Mean={np.mean(after_pred_rmse):.2f}ms, Std={np.std(after_pred_rmse):.2f}ms")
+        print(f"    Prediction MAE:  Mean={np.mean(after_pred_mae):.2f}ms, Std={np.std(after_pred_mae):.2f}ms")
+
+        # Analyze prediction quality degradation
+        if len(before_pred_rmse) == len(after_pred_rmse):
+            pred_rmse_degradation = np.mean(after_pred_rmse) - np.mean(before_pred_rmse)
+            pred_mae_degradation = np.mean(after_pred_mae) - np.mean(before_pred_mae)
+
+            print(f"  PREDICTION QUALITY CHANGE:")
+            print(
+                f"    RMSE change: {pred_rmse_degradation:.2f}ms ({pred_rmse_degradation / np.mean(before_pred_rmse) * 100:.1f}%)")
+            print(
+                f"    MAE change:  {pred_mae_degradation:.2f}ms ({pred_mae_degradation / np.mean(before_pred_mae) * 100:.1f}%)")
+
+    # Analyze prediction accuracy by network type
+    print(f"\nPREDICTION ACCURACY BY NETWORK TYPE:")
+    print("-" * 50)
+
+    by_network = {}
+    for result in meta_model_results:
+        network_name = result.scenario_config.network_type.name
+        if network_name not in by_network:
+            by_network[network_name] = []
+        by_network[network_name].append(result)
+
+    for network_name, network_results in by_network.items():
+        network_pred_rmse = [r.meta_model_metrics.prediction_rmse for r in network_results]
+        network_pred_corr = [r.meta_model_metrics.prediction_correlation for r in network_results]
+
+        print(
+            f"  {network_name}: RMSE={np.mean(network_pred_rmse):.2f}ms, Correlation={np.mean(network_pred_corr):.3f} ({len(network_results)} scenarios)")
+
+
+def print_substitution_analysis(results: List[EvaluationResult]):
+    """Print meta-model substitution analysis."""
+    print(f"\n" + "=" * 80)
+    print("META-MODEL SUBSTITUTION ANALYSIS")
+    print("=" * 80)
+
+    # Filter meta-model results with substitution info
+    meta_model_results = [r for r in results if r.model_type == ModelType.meta_model and r.substitution_info]
+
+    if not meta_model_results:
+        print("No meta-model results with substitution information found.")
+        return
+
+    print(f"Analyzing {len(meta_model_results)} meta-model scenarios")
+
+    # Count substitutions
+    substitution_results = [r for r in meta_model_results if r.substitution_info.substitution_occurred]
+    no_substitution_results = [r for r in meta_model_results if not r.substitution_info.substitution_occurred]
+
+    print(f"\nSUBSTITUTION OCCURRENCE:")
+    print(
+        f"  Scenarios with substitution: {len(substitution_results)} ({len(substitution_results) / len(meta_model_results) * 100:.1f}%)")
+    print(
+        f"  Scenarios without substitution: {len(no_substitution_results)} ({len(no_substitution_results) / len(meta_model_results) * 100:.1f}%)")
+
+    if substitution_results:
+        print(f"\nSUBSTITUTION TIMING ANALYSIS:")
+        print("-" * 50)
+
+        # Analyze substitution timing
+        sub_times = [r.substitution_info.substitution_time_s for r in substitution_results if
+                     r.substitution_info.substitution_time_s is not None]
+        sub_runtimes = [r.substitution_info.substitution_runtime_s for r in substitution_results if
+                        r.substitution_info.substitution_runtime_s is not None]
+        sub_msg_indices = [r.substitution_info.substitution_message_index for r in substitution_results if
+                           r.substitution_info.substitution_message_index is not None]
+        confidence_scores = [r.substitution_info.confidence_score for r in substitution_results if
+                             r.substitution_info.confidence_score is not None]
+
+        if sub_times:
+            print(f"  Simulation time (s): Mean={np.mean(sub_times):.2f}, Std={np.std(sub_times):.2f}")
+            print(f"                      Min={np.min(sub_times):.2f}, Max={np.max(sub_times):.2f}")
+
+        if sub_runtimes:
+            print(f"  Real runtime (s):   Mean={np.mean(sub_runtimes):.2f}, Std={np.std(sub_runtimes):.2f}")
+            print(f"                      Min={np.min(sub_runtimes):.2f}, Max={np.max(sub_runtimes):.2f}")
+
+        if sub_msg_indices:
+            print(f"  Message index:      Mean={np.mean(sub_msg_indices):.0f}, Std={np.std(sub_msg_indices):.0f}")
+            print(f"                      Min={np.min(sub_msg_indices)}, Max={np.max(sub_msg_indices)}")
+
+        if confidence_scores:
+            print(f"  Confidence score:   Mean={np.mean(confidence_scores):.3f}, Std={np.std(confidence_scores):.3f}")
+            print(f"                      Min={np.min(confidence_scores):.3f}, Max={np.max(confidence_scores):.3f}")
+
+        # Analyze accuracy impact of substitution
+        print(f"\nACCURACY IMPACT OF SUBSTITUTION:")
+        print("-" * 50)
+
+        # Compare accuracy between scenarios with and without substitution
+        if no_substitution_results:
+            sub_rmse = [r.rmse for r in substitution_results if r.rmse is not None]
+            no_sub_rmse = [r.rmse for r in no_substitution_results if r.rmse is not None]
+
+            if sub_rmse and no_sub_rmse:
+                print(f"  RMSE with substitution:    Mean={np.mean(sub_rmse):.2f}ms, Std={np.std(sub_rmse):.2f}ms")
+                print(
+                    f"  RMSE without substitution: Mean={np.mean(no_sub_rmse):.2f}ms, Std={np.std(no_sub_rmse):.2f}ms")
+                print(f"  RMSE difference:           {np.mean(sub_rmse) - np.mean(no_sub_rmse):.2f}ms")
+
+            sub_mae = [r.mae for r in substitution_results if r.mae is not None]
+            no_sub_mae = [r.mae for r in no_substitution_results if r.mae is not None]
+
+            if sub_mae and no_sub_mae:
+                print(f"  MAE with substitution:     Mean={np.mean(sub_mae):.2f}ms, Std={np.std(sub_mae):.2f}ms")
+                print(f"  MAE without substitution:  Mean={np.mean(no_sub_mae):.2f}ms, Std={np.std(no_sub_mae):.2f}ms")
+                print(f"  MAE difference:            {np.mean(sub_mae) - np.mean(no_sub_mae):.2f}ms")
+
+        # Analyze before vs after substitution accuracy
+        print(f"\nBEFORE vs AFTER SUBSTITUTION ACCURACY:")
+        print("-" * 50)
+
+        # Get results with before/after metrics
+        before_after_results = [r for r in substitution_results
+                                if (r.before_substitution_rmse is not None and
+                                    r.after_substitution_rmse is not None)]
+
+        if before_after_results:
+            before_rmse = [r.before_substitution_rmse for r in before_after_results]
+            after_rmse = [r.after_substitution_rmse for r in before_after_results]
+            before_mae = [r.before_substitution_mae for r in before_after_results]
+            after_mae = [r.after_substitution_mae for r in before_after_results]
+            before_msgs = [r.before_substitution_messages for r in before_after_results]
+            after_msgs = [r.after_substitution_messages for r in before_after_results]
+
+            print(f"  Scenarios with before/after analysis: {len(before_after_results)}")
+            print(f"  BEFORE substitution (detailed phase):")
+            print(f"    RMSE: Mean={np.mean(before_rmse):.2f}ms, Std={np.std(before_rmse):.2f}ms")
+            print(f"    MAE:  Mean={np.mean(before_mae):.2f}ms, Std={np.std(before_mae):.2f}ms")
+            print(f"    Messages: Mean={np.mean(before_msgs):.0f}, Total={np.sum(before_msgs)}")
+
+            print(f"  AFTER substitution (meta-model phase):")
+            print(f"    RMSE: Mean={np.mean(after_rmse):.2f}ms, Std={np.std(after_rmse):.2f}ms")
+            print(f"    MAE:  Mean={np.mean(after_mae):.2f}ms, Std={np.std(after_mae):.2f}ms")
+            print(f"    Messages: Mean={np.mean(after_msgs):.0f}, Total={np.sum(after_msgs)}")
+
+            # Analyze message distribution
+            total_before = np.sum(before_msgs)
+            total_after = np.sum(after_msgs)
+            total_messages = total_before + total_after
+
+            print(f"  MESSAGE DISTRIBUTION:")
+            print(f"    Before substitution: {total_before} messages ({total_before / total_messages * 100:.1f}%)")
+            print(f"    After substitution:  {total_after} messages ({total_after / total_messages * 100:.1f}%)")
+
+        else:
+            print("  No scenarios with complete before/after substitution data found.")
+
+        # Analyze performance impact
+        print(f"\nPERFORMANCE IMPACT OF SUBSTITUTION:")
+        print("-" * 50)
+
+        sub_perf = [r.performance_metrics for r in substitution_results if r.performance_metrics]
+        no_sub_perf = [r.performance_metrics for r in no_substitution_results if r.performance_metrics]
+
+        if sub_perf and no_sub_perf:
+            sub_runtimes_perf = [p.execution_time_s for p in sub_perf]
+            no_sub_runtimes_perf = [p.execution_time_s for p in no_sub_perf]
+
+            print(f"  Runtime with substitution:    Mean={np.mean(sub_runtimes_perf):.2f}s")
+            print(f"  Runtime without substitution: Mean={np.mean(no_sub_runtimes_perf):.2f}s")
+            print(f"  Runtime speedup:              {np.mean(no_sub_runtimes_perf) / np.mean(sub_runtimes_perf):.2f}x")
+
+        # Group by network type for substitution analysis
+        print(f"\nSUBSTITUTION BY NETWORK TYPE:")
+        print("-" * 50)
+
+        by_network = {}
+        for result in meta_model_results:
+            network_name = result.scenario_config.network_type.name
+            if network_name not in by_network:
+                by_network[network_name] = {'total': 0, 'substituted': 0}
+            by_network[network_name]['total'] += 1
+            if result.substitution_info.substitution_occurred:
+                by_network[network_name]['substituted'] += 1
+
+        for network_name, counts in by_network.items():
+            substitution_rate = counts['substituted'] / counts['total'] * 100
+            print(f"  {network_name}: {counts['substituted']}/{counts['total']} scenarios ({substitution_rate:.1f}%)")
 
 
 def print_performance_summary(results: List[EvaluationResult]):
@@ -475,15 +1065,21 @@ def print_summary(results: List[EvaluationResult]):
             print(f"  RMSE (ms): Mean={np.mean(rmse_values):.2f}, Std={np.std(rmse_values):.2f}")
             print(f"  MAE (ms):  Mean={np.mean(mae_values):.2f}, Std={np.std(mae_values):.2f}")
 
-    print(f"\nTotal scenarios: {len(results)} ({len(detailed_results)} detailed, {len(accuracy_results)} accuracy-evaluated)")
+    print(
+        f"\nTotal scenarios: {len(results)} ({len(detailed_results)} detailed, {len(accuracy_results)} accuracy-evaluated)")
 
     # Add performance summary
     print_performance_summary(results)
 
+    # Add substitution analysis
+    print_substitution_analysis(results)
+
+    # Add meta-model prediction analysis
+    print_meta_model_prediction_analysis(results)
+
 
 def main():
     """Main function."""
-
     try:
         # Analyze results
         results = analyze_results('results', 'analysis_results.csv')
