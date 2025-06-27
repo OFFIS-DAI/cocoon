@@ -1078,14 +1078,412 @@ def print_summary(results: List[EvaluationResult]):
     print_meta_model_prediction_analysis(results)
 
 
+def analyze_error_scenarios(results_folder: str) -> dict:
+    """
+    Analyze error scenarios from simulation results.
+
+    Args:
+        results_folder: Path to folder containing JSON statistics files
+
+    Returns:
+        Dictionary containing error analysis results
+    """
+    results_path = Path(results_folder)
+    if not results_path.exists():
+        raise ValueError(f"Results folder does not exist: {results_folder}")
+
+    # Find all JSON statistics files
+    json_files = list(results_path.glob("statistics_*.json"))
+
+    if not json_files:
+        print("No statistics files found for error analysis.")
+        return {}
+
+    print(f"Analyzing {len(json_files)} statistics files for errors...")
+
+    # Error tracking
+    error_scenarios = []
+    timeout_scenarios = []
+    successful_scenarios = []
+    total_scenarios = 0
+
+    # Error pattern tracking
+    error_types = {}
+    timeout_patterns = {}
+    error_by_model_type = {}
+    error_by_network_type = {}
+    error_by_scenario_complexity = {}
+
+    for json_file in json_files:
+        try:
+            with open(json_file, 'r') as f:
+                data = json.load(f)
+
+            total_scenarios += 1
+            scenario_id = data.get('scenario_id', json_file.stem)
+
+            # Parse scenario configuration for pattern analysis
+            try:
+                config = ScenarioConfiguration.from_scenario_id(scenario_id)
+                model_type = config.model_type.name
+                network_type = config.network_type.name
+                num_devices = config.num_devices.name
+                payload_size = config.payload_size.name
+            except Exception as e:
+                print(f"Warning: Could not parse scenario config for {scenario_id}: {e}")
+                model_type = network_type = num_devices = payload_size = "unknown"
+
+            # Check for errors
+            if data.get('error_occurred', False):
+                error_info = data.get('error_info', {})
+                error_scenario = {
+                    'scenario_id': scenario_id,
+                    'model_type': model_type,
+                    'network_type': network_type,
+                    'num_devices': num_devices,
+                    'payload_size': payload_size,
+                    'execution_time_s': data.get('execution_run_time_s', 0),
+                    'error_type': error_info.get('error_type', 'Unknown'),
+                    'error_message': error_info.get('error_message', ''),
+                    'error_details': error_info.get('error_details', ''),
+                    'messages_sent': data.get('messages_sent', 0),
+                    'messages_received': data.get('messages_received', 0),
+                    'messages_completed': data.get('messages_completed', 0),
+                    'memory_peak_mb': data.get('memory_statistics', {}).get('peak_memory_mb', 0),
+                }
+                error_scenarios.append(error_scenario)
+
+                # Track error patterns
+                error_type = error_info.get('error_type', 'Unknown')
+                error_types[error_type] = error_types.get(error_type, 0) + 1
+
+                if model_type not in error_by_model_type:
+                    error_by_model_type[model_type] = {'total': 0, 'errors': 0}
+                error_by_model_type[model_type]['errors'] += 1
+
+                if network_type not in error_by_network_type:
+                    error_by_network_type[network_type] = {'total': 0, 'errors': 0}
+                error_by_network_type[network_type]['errors'] += 1
+
+            # Check for timeouts
+            elif data.get('timeout_occurred', False):
+                timeout_scenario = {
+                    'scenario_id': scenario_id,
+                    'model_type': model_type,
+                    'network_type': network_type,
+                    'num_devices': num_devices,
+                    'payload_size': payload_size,
+                    'execution_time_s': data.get('execution_run_time_s', 0),
+                    'timeout_limit_s': data.get('timeout_limit_s', 0),
+                    'timeout_error_message': data.get('timeout_error_message', ''),
+                    'messages_sent': data.get('messages_sent', 0),
+                    'messages_received': data.get('messages_received', 0),
+                    'messages_completed': data.get('messages_completed', 0),
+                    'memory_peak_mb': data.get('memory_statistics', {}).get('peak_memory_mb', 0),
+                }
+                timeout_scenarios.append(timeout_scenario)
+
+                # Track timeout patterns
+                timeout_limit = data.get('timeout_limit_s', 0)
+                timeout_patterns[timeout_limit] = timeout_patterns.get(timeout_limit, 0) + 1
+
+                if model_type not in error_by_model_type:
+                    error_by_model_type[model_type] = {'total': 0, 'errors': 0}
+                error_by_model_type[model_type]['errors'] += 1
+
+                if network_type not in error_by_network_type:
+                    error_by_network_type[network_type] = {'total': 0, 'errors': 0}
+                error_by_network_type[network_type]['errors'] += 1
+
+            else:
+                # Successful scenario
+                successful_scenario = {
+                    'scenario_id': scenario_id,
+                    'model_type': model_type,
+                    'network_type': network_type,
+                    'execution_time_s': data.get('execution_run_time_s', 0),
+                    'messages_sent': len([]) if 'messages_sent' not in data else data['messages_sent'],
+                    'memory_peak_mb': data.get('memory_statistics', {}).get('peak_memory_mb', 0),
+                }
+                successful_scenarios.append(successful_scenario)
+
+            # Track totals for error rate calculation
+            if model_type not in error_by_model_type:
+                error_by_model_type[model_type] = {'total': 0, 'errors': 0}
+            error_by_model_type[model_type]['total'] += 1
+
+            if network_type not in error_by_network_type:
+                error_by_network_type[network_type] = {'total': 0, 'errors': 0}
+            error_by_network_type[network_type]['total'] += 1
+
+        except Exception as e:
+            print(f"Error reading {json_file}: {e}")
+            continue
+
+    # Calculate error rates
+    error_rate_by_model = {}
+    for model, counts in error_by_model_type.items():
+        if counts['total'] > 0:
+            error_rate_by_model[model] = {
+                'error_count': counts['errors'],
+                'total_count': counts['total'],
+                'error_rate': counts['errors'] / counts['total']
+            }
+
+    error_rate_by_network = {}
+    for network, counts in error_by_network_type.items():
+        if counts['total'] > 0:
+            error_rate_by_network[network] = {
+                'error_count': counts['errors'],
+                'total_count': counts['total'],
+                'error_rate': counts['errors'] / counts['total']
+            }
+
+    # Compile results
+    analysis_results = {
+        'summary': {
+            'total_scenarios': total_scenarios,
+            'successful_scenarios': len(successful_scenarios),
+            'error_scenarios': len(error_scenarios),
+            'timeout_scenarios': len(timeout_scenarios),
+            'overall_success_rate': len(successful_scenarios) / total_scenarios if total_scenarios > 0 else 0,
+            'overall_error_rate': len(error_scenarios) / total_scenarios if total_scenarios > 0 else 0,
+            'overall_timeout_rate': len(timeout_scenarios) / total_scenarios if total_scenarios > 0 else 0,
+        },
+        'error_details': {
+            'error_scenarios': error_scenarios,
+            'timeout_scenarios': timeout_scenarios,
+            'error_types': error_types,
+            'timeout_patterns': timeout_patterns,
+        },
+        'error_patterns': {
+            'by_model_type': error_rate_by_model,
+            'by_network_type': error_rate_by_network,
+        },
+        'successful_scenarios': successful_scenarios,
+    }
+
+    return analysis_results
+
+
+def print_error_analysis(error_analysis: dict):
+    """
+    Print a comprehensive error analysis report.
+
+    Args:
+        error_analysis: Dictionary returned by analyze_error_scenarios()
+    """
+    if not error_analysis:
+        print("No error analysis data available.")
+        return
+
+    summary = error_analysis['summary']
+    error_details = error_analysis['error_details']
+    error_patterns = error_analysis['error_patterns']
+
+    print(f"\n" + "=" * 80)
+    print("ERROR SCENARIO ANALYSIS")
+    print("=" * 80)
+
+    # Overall summary
+    print(f"\nOVERALL SUMMARY:")
+    print("-" * 50)
+    print(f"  Total scenarios analyzed: {summary['total_scenarios']}")
+    print(f"  Successful scenarios: {summary['successful_scenarios']} ({summary['overall_success_rate'] * 100:.1f}%)")
+    print(f"  Error scenarios: {summary['error_scenarios']} ({summary['overall_error_rate'] * 100:.1f}%)")
+    print(f"  Timeout scenarios: {summary['timeout_scenarios']} ({summary['overall_timeout_rate'] * 100:.1f}%)")
+
+    # Error type breakdown
+    if error_details['error_types']:
+        print(f"\nERROR TYPES:")
+        print("-" * 50)
+        for error_type, count in sorted(error_details['error_types'].items(), key=lambda x: x[1], reverse=True):
+            percentage = count / summary['error_scenarios'] * 100 if summary['error_scenarios'] > 0 else 0
+            print(f"  {error_type}: {count} scenarios ({percentage:.1f}% of errors)")
+
+    # Timeout patterns
+    if error_details['timeout_patterns']:
+        print(f"\nTIMEOUT PATTERNS:")
+        print("-" * 50)
+        for timeout_limit, count in sorted(error_details['timeout_patterns'].items()):
+            percentage = count / summary['timeout_scenarios'] * 100 if summary['timeout_scenarios'] > 0 else 0
+            print(f"  {timeout_limit}s timeout: {count} scenarios ({percentage:.1f}% of timeouts)")
+
+    # Error rates by model type
+    if error_patterns['by_model_type']:
+        print(f"\nERROR RATES BY MODEL TYPE:")
+        print("-" * 50)
+        for model_type, stats in sorted(error_patterns['by_model_type'].items(),
+                                        key=lambda x: x[1]['error_rate'], reverse=True):
+            print(f"  {model_type}: {stats['error_count']}/{stats['total_count']} scenarios "
+                  f"({stats['error_rate'] * 100:.1f}% error rate)")
+
+    # Error rates by network type
+    if error_patterns['by_network_type']:
+        print(f"\nERROR RATES BY NETWORK TYPE:")
+        print("-" * 50)
+        for network_type, stats in sorted(error_patterns['by_network_type'].items(),
+                                          key=lambda x: x[1]['error_rate'], reverse=True):
+            print(f"  {network_type}: {stats['error_count']}/{stats['total_count']} scenarios "
+                  f"({stats['error_rate'] * 100:.1f}% error rate)")
+
+    # Detailed error scenarios
+    if error_details['error_scenarios']:
+        print(f"\nDETAILED ERROR SCENARIOS:")
+        print("-" * 50)
+        for i, error in enumerate(error_details['error_scenarios'][:10], 1):  # Show first 10
+            print(f"  {i}. {error['scenario_id']} ({error['model_type']}, {error['network_type']})")
+            print(f"     Error: {error['error_type']} - {error['error_message']}")
+            print(
+                f"     Runtime: {error['execution_time_s']:.2f}s, Messages: {error['messages_completed']}/{error['messages_sent']}")
+            if error['error_details']:
+                print(f"     Details: {error['error_details'][:100]}...")
+            print()
+
+        if len(error_details['error_scenarios']) > 10:
+            print(f"  ... and {len(error_details['error_scenarios']) - 10} more error scenarios")
+
+    # Detailed timeout scenarios
+    if error_details['timeout_scenarios']:
+        print(f"\nDETAILED TIMEOUT SCENARIOS:")
+        print("-" * 50)
+        for i, timeout in enumerate(error_details['timeout_scenarios'][:5], 1):  # Show first 5
+            print(f"  {i}. {timeout['scenario_id']} ({timeout['model_type']}, {timeout['network_type']})")
+            print(f"     Timeout: {timeout['timeout_limit_s']}s limit, ran for {timeout['execution_time_s']:.2f}s")
+            print(f"     Messages: {timeout['messages_completed']}/{timeout['messages_sent']}")
+            if timeout['timeout_error_message']:
+                print(f"     Message: {timeout['timeout_error_message']}")
+            print()
+
+        if len(error_details['timeout_scenarios']) > 5:
+            print(f"  ... and {len(error_details['timeout_scenarios']) - 5} more timeout scenarios")
+
+    # Performance analysis of failed vs successful scenarios
+    successful_scenarios = error_analysis['successful_scenarios']
+    if successful_scenarios and (error_details['error_scenarios'] or error_details['timeout_scenarios']):
+        print(f"\nPERFORMANCE COMPARISON (SUCCESSFUL vs FAILED):")
+        print("-" * 50)
+
+        # Successful scenario stats
+        success_runtimes = [s['execution_time_s'] for s in successful_scenarios]
+        success_memory = [s['memory_peak_mb'] for s in successful_scenarios if s['memory_peak_mb'] > 0]
+
+        # Failed scenario stats
+        failed_runtimes = ([e['execution_time_s'] for e in error_details['error_scenarios']] +
+                           [t['execution_time_s'] for t in error_details['timeout_scenarios']])
+        failed_memory = ([e['memory_peak_mb'] for e in error_details['error_scenarios'] if e['memory_peak_mb'] > 0] +
+                         [t['memory_peak_mb'] for t in error_details['timeout_scenarios'] if t['memory_peak_mb'] > 0])
+
+        if success_runtimes:
+            print(f"  Successful scenarios runtime: Mean={np.mean(success_runtimes):.2f}s, "
+                  f"Std={np.std(success_runtimes):.2f}s")
+        if failed_runtimes:
+            print(f"  Failed scenarios runtime: Mean={np.mean(failed_runtimes):.2f}s, "
+                  f"Std={np.std(failed_runtimes):.2f}s")
+
+        if success_memory:
+            print(f"  Successful scenarios memory: Mean={np.mean(success_memory):.1f}MB, "
+                  f"Std={np.std(success_memory):.1f}MB")
+        if failed_memory:
+            print(f"  Failed scenarios memory: Mean={np.mean(failed_memory):.1f}MB, "
+                  f"Std={np.std(failed_memory):.1f}MB")
+
+
+def save_error_analysis(error_analysis: dict, output_file: str):
+    """
+    Save error analysis results to CSV files.
+
+    Args:
+        error_analysis: Dictionary returned by analyze_error_scenarios()
+        output_file: Base filename for output files (without extension)
+    """
+    if not error_analysis:
+        print("No error analysis data to save.")
+        return
+
+    # Save error scenarios
+    if error_analysis['error_details']['error_scenarios']:
+        error_df = pd.DataFrame(error_analysis['error_details']['error_scenarios'])
+        error_file = f"{output_file}_errors.csv"
+        error_df.to_csv(error_file, index=False)
+        print(f"Error scenarios saved to: {error_file}")
+
+    # Save timeout scenarios
+    if error_analysis['error_details']['timeout_scenarios']:
+        timeout_df = pd.DataFrame(error_analysis['error_details']['timeout_scenarios'])
+        timeout_file = f"{output_file}_timeouts.csv"
+        timeout_df.to_csv(timeout_file, index=False)
+        print(f"Timeout scenarios saved to: {timeout_file}")
+
+    # Save summary statistics
+    summary_data = []
+
+    # Overall summary
+    summary = error_analysis['summary']
+    summary_data.append({
+        'category': 'overall',
+        'subcategory': 'total',
+        'metric': 'scenarios',
+        'value': summary['total_scenarios']
+    })
+    summary_data.append({
+        'category': 'overall',
+        'subcategory': 'success',
+        'metric': 'rate',
+        'value': summary['overall_success_rate']
+    })
+    summary_data.append({
+        'category': 'overall',
+        'subcategory': 'error',
+        'metric': 'rate',
+        'value': summary['overall_error_rate']
+    })
+    summary_data.append({
+        'category': 'overall',
+        'subcategory': 'timeout',
+        'metric': 'rate',
+        'value': summary['overall_timeout_rate']
+    })
+
+    # Error rates by model type
+    for model_type, stats in error_analysis['error_patterns']['by_model_type'].items():
+        summary_data.append({
+            'category': 'model_type',
+            'subcategory': model_type,
+            'metric': 'error_rate',
+            'value': stats['error_rate']
+        })
+
+    # Error rates by network type
+    for network_type, stats in error_analysis['error_patterns']['by_network_type'].items():
+        summary_data.append({
+            'category': 'network_type',
+            'subcategory': network_type,
+            'metric': 'error_rate',
+            'value': stats['error_rate']
+        })
+
+    summary_df = pd.DataFrame(summary_data)
+    summary_file = f"{output_file}_summary.csv"
+    summary_df.to_csv(summary_file, index=False)
+    print(f"Error analysis summary saved to: {summary_file}")
+
+
+# Add this to the main() function in your original script
 def main():
-    """Main function."""
     try:
-        # Analyze results
+        # Analyze regular results
         results = analyze_results('results', 'analysis_results.csv')
 
-        # Print summary
+        # Analyze error scenarios
+        error_analysis = analyze_error_scenarios('results')
+
+        # Print all summaries
         print_summary(results)
+        print_error_analysis(error_analysis)
+
+        # Save error analysis
+        save_error_analysis(error_analysis, 'error_analysis')
 
         return 0
 
