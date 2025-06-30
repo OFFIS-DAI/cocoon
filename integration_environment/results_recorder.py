@@ -27,6 +27,10 @@ class ResultsRecorder:
         self.receive_message_events = []
 
         # performance metrics
+        self.initialization_start_time = 0
+        self.initialization_end_time = 0
+        self.initialization_runtime = 0
+
         self.execution_start_time = 0
         self.execution_end_time = 0
         self.execution_runtime = 0
@@ -37,12 +41,21 @@ class ResultsRecorder:
         self._memory_monitoring_task = None
         self._stop_monitoring = False
 
+        self.time_advancement_stats = None
+
         self.substitution_event = None  # Will store substitution information
 
         self.scheduler = None
 
     def set_scheduler(self, scheduler: CommunicationScheduler):
         self.scheduler = scheduler
+
+    def start_initialization_time_recording(self):
+        self.initialization_start_time = time.time()
+
+    def stop_initialization_time_recording(self):
+        self.initialization_end_time = time.time()
+        self.initialization_runtime = self.initialization_end_time - self.initialization_start_time
 
     def start_scenario_recording(self):
         self.execution_start_time = time.time()
@@ -112,6 +125,9 @@ class ResultsRecorder:
             'execution_start_time': str(datetime.datetime.fromtimestamp(self.execution_start_time)),
             'execution_end_time': str(datetime.datetime.fromtimestamp(self.execution_end_time)),
             'execution_run_time_s': self.execution_runtime,
+            'initialization_start_time': str(datetime.datetime.fromtimestamp(self.initialization_start_time)),
+            'initialization_end_time': str(datetime.datetime.fromtimestamp(self.initialization_end_time)),
+            'initialization_runtime_s': self.initialization_runtime,
             'memory_statistics': memory_stats
         }
 

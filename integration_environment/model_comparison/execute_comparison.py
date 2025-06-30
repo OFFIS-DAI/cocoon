@@ -55,6 +55,8 @@ def get_training_df(scenario_configuration: ScenarioConfiguration, same_technolo
         except Exception as e:
             continue
         dataframes.append(df)
+    if len(dataframes) == 0:
+        return pd.DataFrame.empty
     complete_df = pd.concat(dataframes)
     complete_df.dropna(subset=['actual_delay_ms'], inplace=True)
     return complete_df
