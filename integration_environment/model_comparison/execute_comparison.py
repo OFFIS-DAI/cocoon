@@ -97,11 +97,15 @@ def get_duration_traffic_list():
 def get_scenario_configurations():
     scenario_configurations = []
     for payload_size in [PayloadSizeConfig.small, PayloadSizeConfig.medium, PayloadSizeConfig.large]:
-        for model_type in [ModelType.detailed, ModelType.ideal,
-                           # ModelType.meta_model, ModelType.channel, ModelType.static_graph, ModelType.detailed
+        for model_type in [ModelType.detailed,
+                           ModelType.ideal,
+                           ModelType.meta_model,
+                           ModelType.channel,
+                           ModelType.static_graph,
+                           ModelType.detailed
                            ]:
             if not model_type == ModelType.ideal:
-                networks = [NetworkModelType.simbench_lte450, NetworkModelType.simbench_ethernet,
+                networks = [NetworkModelType.simbench_ethernet, NetworkModelType.simbench_lte450,
                             NetworkModelType.simbench_lte, NetworkModelType.simbench_5g]
             else:
                 networks = [NetworkModelType.none]
@@ -218,7 +222,7 @@ async def initialize_poisson_broadcast_agents(clock: ExternalClock,
     container_mapping = {}
     receiver_addresses = []
     for n_agents in range(scenario_configuration.num_devices.value - 1):
-        index = n_agents + 1
+        index = n_agents
         container = create_external_coupling(addr=f'node{index}', codec=my_codec, clock=clock)
         receiver_role = ReceiverRole()
         receiver_role_agent = agent_composed_of(receiver_role, ResultsRecorderRole(results_recorder))
@@ -321,7 +325,7 @@ async def run_scenario(container_mapping: Dict[str, ExternalSchedulingContainer]
 
 
 async def run_benchmark_suite():
-    num_repetitions = 1
+    num_repetitions = 2
     # clean up result folder first
     for f in [f for f in os.listdir('results')]:
         os.remove(os.path.join('results', f))
