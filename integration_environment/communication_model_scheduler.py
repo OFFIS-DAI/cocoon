@@ -87,8 +87,8 @@ class CommunicationScheduler(ABC):
             container_messages_dict = {}
             next_activities_in_current_step = []
             for container_name, container in self._container_mapping.items():
-                step_time = self.current_time
-                if self.current_time < container.clock.time:
+                step_time = round(self.current_time, 3)
+                if step_time < container.clock.time:
                     raise ValueError(f'Trying to set current time to {self.current_time}.'
                                      f'But time is {container.clock.time}.')
                 incoming_messages_for_container = await self.get_incoming_messages_for_container(container_name)
@@ -301,7 +301,7 @@ class DetailedModelScheduler(CommunicationScheduler):
         return max_advance
 
     def _waiting_for_messages(self):
-        return self.detailed_network_model.waiting_for_messages_from_omnet()
+        return self.detailed_network_model.waiting_for_messages_from_omnet() and (self.current_time < self._duration_s)
 
     async def handle_waiting(self):
         if not self.detailed_network_model.omnet_connection or not self.detailed_network_model.omnet_connection.running:
@@ -314,6 +314,9 @@ class DetailedModelScheduler(CommunicationScheduler):
             if time_s not in self._message_buffer:
                 self._message_buffer[time_s] = []
             self._message_buffer[time_s].extend(messages)
+
+    async def _on_scenario_finished(self):
+        self.detailed_network_model.terminate_simulation()
 
 
 class MetaModelScheduler(DetailedModelScheduler):
@@ -451,6 +454,7 @@ class MetaModelScheduler(DetailedModelScheduler):
         # Final call to process observations
         await self.meta_model.process_observations()
         await self.meta_model.save_observations()
+        self.detailed_network_model.terminated = True
 
 
 class StaticDelayGraphModelScheduler(CommunicationScheduler):
