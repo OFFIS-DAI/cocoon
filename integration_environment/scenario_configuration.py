@@ -73,6 +73,29 @@ class BatchSizeIPupa(Enum):
     hundred = 1000
 
 
+class LearningRateWeighting(Enum):
+    none = 0
+    small = 0.7
+    medium = 0.7
+    large = 0.9
+
+
+class ButterflyThresholdValue(Enum):
+    none = 0
+    small = 0.5
+    small_medium = 0.75
+    medium = 0.8
+    large = 0.9
+
+
+class SubstitutionPriority(Enum):
+    none = 'none'
+    error_trend = 'error_trend'
+    error_level = 'error_level'
+    cluster_distance = 'cluster_distance'
+    topology_stability = 'topology_stability'
+
+
 @dataclass
 class ScenarioConfiguration:
     payload_size: PayloadSizeConfig = PayloadSizeConfig.none
@@ -82,8 +105,12 @@ class ScenarioConfiguration:
     traffic_configuration: TrafficConfig = TrafficConfig.none
     network_type: NetworkModelType = NetworkModelType.none
 
+    # specific for meta-model
     i_pupa: BatchSizeIPupa = BatchSizeIPupa.none
     cluster_distance_threshold: ClusterDistanceThreshold = ClusterDistanceThreshold.none
+    learning_rate_weighting: LearningRateWeighting = LearningRateWeighting.none
+    butterfly_threshold_value: ButterflyThresholdValue = ButterflyThresholdValue.none
+    substitution_priority: SubstitutionPriority = SubstitutionPriority.none
 
     run: int = 0
 
@@ -92,13 +119,14 @@ class ScenarioConfiguration:
         """Create a scenario ID that includes all configuration parameters."""
         return (f"{self.model_type.name}-{self.num_devices.name}-{self.payload_size.name}-{self.scenario_duration.name}"
                 f"-{self.traffic_configuration.name}-{self.network_type.name}-{self.cluster_distance_threshold.name}-"
-                f"{self.i_pupa.name}-{self.run}")
+                f"{self.i_pupa.name}-{self.learning_rate_weighting.name}-{self.butterfly_threshold_value.name}"
+                f"-{self.substitution_priority.name}-{self.run}")
 
     @classmethod
     def from_scenario_id(cls, scenario_id: str) -> 'ScenarioConfiguration':
         try:
-            model_str, devices_str, payload_str, duration_str, traffic_str, network_str, cl_thr_str, i_pupa, run \
-                = scenario_id.split('-')
+            (model_str, devices_str, payload_str, duration_str, traffic_str, network_str, cl_thr_str, i_pupa,
+             learning_rate, butterfly_threshold_value, substitution_priority, run) = scenario_id.split('-')
             return cls(
                 model_type=ModelType[model_str],
                 num_devices=NumDevices[devices_str],
@@ -108,6 +136,9 @@ class ScenarioConfiguration:
                 network_type=NetworkModelType[network_str],
                 cluster_distance_threshold=ClusterDistanceThreshold[cl_thr_str],
                 i_pupa=BatchSizeIPupa[i_pupa],
+                learning_rate_weighting=learning_rate,
+                butterfly_threshold_value=butterfly_threshold_value,
+                substitution_priority=substitution_priority,
                 run=run
             )
         except (ValueError, KeyError) as e:
