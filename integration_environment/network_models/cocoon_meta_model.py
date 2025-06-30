@@ -282,23 +282,44 @@ class CocoonMetaModel:
         TRAINING = 0
         PRODUCTION = 1
 
-    def __init__(self, output_file_name: str, mode: Mode = Mode.TRAINING, cluster_distance_threshold: float = 5,
-                 i_pupa: int = 10, alpha: float = 0.3):
+    def __init__(self, output_file_name: str, mode: Mode = Mode.TRAINING,
+                 cluster_distance_threshold: float = 5,
+                 i_pupa: int = 10,
+                 alpha: float = 0.3,
+                 butterfly_threshold_value: float = 0.8,
+                 substitution_priority: str = 'none'):
+        """
+        Initialize cocoon model.
+        """
+
+        """
+        Convenience parameters & Results recording
+        """
         self.output_file_name = output_file_name
         self.mode = mode
+        self.substitution_info = SubstitutionInfo()
+        self.message_index = 0
+
+        """
+        Internal graph model 
+        """
         self.network_graph = CocoonNetworkGraph()
 
-        self.substitution_info = SubstitutionInfo()
+        """
+        Training of regressors.
+        """
+        # Save clustering distance threshold
+        self.clustering_distance_threshold = cluster_distance_threshold
+        self.cluster_centroids = {}  # {cluster_id: centroid_vector}
 
         # DataFrame containing training data for the regressors
         self.training_df = None
         # Dictionary containing all pre-trained regressors on historical data
         self.model_for_cluster_id = {}
         self.online_model = None  # TODO: add multiple models for different clusters
-
         # create empty dictionary in order track observations for prediction training
         self.message_observations: Dict[str, MessageObservation] = {}
-
+        # define variables for learning
         self.object_variables = ['network_num_messages_in_transit', 'network_num_busy_links',
                                  'network_num_network_nodes',
                                  'network_num_messages_sent_simultaneously', 'payload_size_B',
@@ -307,23 +328,21 @@ class CocoonMetaModel:
                                    'receiver_average_incoming_delay_ms']
         self.model_features = self.object_variables + self.emerging_variables
 
-        self.clustering_distance_threshold = cluster_distance_threshold
-
-        self.message_index = 0
+        """
+        Algorithm parameters
+        """
+        # batch size parameter i_pupa
         self.i_pupa = i_pupa
-
-        # Additional attributes for weighted predictions
-        self.alpha = alpha  # EWMA smoothing parameter
+        # EWMA smoothing parameter
+        self.alpha = alpha
         self.cluster_prediction_errors = []  # Track cluster prediction errors
         self.online_prediction_errors = []  # Track online prediction errors
         self.weighted_prediction_errors = []  # Track weighted prediction errors
-
-        # OPTIMIZATION: Store cluster centroids for fast distance calculation
-        self.cluster_centroids = {}  # {cluster_id: centroid_vector}
-
-        # boolean variable indicating if substitution threshold has been reached
+        # substitution parameters
         self.substitution_threshold_reached = False
         self.previous_node_count = 0
+        self.butterfly_threshold_value = butterfly_threshold_value
+        self.substitution_priority = substitution_priority
 
     async def get_messages_in_transit(self):
         messages_in_transit = self.network_graph.get_messages_in_transit()
@@ -486,7 +505,6 @@ class CocoonMetaModel:
         # Calculate weighted prediction
         if cluster_prediction is not None and online_prediction is not None:
             weighted_pred = int(self.weighted_prediction(
-                alpha=self.alpha,
                 abs_error_cluster_predictions=self.cluster_prediction_errors,
                 abs_error_online_predictions=self.online_prediction_errors,
                 cluster_prediction=cluster_prediction,
@@ -514,7 +532,7 @@ class CocoonMetaModel:
 
         return model
 
-    def get_exponential_weighted_moving_average(self, errors: list, alpha: float):
+    def get_exponential_weighted_moving_average(self, errors: list):
         """
         Calculation of the exponential moving average (EWMA) for weighting of the predictions.
         """
@@ -526,10 +544,10 @@ class CocoonMetaModel:
             if i == 0:
                 exp_weigh_mov_av = errors[i]
             else:
-                exp_weigh_mov_av = alpha * errors[i] + (1 - alpha) * exp_weigh_mov_av
+                exp_weigh_mov_av = self.alpha * errors[i] + (1 - self.alpha) * exp_weigh_mov_av
         return exp_weigh_mov_av
 
-    def weighted_prediction(self, alpha: float,
+    def weighted_prediction(self,
                             abs_error_cluster_predictions: list,
                             abs_error_online_predictions: list,
                             cluster_prediction: float,
@@ -544,11 +562,9 @@ class CocoonMetaModel:
 
         # Calculate exponential weighted moving average of errors
         cl_pred_moving_average = self.get_exponential_weighted_moving_average(
-            errors=abs_error_cluster_predictions, alpha=alpha
-        )
+            errors=abs_error_cluster_predictions)
         on_pred_moving_average = self.get_exponential_weighted_moving_average(
-            errors=abs_error_online_predictions, alpha=alpha
-        )
+            errors=abs_error_online_predictions)
 
         # Avoid division by zero
         if (on_pred_moving_average + cl_pred_moving_average) == 0:
@@ -649,12 +665,7 @@ class CocoonMetaModel:
         self.previous_node_count = current_node_count
 
         # Calculate combined threshold using weighted factors
-        weights = {
-            'error_trend': 0.1,
-            'error_level': 0.4,
-            'cluster_distance': 0.3,
-            'network_topology': 0.2
-        }
+        weights = self.get_weights_for_substitution()
 
         combined_score = (
                 weights['error_trend'] * error_trend_factor +
@@ -664,8 +675,7 @@ class CocoonMetaModel:
         )
 
         # Determine if substitution threshold is reached
-        threshold_value = 0.75  # Required threshold to trigger substitution
-        self.substitution_threshold_reached = combined_score >= threshold_value
+        self.substitution_threshold_reached = combined_score >= self.butterfly_threshold_value
 
         if self.substitution_threshold_reached and not self.substitution_info.occurred:
             print('--------------SUBSTITUTION--------------')
@@ -688,10 +698,46 @@ class CocoonMetaModel:
             logger.info(f"  Error Level Factor: {error_level_factor:.4f}")
             logger.info(f"  Cluster Distance Factor: {cluster_distance_factor:.4f}")
             logger.info(f"  Network Topology Factor: {network_topology_factor:.4f}")
-            logger.info(f"  Combined Score: {combined_score:.4f} (required: {threshold_value})")
+            logger.info(f"  Combined Score: {combined_score:.4f} (required: {self.butterfly_threshold_value})")
             logger.info(f"  Substitution Threshold Reached: {self.substitution_threshold_reached}")
 
         return self.substitution_threshold_reached
+
+    def get_weights_for_substitution(self) -> Dict:
+        if self.substitution_priority == 'error_trend':
+            return {
+                'error_trend': 0.4,
+                'error_level': 0.2,
+                'cluster_distance': 0.2,
+                'network_topology': 0.2
+            }
+        elif self.substitution_priority == 'error_level':
+            return {
+                'error_trend': 0.2,
+                'error_level': 0.4,
+                'cluster_distance': 0.2,
+                'network_topology': 0.2
+            }
+        elif self.substitution_priority == 'cluster_distance':
+            return {
+                'error_trend': 0.2,
+                'error_level': 0.2,
+                'cluster_distance': 0.4,
+                'network_topology': 0.2
+            }
+        elif self.substitution_priority == 'topology_stability':
+            return {
+                'error_trend': 0.2,
+                'error_level': 0.2,
+                'cluster_distance': 0.2,
+                'network_topology': 0.4
+            }
+        return {
+            'error_trend': 0.25,
+            'error_level': 0.25,
+            'cluster_distance': 0.25,
+            'network_topology': 0.25
+        }
 
     def update_prediction_errors(self, msg_id: str, actual_delay: float):
         """
