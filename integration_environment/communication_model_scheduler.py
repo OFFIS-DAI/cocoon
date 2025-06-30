@@ -338,6 +338,7 @@ class MetaModelScheduler(DetailedModelScheduler):
                          omnet_project_path=omnet_project_path,
                          scenario_duration_ms=scenario_duration_ms)
         self.training_df = training_df
+        self.is_trained = False
         self.meta_model = CocoonMetaModel(output_file_name=output_file_name,
                                           mode=CocoonMetaModel.Mode.TRAINING
                                           if in_training_mode else CocoonMetaModel.Mode.PRODUCTION,
@@ -349,14 +350,22 @@ class MetaModelScheduler(DetailedModelScheduler):
         self.msg_id_to_msg = None
         self.meta_model_msg_counter = 0
 
-    async def _on_scenario_start(self):
+    async def prepare_for_simulation(self):
+        if self.is_trained:
+            return
+
         while not hasattr(self, 'meta_model'):
             await asyncio.sleep(0.1)
+
         if self.meta_model.mode == CocoonMetaModel.Mode.PRODUCTION:
             if not isinstance(self.training_df, pd.DataFrame):
                 logger.warning('No training data provided for meta-model in production phase.')
             else:
                 self.meta_model.execute_egg_phase(self.training_df)
+        self.is_trained = True
+
+    async def _on_scenario_start(self):
+        await self.prepare_for_simulation()
 
     async def process_message_output(self,
                                      container_messages_dict: dict[str, list[ExternalAgentMessage]],
