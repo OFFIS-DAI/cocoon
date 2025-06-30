@@ -13,6 +13,7 @@ import json
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
+import re
 
 from integration_environment.scenario_configuration import (
     ScenarioConfiguration,
@@ -238,7 +239,7 @@ def load_performance_and_substitution_data(file_path: Path) -> Tuple[
 
 
 def find_matching_detailed_simulation(config: ScenarioConfiguration, detailed_results: Dict[str, pd.DataFrame]) -> \
-Optional[pd.DataFrame]:
+        Optional[pd.DataFrame]:
     """Find the detailed simulation result that matches the given configuration."""
     # Create a detailed version of the config
     detailed_config = ScenarioConfiguration(
@@ -510,7 +511,7 @@ def analyze_results(results_folder: str, output_file: Optional[str] = None) -> L
                     try:
                         meta_df = meta_model_detailed_data[scenario_id]
                         substitution_idx = sub_info.substitution_message_index if (
-                                    sub_info and sub_info.substitution_occurred) else None
+                                sub_info and sub_info.substitution_occurred) else None
                         meta_model_pred_metrics = analyze_meta_model_predictions(meta_df, substitution_idx)
                     except Exception as e:
                         print(f"Warning: Could not analyze meta-model predictions for {scenario_id}: {e}")
@@ -582,7 +583,7 @@ def save_detailed_results(results: List[EvaluationResult], output_file: str):
             'mean_delay_detailed_ms': result.mean_delay_detailed,
             'mean_delay_model_ms': result.mean_delay_model,
             'relative_error_percent': ((
-                                                   result.mean_delay_model - result.mean_delay_detailed) / result.mean_delay_detailed * 100) if result.mean_delay_detailed and result.mean_delay_detailed > 0 else None
+                                               result.mean_delay_model - result.mean_delay_detailed) / result.mean_delay_detailed * 100) if result.mean_delay_detailed and result.mean_delay_detailed > 0 else None
         }
 
         # Add performance metrics if available
@@ -1469,28 +1470,528 @@ def save_error_analysis(error_analysis: dict, output_file: str):
     print(f"Error analysis summary saved to: {summary_file}")
 
 
-# Add this to the main() function in your original script
-def main():
-    try:
-        # Analyze regular results
-        results = analyze_results('results', 'analysis_results.csv')
+@dataclass
+class StochasticAnalysisResult:
+    """Container for stochastic analysis metrics."""
+    base_scenario_id: str  # scenario_id without run number
+    model_type: str  # Changed to str to avoid ModelType import issues
+    network_type: str
+    num_runs: int
 
-        # Analyze error scenarios
-        error_analysis = analyze_error_scenarios('results')
+    # Delay variability metrics
+    delay_mean_across_runs: float
+    delay_std_across_runs: float
+    delay_cv_across_runs: float  # coefficient of variation
+    delay_min_across_runs: float
+    delay_max_across_runs: float
+    delay_range_across_runs: float
 
-        # Print all summaries
-        print_summary(results)
-        print_error_analysis(error_analysis)
+    # Message count variability
+    num_messages_mean: float
+    num_messages_std: float
+    num_messages_consistent: bool  # True if all runs have same number of messages
 
-        # Save error analysis
-        save_error_analysis(error_analysis, 'error_analysis')
+    # RMSE/MAE variability (for non-detailed models)
+    rmse_mean_across_runs: Optional[float] = None
+    rmse_std_across_runs: Optional[float] = None
+    rmse_cv_across_runs: Optional[float] = None
+    mae_mean_across_runs: Optional[float] = None
+    mae_std_across_runs: Optional[float] = None
+    mae_cv_across_runs: Optional[float] = None
 
+    # Performance variability
+    runtime_mean_across_runs: Optional[float] = None
+    runtime_std_across_runs: Optional[float] = None
+    runtime_cv_across_runs: Optional[float] = None
+    memory_mean_across_runs: Optional[float] = None
+    memory_std_across_runs: Optional[float] = None
+    memory_cv_across_runs: Optional[float] = None
+
+    # Substitution variability (for meta-model)
+    substitution_consistency: Optional[float] = None  # fraction of runs that substituted
+    substitution_time_std: Optional[float] = None  # std of substitution times when it occurred
+
+    # Statistical significance tests
+    delay_anova_p_value: Optional[float] = None  # ANOVA p-value for delay differences
+    is_stochastic_delay: Optional[bool] = None  # True if significant delay variation found
+
+
+def extract_run_number_from_scenario_id(scenario_id: str) -> int:
+    """
+    Extract run number from scenario ID.
+
+    Expected format: detailed-two-small-one_day-cbr_broadcast_4_mph-simbench_ethernet-none-none-0
+    Returns the final number (0 in this example).
+    """
+    # Find the last number after the final dash
+    match = re.search(r'-(\d+)$', scenario_id)
+    if match:
+        return int(match.group(1))
+    else:
+        # If no run number found, assume run 0
         return 0
 
+
+def get_base_scenario_id(scenario_id: str) -> str:
+    """
+    Get base scenario ID by removing the run number.
+
+    Args:
+        scenario_id: Full scenario ID like "detailed-two-small-one_day-cbr_broadcast_4_mph-simbench_ethernet-none-none-0"
+
+    Returns:
+        Base scenario ID like "detailed-two-small-one_day-cbr_broadcast_4_mph-simbench_ethernet-none-none"
+    """
+    # Remove run number from the end (pattern: -\d+$ meaning dash followed by digits at end)
+    base_scenario_id = re.sub(r'-\d+$', '', scenario_id)
+    return base_scenario_id
+
+
+def group_results_by_run(results: List) -> dict:
+    """
+    Group results by run number for debugging purposes.
+
+    Returns:
+        Dictionary mapping run numbers to lists of results
+    """
+    by_run = {}
+
+    for result in results:
+        run_number = extract_run_number_from_scenario_id(result.scenario_config.scenario_id)
+        if run_number not in by_run:
+            by_run[run_number] = []
+        by_run[run_number].append(result)
+
+    return by_run
+
+
+def analyze_stochastic_behavior(results: List) -> List[StochasticAnalysisResult]:
+    """
+    Analyze run-to-run variability for scenarios with multiple runs.
+
+    Args:
+        results: List of EvaluationResult objects
+
+    Returns:
+        List of StochasticAnalysisResult objects for scenarios with multiple runs
+    """
+    try:
+        from scipy import stats
+    except ImportError:
+        print("Warning: scipy not available. Statistical tests will be skipped.")
+        stats = None
+
+    # Group results by base scenario (without run number)
+    base_scenario_groups = {}
+
+    for result in results:
+        # Extract base scenario ID (remove run suffix)
+        scenario_id = result.scenario_config.scenario_id
+
+        # Use the helper function to get base scenario ID
+        base_scenario_id = get_base_scenario_id(scenario_id)
+        run_number = extract_run_number_from_scenario_id(scenario_id)
+
+        # Debug print for first few scenarios
+        if len(base_scenario_groups) < 5:
+            print(f"Scenario ID: {scenario_id} -> Base: {base_scenario_id}, Run: {run_number}")
+
+        if base_scenario_id not in base_scenario_groups:
+            base_scenario_groups[base_scenario_id] = []
+        base_scenario_groups[base_scenario_id].append(result)
+
+    print(f"Found {len(base_scenario_groups)} unique base scenarios")
+
+    stochastic_results = []
+
+    for base_scenario_id, run_results in base_scenario_groups.items():
+        # Only analyze scenarios with multiple runs
+        if len(run_results) < 1:
+            continue
+
+        print(f"Analyzing stochastic behavior for {base_scenario_id} ({len(run_results)} runs)")
+
+        try:
+            # Extract metrics from all runs
+            model_type = run_results[0].model_type.name if hasattr(run_results[0].model_type, 'name') else str(
+                run_results[0].model_type)
+            network_type = run_results[0].scenario_config.network_type.name if hasattr(
+                run_results[0].scenario_config.network_type, 'name') else str(
+                run_results[0].scenario_config.network_type)
+
+            # Delay metrics
+            delay_means = [r.mean_delay_model for r in run_results]
+            delay_mean = np.mean(delay_means)
+            delay_std = np.std(delay_means, ddof=1) if len(delay_means) > 1 else 0.0
+            delay_cv = delay_std / delay_mean if delay_mean > 0 else 0.0
+
+            # RMSE/MAE metrics (for non-detailed models)
+            rmse_values = [r.rmse for r in run_results if r.rmse is not None]
+            mae_values = [r.mae for r in run_results if r.mae is not None]
+
+            rmse_mean = rmse_std = rmse_cv = None
+            mae_mean = mae_std = mae_cv = None
+
+            if rmse_values:
+                rmse_mean = np.mean(rmse_values)
+                rmse_std = np.std(rmse_values, ddof=1) if len(rmse_values) > 1 else 0.0
+                rmse_cv = rmse_std / rmse_mean if rmse_mean > 0 else 0.0
+
+            if mae_values:
+                mae_mean = np.mean(mae_values)
+                mae_std = np.std(mae_values, ddof=1) if len(mae_values) > 1 else 0.0
+                mae_cv = mae_std / mae_mean if mae_mean > 0 else 0.0
+
+            # Performance metrics
+            runtime_values = [r.performance_metrics.execution_time_s for r in run_results
+                              if r.performance_metrics is not None]
+            memory_values = [r.performance_metrics.memory_peak_mb for r in run_results
+                             if r.performance_metrics is not None]
+
+            runtime_mean = runtime_std = runtime_cv = None
+            memory_mean = memory_std = memory_cv = None
+
+            if runtime_values:
+                runtime_mean = np.mean(runtime_values)
+                runtime_std = np.std(runtime_values, ddof=1) if len(runtime_values) > 1 else 0.0
+                runtime_cv = runtime_std / runtime_mean if runtime_mean > 0 else 0.0
+
+            if memory_values:
+                memory_mean = np.mean(memory_values)
+                memory_std = np.std(memory_values, ddof=1) if len(memory_values) > 1 else 0.0
+                memory_cv = memory_std / memory_mean if memory_mean > 0 else 0.0
+
+            # Message count consistency
+            message_counts = [r.num_messages for r in run_results]
+            num_messages_mean = np.mean(message_counts)
+            num_messages_std = np.std(message_counts, ddof=1) if len(message_counts) > 1 else 0.0
+            num_messages_consistent = len(set(message_counts)) == 1
+
+            # Substitution analysis (for meta-model)
+            substitution_consistency = substitution_time_std = None
+            if model_type == 'meta_model':
+                substitution_occurred = [r.substitution_info.substitution_occurred for r in run_results
+                                         if r.substitution_info is not None]
+                if substitution_occurred:
+                    substitution_consistency = np.mean(substitution_occurred)
+
+                    substitution_times = [r.substitution_info.substitution_time_s for r in run_results
+                                          if (r.substitution_info is not None and
+                                              r.substitution_info.substitution_occurred and
+                                              r.substitution_info.substitution_time_s is not None)]
+                    if len(substitution_times) > 1:
+                        substitution_time_std = np.std(substitution_times, ddof=1)
+
+            # Statistical tests for delay variation
+            delay_anova_p_value = is_stochastic_delay = None
+            if stats and len(run_results) >= 3:  # Need at least 3 runs for meaningful ANOVA
+                try:
+                    # Perform one-way ANOVA on delay means
+                    # This is a simplified test - in practice you might want to compare
+                    # the full delay distributions from each run
+                    _, delay_anova_p_value = stats.f_oneway(*[np.array([r.mean_delay_model]) for r in run_results])
+                    is_stochastic_delay = delay_anova_p_value < 0.05  # Significant at 5% level
+                except Exception as e:
+                    print(f"Warning: Could not perform ANOVA test: {e}")
+                    delay_anova_p_value = None
+                    is_stochastic_delay = None
+
+            # Create result object
+            stochastic_result = StochasticAnalysisResult(
+                base_scenario_id=base_scenario_id,
+                model_type=model_type,
+                network_type=network_type,
+                num_runs=len(run_results),
+
+                delay_mean_across_runs=delay_mean,
+                delay_std_across_runs=delay_std,
+                delay_cv_across_runs=delay_cv,
+                delay_min_across_runs=np.min(delay_means),
+                delay_max_across_runs=np.max(delay_means),
+                delay_range_across_runs=np.max(delay_means) - np.min(delay_means),
+
+                rmse_mean_across_runs=rmse_mean,
+                rmse_std_across_runs=rmse_std,
+                rmse_cv_across_runs=rmse_cv,
+                mae_mean_across_runs=mae_mean,
+                mae_std_across_runs=mae_std,
+                mae_cv_across_runs=mae_cv,
+
+                runtime_mean_across_runs=runtime_mean,
+                runtime_std_across_runs=runtime_std,
+                runtime_cv_across_runs=runtime_cv,
+                memory_mean_across_runs=memory_mean,
+                memory_std_across_runs=memory_std,
+                memory_cv_across_runs=memory_cv,
+
+                num_messages_mean=num_messages_mean,
+                num_messages_std=num_messages_std,
+                num_messages_consistent=num_messages_consistent,
+
+                substitution_consistency=substitution_consistency,
+                substitution_time_std=substitution_time_std,
+
+                delay_anova_p_value=delay_anova_p_value,
+                is_stochastic_delay=is_stochastic_delay
+            )
+
+            stochastic_results.append(stochastic_result)
+
+        except Exception as e:
+            print(f"Error analyzing {base_scenario_id}: {e}")
+            continue
+
+    return stochastic_results
+
+
+def print_stochastic_analysis(stochastic_results: List[StochasticAnalysisResult]):
+    """Print stochastic behavior analysis."""
+    if not stochastic_results:
+        print("No scenarios with multiple runs found for stochastic analysis.")
+        return
+
+    print(f"\n" + "=" * 80)
+    print("STOCHASTIC BEHAVIOR ANALYSIS")
+    print("=" * 80)
+
+    print(f"Analyzed {len(stochastic_results)} scenarios with multiple runs")
+
+    # Overall stochasticity summary
+    print(f"\nOVERALL STOCHASTICITY SUMMARY:")
+    print("-" * 50)
+
+    # Delay variability
+    delay_cvs = [r.delay_cv_across_runs for r in stochastic_results]
+    high_delay_variability = len([cv for cv in delay_cvs if cv > 0.05])  # CV > 5%
+    moderate_delay_variability = len([cv for cv in delay_cvs if 0.01 < cv <= 0.05])  # 1% < CV <= 5%
+    low_delay_variability = len([cv for cv in delay_cvs if cv <= 0.01])  # CV <= 1%
+
+    print(f"  Delay Variability:")
+    print(
+        f"    High (CV > 5%): {high_delay_variability} scenarios ({high_delay_variability / len(stochastic_results) * 100:.1f}%)")
+    print(
+        f"    Moderate (1% < CV <= 5%): {moderate_delay_variability} scenarios ({moderate_delay_variability / len(stochastic_results) * 100:.1f}%)")
+    print(
+        f"    Low (CV <= 1%): {low_delay_variability} scenarios ({low_delay_variability / len(stochastic_results) * 100:.1f}%)")
+
+    # Message count consistency
+    consistent_message_counts = len([r for r in stochastic_results if r.num_messages_consistent])
+    print(
+        f"  Message Count Consistency: {consistent_message_counts}/{len(stochastic_results)} scenarios ({consistent_message_counts / len(stochastic_results) * 100:.1f}%)")
+
+    # Statistical significance
+    statistically_significant = [r for r in stochastic_results if r.is_stochastic_delay is True]
+    if statistically_significant:
+        print(f"  Statistically Significant Variation: {len(statistically_significant)} scenarios")
+
+    # Analysis by model type
+    print(f"\nSTOCHASTICITY BY MODEL TYPE:")
+    print("-" * 50)
+
+    by_model = {}
+    for result in stochastic_results:
+        model_name = result.model_type
+        if model_name not in by_model:
+            by_model[model_name] = []
+        by_model[model_name].append(result)
+
+    for model_name, model_results in by_model.items():
+        delay_cvs = [r.delay_cv_across_runs for r in model_results]
+        runtime_cvs = [r.runtime_cv_across_runs for r in model_results if r.runtime_cv_across_runs is not None]
+
+        print(f"\n  {model_name.upper()}:")
+        print(f"    Scenarios: {len(model_results)}")
+        print(f"    Delay CV: Mean={np.mean(delay_cvs):.4f}, Std={np.std(delay_cvs):.4f}")
+        print(f"             Min={np.min(delay_cvs):.4f}, Max={np.max(delay_cvs):.4f}")
+
+        if runtime_cvs:
+            print(f"    Runtime CV: Mean={np.mean(runtime_cvs):.4f}, Std={np.std(runtime_cvs):.4f}")
+
+        # Message consistency
+        consistent_count = len([r for r in model_results if r.num_messages_consistent])
+        print(
+            f"    Message Consistency: {consistent_count}/{len(model_results)} ({consistent_count / len(model_results) * 100:.1f}%)")
+
+        # RMSE/MAE variability for non-detailed models
+        rmse_cvs = [r.rmse_cv_across_runs for r in model_results if r.rmse_cv_across_runs is not None]
+        if rmse_cvs:
+            print(f"    RMSE CV: Mean={np.mean(rmse_cvs):.4f}, Std={np.std(rmse_cvs):.4f}")
+
+    # Detailed analysis of high-variability scenarios
+    print(f"\nHIGH-VARIABILITY SCENARIOS (CV > 5%):")
+    print("-" * 50)
+
+    high_variability_scenarios = [r for r in stochastic_results if r.delay_cv_across_runs > 0.05]
+    if high_variability_scenarios:
+        # Sort by CV descending
+        high_variability_scenarios.sort(key=lambda x: x.delay_cv_across_runs, reverse=True)
+
+        for i, result in enumerate(high_variability_scenarios[:10], 1):  # Show top 10
+            print(f"  {i}. {result.base_scenario_id}")
+            print(f"     Model: {result.model_type}, Network: {result.network_type}")
+            print(f"     Runs: {result.num_runs}, Delay CV: {result.delay_cv_across_runs:.4f}")
+            print(f"     Delay Range: {result.delay_min_across_runs:.2f} - {result.delay_max_across_runs:.2f}ms")
+            print(f"     Messages: {result.num_messages_mean:.0f} ± {result.num_messages_std:.1f}")
+
+            if result.rmse_cv_across_runs is not None:
+                print(f"     RMSE CV: {result.rmse_cv_across_runs:.4f}")
+
+            if result.substitution_consistency is not None:
+                print(f"     Substitution Rate: {result.substitution_consistency:.2f}")
+
+            print()
+
+        if len(high_variability_scenarios) > 10:
+            print(f"  ... and {len(high_variability_scenarios) - 10} more high-variability scenarios")
+    else:
+        print("  No scenarios with high delay variability found.")
+
+    # Meta-model substitution analysis
+    meta_model_results = [r for r in stochastic_results if r.model_type == 'meta_model']
+    if meta_model_results:
+        print(f"\nMETA-MODEL SUBSTITUTION VARIABILITY:")
+        print("-" * 50)
+
+        substitution_consistencies = [r.substitution_consistency for r in meta_model_results
+                                      if r.substitution_consistency is not None]
+
+        if substitution_consistencies:
+            print(f"  Substitution Rate Across Runs:")
+            print(f"    Mean: {np.mean(substitution_consistencies):.3f}")
+            print(f"    Std:  {np.std(substitution_consistencies):.3f}")
+            print(f"    Range: {np.min(substitution_consistencies):.3f} - {np.max(substitution_consistencies):.3f}")
+
+            # Classify substitution consistency
+            always_substitute = len([c for c in substitution_consistencies if c == 1.0])
+            never_substitute = len([c for c in substitution_consistencies if c == 0.0])
+            sometimes_substitute = len(substitution_consistencies) - always_substitute - never_substitute
+
+            print(f"  Substitution Patterns:")
+            print(f"    Always substitute: {always_substitute} scenarios")
+            print(f"    Never substitute: {never_substitute} scenarios")
+            print(f"    Sometimes substitute: {sometimes_substitute} scenarios")
+
+        substitution_time_stds = [r.substitution_time_std for r in meta_model_results
+                                  if r.substitution_time_std is not None]
+        if substitution_time_stds:
+            print(f"  Substitution Time Variability (when it occurs):")
+            print(f"    Mean Std: {np.mean(substitution_time_stds):.2f}s")
+            print(f"    Range: {np.min(substitution_time_stds):.2f} - {np.max(substitution_time_stds):.2f}s")
+
+
+def save_stochastic_analysis(stochastic_results: List[StochasticAnalysisResult], output_file: str):
+    """Save stochastic analysis results to CSV."""
+    if not stochastic_results:
+        print("No stochastic analysis results to save.")
+        return
+
+    data = []
+    for result in stochastic_results:
+        row = {
+            'base_scenario_id': result.base_scenario_id,
+            'model_type': result.model_type,
+            'network_type': result.network_type,
+            'num_runs': result.num_runs,
+
+            # Delay metrics
+            'delay_mean_ms': result.delay_mean_across_runs,
+            'delay_std_ms': result.delay_std_across_runs,
+            'delay_cv': result.delay_cv_across_runs,
+            'delay_min_ms': result.delay_min_across_runs,
+            'delay_max_ms': result.delay_max_across_runs,
+            'delay_range_ms': result.delay_range_across_runs,
+
+            # RMSE/MAE metrics
+            'rmse_mean_ms': result.rmse_mean_across_runs,
+            'rmse_std_ms': result.rmse_std_across_runs,
+            'rmse_cv': result.rmse_cv_across_runs,
+            'mae_mean_ms': result.mae_mean_across_runs,
+            'mae_std_ms': result.mae_std_across_runs,
+            'mae_cv': result.mae_cv_across_runs,
+
+            # Performance metrics
+            'runtime_mean_s': result.runtime_mean_across_runs,
+            'runtime_std_s': result.runtime_std_across_runs,
+            'runtime_cv': result.runtime_cv_across_runs,
+            'memory_mean_mb': result.memory_mean_across_runs,
+            'memory_std_mb': result.memory_std_across_runs,
+            'memory_cv': result.memory_cv_across_runs,
+
+            # Message metrics
+            'num_messages_mean': result.num_messages_mean,
+            'num_messages_std': result.num_messages_std,
+            'num_messages_consistent': result.num_messages_consistent,
+
+            # Substitution metrics
+            'substitution_consistency': result.substitution_consistency,
+            'substitution_time_std_s': result.substitution_time_std,
+
+            # Statistical tests
+            'delay_anova_p_value': result.delay_anova_p_value,
+            'is_stochastic_delay': result.is_stochastic_delay,
+
+            # Derived metrics
+            'high_delay_variability': result.delay_cv_across_runs > 0.05,
+            'moderate_delay_variability': 0.01 < result.delay_cv_across_runs <= 0.05,
+            'low_delay_variability': result.delay_cv_across_runs <= 0.01,
+        }
+        data.append(row)
+
+    df = pd.DataFrame(data)
+    df.to_csv(output_file, index=False)
+    print(f"Stochastic analysis results saved to: {output_file}")
+
+
+def updated_parse_filename_to_config(filename: str):
+    """
+    Updated parse function to handle run numbers correctly.
+    Add this to replace the existing parse_filename_to_config function.
+    """
+    try:
+        # Handle both messages_ and statistics_ prefixes
+        if filename.startswith('messages_'):
+            scenario_id = filename[9:]  # Remove 'messages_' prefix
+        elif filename.startswith('statistics_'):
+            scenario_id = filename[11:]  # Remove 'statistics_' prefix
+        else:
+            return None
+
+        # Remove file extension
+        if scenario_id.endswith('.csv'):
+            scenario_id = scenario_id[:-4]
+        if scenario_id.endswith('.json'):
+            scenario_id = scenario_id[:-5]
+
+        # Parse the scenario ID using the from_scenario_id method
+        # This should handle the run number correctly now
+        from integration_environment.scenario_configuration import ScenarioConfiguration
+        return ScenarioConfiguration.from_scenario_id(scenario_id)
+
     except Exception as e:
-        print(f"Error: {e}")
-        return 1
+        print(f"Warning: Could not parse filename '{filename}': {e}")
+        return None
 
 
-if __name__ == '__main__':
-    exit(main())
+# Analyze regular results
+results = analyze_results('results', 'analysis_results.csv')
+
+# NEW: Analyze stochastic behavior
+stochastic_results = analyze_stochastic_behavior(results)
+
+# Analyze error scenarios
+error_analysis = analyze_error_scenarios('results')
+
+# Print all summaries
+print_summary(results)
+
+# NEW: Print stochastic analysis
+if stochastic_results:
+    print_stochastic_analysis(stochastic_results)
+    save_stochastic_analysis(stochastic_results, 'stochastic_analysis.csv')
+else:
+    print("No stochastic analysis performed - no scenarios with multiple runs found.")
+
+print_error_analysis(error_analysis)
+
+# Save error analysis
+save_error_analysis(error_analysis, 'error_analysis')
