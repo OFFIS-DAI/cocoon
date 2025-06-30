@@ -27,9 +27,9 @@ def setup_logging():
     # Configure basic logging to file
     logging.basicConfig(
         filename='results/integration_test_log.log',
-        level=logging.DEBUG,
+        level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        #filemode='w'  # 'w' to overwrite the file each time
+        filemode='w'  # 'w' to overwrite the file each time
     )
 
     # Add console handler to see logs in terminal
