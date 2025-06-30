@@ -46,37 +46,8 @@ Our approach follows a four-phase process inspired by the metamorphosis of a but
 - Continues to process messages using the weighted prediction approach
 
 ## Usage
-Users can run the simple use case provided in the repository:
-
-```bash
-# Run the example Storage Application scenario
-python src/analysis/00_paper_usecase.py
-```
-
-This script demonstrates the complete workflow of the cocoon approach using a Storage Application scenario.
-
-
-## Repository Structure
-```.
-├── cocoon/                         # Main package
-│   ├── docs/                       # Documentation
-│   ├── src/                        # Source code
-│   │   ├── analysis/               # Analysis and evaluation scripts
-│   │   │   └── 00_paper_usecase.py # Paper use case implementation
-│   │   └── training/               # Implementation of training phases
-│   │       ├── egg.py              # EGG phase implementation
-│   │       ├── larva.py            # LARVA phase implementation
-│   │       └── pupa.py             # PUPA phase implementation
-│   ├── utils/                      # Utility functions
-│   ├── cocoon.py                   # Main implementation
-│   ├── communication_network_graph.py  # Graph-based network representation
-│   ├── events.py                   # Event handling
-│   ├── scenario_configuration.py   # Configuration for scenarios
-│   └── state_definitions.py        # Definition of state attributes
-├── state_data/                     # State data from simulation scenarios
-├── requirements.txt                # Dependencies
-└── README.md                       # This file
-```
+Users can run the time advancement example ([example](tests/integration_tests/test_time_advancement.py)) 
+provided in the repository.
 
 ## Installation
 
@@ -85,14 +56,6 @@ git clone https://github.com/OFFIS-DAI/cocoon.git
 cd cocoon
 pip install -r requirements.txt
 ```
-
-## Example Results
-
-Our experimental results with a Storage Application scenario demonstrated significant improvements in prediction accuracy:
-
-- Cluster-based predictions: Mean absolute error of 2.78ms
-- Online-trained regressor: Mean absolute error of 0.62ms
-- Weighted predictions: Mean absolute error of only 0.28ms
 
 ## License
 
