@@ -11,9 +11,11 @@ import numpy as np
 import pandas as pd
 from numpy import floating
 from scipy.cluster.hierarchy import linkage, fcluster
-from scipy.spatial.distance import pdist, cdist
+from scipy.spatial.distance import pdist
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.base import clone
+from sklearn.model_selection import GridSearchCV
+from sklearn.metrics import mean_squared_error, make_scorer
 
 logger = logging.getLogger(__name__)
 
@@ -316,7 +318,7 @@ class CocoonMetaModel:
         self.training_df = None
         # Dictionary containing all pre-trained regressors on historical data
         self.model_for_cluster_id = {}
-        self.online_model = None  # TODO: add multiple models for different clusters
+        self.online_models_for_cluster_id = {}
         # create empty dictionary in order track observations for prediction training
         self.message_observations: Dict[str, MessageObservation] = {}
         # define variables for learning
@@ -369,8 +371,7 @@ class CocoonMetaModel:
         dis_matrix = pdist(training_df[self.object_variables], metric='seuclidean')
 
         # Calculate linkages with hierarchical clustering (centroid linkage)
-        linkage_matrix_centroid = linkage(dis_matrix, method='centroid')  # centroid linkage
-        # build cluster from the previously calculated distances between (message) objects
+        linkage_matrix_centroid = linkage(dis_matrix, method='centroid')
         label_cen = fcluster(linkage_matrix_centroid, t=self.clustering_distance_threshold, criterion='distance')
 
         # Add cluster labels to the dataframe
@@ -378,25 +379,46 @@ class CocoonMetaModel:
 
         self.compute_cluster_centroids(training_df)
 
-        # Train a regression model for each cluster
-        for cluster_id in training_df['cluster_cen'].unique():
-            # Select historical data for the current cluster
-            cluster_data = training_df[training_df['cluster_cen'] == cluster_id]
+        # Lightweight hyperparameter grid (fewer options for faster execution)
+        param_grid = {
+            'max_depth': [5, 10, None],
+            'min_samples_split': [2, 10],
+            'min_samples_leaf': [1, 5],
+            'max_leaf_nodes': [50, None],
+            'max_features': ['sqrt', None]
+        }
 
-            # Extract features (X) and target (y) for the current cluster
+        scoring = make_scorer(mean_squared_error, greater_is_better=False)
+
+        total_clusters = len(training_df['cluster_cen'].unique())
+        logger.info(f'Starting lightweight grid search for {total_clusters} clusters...')
+
+        # Train a regression model for each cluster with reduced grid search
+        for cluster_id in training_df['cluster_cen'].unique():
+            cluster_data = training_df[training_df['cluster_cen'] == cluster_id]
             X = cluster_data[self.model_features]
             y = cluster_data['actual_delay_ms']
-            reg = DecisionTreeRegressor(random_state=42)
 
-            reg.fit(X, y)
+            base_reg = DecisionTreeRegressor(random_state=42)
+            cv_folds = min(3, len(X) // 2)  # Fewer CV folds
+            cv_folds = max(2, cv_folds)
 
-            # Store feature names for later use
+            grid_search = GridSearchCV(
+                estimator=base_reg,
+                param_grid=param_grid,
+                cv=cv_folds,
+                scoring=scoring,
+                n_jobs=-1
+            )
+
+            grid_search.fit(X, y)
+            reg = grid_search.best_estimator_
+
             reg.feature_names_in_ = np.array(self.model_features)
-
             self.model_for_cluster_id[cluster_id] = reg
+            self.online_models_for_cluster_id[cluster_id] = None
 
-        logger.info(f'EGG phase done. Resulting in a number of {len(self.model_for_cluster_id)} '
-                    f'distinct clusters with one regressor each. Computed {len(self.cluster_centroids)} centroids.')
+        logger.info(f'Lightweight EGG phase done. {len(self.model_for_cluster_id)} clusters trained.')
 
     def compute_cluster_centroids(self, training_df: pd.DataFrame):
         """
@@ -422,7 +444,7 @@ class CocoonMetaModel:
         return state_dict
 
     def execute_larva_phase(self, sender_node: CocoonNetworkNode, receiver_node: CocoonNetworkNode,
-                            payload_size_B: int) -> int:
+                            payload_size_B: int) -> (int, int):
         """
         ------------
         LARVA phase
@@ -436,7 +458,7 @@ class CocoonMetaModel:
         # Create feature vector for current message (still use numpy for centroid distance)
         message_features = np.array([variables_dict[var] for var in self.object_variables])
 
-        # OPTIMIZATION: Calculate distance only to cluster centroids (much faster!)
+        # Calculate distance only to cluster centroids
         closest_cluster = self.find_closest_centroid(message_features)
 
         logger.info(f'Assigned message to cluster {closest_cluster} using centroid optimization')
@@ -451,11 +473,11 @@ class CocoonMetaModel:
         # predict message delay time with cluster regressor
         d_cl_pred = regressor_cluster.predict(prediction_data)[0]
         logger.info(f'Predicted delay time with cluster regressor: d_cl_pred = {d_cl_pred}. ')
-        return int(d_cl_pred)
+        return int(d_cl_pred), closest_cluster
 
     def find_closest_centroid(self, message_features: np.ndarray) -> int:
         """
-        Find closest cluster by comparing only to centroids (FASTEST approach)
+        Find the closest cluster by comparing only to centroids
         """
         min_distance = float('inf')
         closest_cluster = None
@@ -470,7 +492,7 @@ class CocoonMetaModel:
         return closest_cluster
 
     def execute_pupa_phase(self, sender_node: CocoonNetworkNode, receiver_node: CocoonNetworkNode,
-                           payload_size_B: int, cluster_prediction: float = None):
+                           payload_size_B: int, cluster_prediction: float = None, closest_cluster: int = 0):
         """
         Enhanced PUPA phase with weighted predictions
         """
@@ -488,17 +510,18 @@ class CocoonMetaModel:
                 # Extract features (X) and target (y)
                 X = message_observations_as_df[self.model_features]
                 y = message_observations_as_df['actual_delay_ms']
-                reg = DecisionTreeRegressor(random_state=42)
+                reg = clone(self.model_for_cluster_id[closest_cluster])
                 reg.fit(X, y)
-                self.online_model = reg
+                self.online_models_for_cluster_id[closest_cluster] = reg
 
         # Make online prediction if model exists
-        if self.online_model is not None:
+        if (closest_cluster in self.online_models_for_cluster_id and
+                self.online_models_for_cluster_id[closest_cluster] is not None):
             # Create DataFrame correctly with feature values as a dictionary
             prediction_dict = {var: variables_dict[var] for var in self.model_features}
             prediction_data = pd.DataFrame([prediction_dict])
 
-            online_prediction = int(self.online_model.predict(prediction_data)[0])
+            online_prediction = int(self.online_models_for_cluster_id[closest_cluster].predict(prediction_data)[0])
             logger.info(f'Predicted delay time online: d_on_pred = {online_prediction}')
 
         weighted_pred = None
@@ -512,25 +535,6 @@ class CocoonMetaModel:
             ))
             logger.info(f'Weighted prediction: d_w_pred = {weighted_pred}')
         return online_prediction, weighted_pred
-
-    def train_decision_tree_regressor_online(self, cluster_model: DecisionTreeRegressor,
-                                             state_df: pd.DataFrame,
-                                             model_features: list[str]):
-        """
-        Trains decision tree regressor on current scenario data.
-        :param state_df: Dataframe with message data (state attributes and delay times) and cluster information.
-        :param model_features: list of model features.
-        :return: map containing {cluster id: trained model}
-        """
-        # Extract features (X) and target (y)
-        X_train = state_df[model_features]
-        y_train = state_df['delay_ms']
-
-        # Train a decision tree regression model
-        model = clone(cluster_model)
-        model.fit(X_train, y_train)
-
-        return model
 
     def get_exponential_weighted_moving_average(self, errors: list):
         """
@@ -801,14 +805,16 @@ class CocoonMetaModel:
 
             if self.mode == self.Mode.PRODUCTION:
                 # LARVA phase - get cluster prediction (now optimized with centroids)
-                d_cl_pred = self.execute_larva_phase(sender_node, receiver_node, payload_size_B=message.payload_size_B)
+                d_cl_pred, closest_cluster = (
+                    self.execute_larva_phase(sender_node, receiver_node, payload_size_B=message.payload_size_B))
 
                 if self.message_index >= self.i_pupa:
                     # PUPA phase - get weighted prediction
                     d_on_pred, d_w_pred = self.execute_pupa_phase(
                         sender_node, receiver_node,
                         payload_size_B=message.payload_size_B,
-                        cluster_prediction=d_cl_pred
+                        cluster_prediction=d_cl_pred,
+                        closest_cluster=closest_cluster
                     )
 
             self.message_observations[message.msg_id] = MessageObservation(sender=message.sender,
