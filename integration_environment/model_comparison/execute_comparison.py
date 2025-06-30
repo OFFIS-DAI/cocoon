@@ -120,15 +120,30 @@ def get_scenario_configurations():
                                 for i_pupa in [BatchSizeIPupa.ten,
                                                BatchSizeIPupa.fifty,
                                                BatchSizeIPupa.hundred]:
-                                    scenario_configurations.append(
-                                        ScenarioConfiguration(payload_size=payload_size,
-                                                              num_devices=n_devices,
-                                                              model_type=model_type,
-                                                              scenario_duration=scenario_duration,
-                                                              traffic_configuration=traffic_config,
-                                                              network_type=network,
-                                                              cluster_distance_threshold=cluster_distance_threshold,
-                                                              i_pupa=i_pupa))
+                                    for learning_rate in [LearningRateWeighting.small,
+                                                          LearningRateWeighting.medium,
+                                                          LearningRateWeighting.large]:
+                                        for butterfly_threshold_value in [ButterflyThresholdValue.small,
+                                                                          ButterflyThresholdValue.small_medium,
+                                                                          ButterflyThresholdValue.medium,
+                                                                          ButterflyThresholdValue.large]:
+                                            for substitution_priority in [SubstitutionPriority.none,
+                                                                          SubstitutionPriority.error_level,
+                                                                          SubstitutionPriority.error_trend,
+                                                                          SubstitutionPriority.cluster_distance,
+                                                                          SubstitutionPriority.topology_stability]:
+                                                scenario_configurations.append(
+                                                    ScenarioConfiguration(payload_size=payload_size,
+                                                                          num_devices=n_devices,
+                                                                          model_type=model_type,
+                                                                          scenario_duration=scenario_duration,
+                                                                          traffic_configuration=traffic_config,
+                                                                          network_type=network,
+                                                                          cluster_distance_threshold=cluster_distance_threshold,
+                                                                          i_pupa=i_pupa,
+                                                                          learning_rate_weighting=learning_rate,
+                                                                          butterfly_threshold_value=butterfly_threshold_value,
+                                                                          substitution_priority=substitution_priority))
                         else:
                             scenario_configurations.append(
                                 ScenarioConfiguration(payload_size=payload_size,
