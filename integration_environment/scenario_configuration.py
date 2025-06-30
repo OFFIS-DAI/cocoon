@@ -136,9 +136,9 @@ class ScenarioConfiguration:
                 network_type=NetworkModelType[network_str],
                 cluster_distance_threshold=ClusterDistanceThreshold[cl_thr_str],
                 i_pupa=BatchSizeIPupa[i_pupa],
-                learning_rate_weighting=learning_rate,
-                butterfly_threshold_value=butterfly_threshold_value,
-                substitution_priority=substitution_priority,
+                learning_rate_weighting=LearningRateWeighting[learning_rate],
+                butterfly_threshold_value=ButterflyThresholdValue[butterfly_threshold_value],
+                substitution_priority=SubstitutionPriority[substitution_priority],
                 run=run
             )
         except (ValueError, KeyError) as e:
