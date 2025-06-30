@@ -121,6 +121,8 @@ class OmnetConnection:
     def start_omnet_simulation(self):
         """Start OMNeT++ simulation process from the simulations directory"""
         # Build the command
+        stdout_file = f"omnet_stdout.log"
+        stderr_file = f"omnet_stderr.log"
         command = (f'./cocoon_omnet_project -m '
                    f'-u Cmdenv '
                    f'-n {self.inet_installation_path} '
@@ -130,7 +132,7 @@ class OmnetConnection:
                    f'--cmdenv-status-frequency=0s '
                    f'--record-eventlog=false '
                    f'--cmdenv-event-banners=false '
-                   f'> /dev/null 2>&1')  # Redirect all output
+                   f'> {stdout_file} 2> {stderr_file}')
 
         try:
             omnet_ini_path = self.omnet_project_path
@@ -316,7 +318,7 @@ class OmnetConnection:
             return True
 
     def send_waiting_message_to_omnet(self, max_advance_ms) -> bool:
-        if self.termination_acknowledged:
+        if self.termination_acknowledged or not self.running:
             return False
         message = f"WAITING|{json.dumps({'max_advance': max_advance_ms})}"
         success = self.send_message(message)
@@ -454,6 +456,7 @@ class DetailedNetworkModel:
         self.msg_id_counter = 0
 
         self.waiting_for_omnet = False
+        self.terminated = False
 
         self.omnet_connection.initialize()
 
@@ -467,6 +470,7 @@ class DetailedNetworkModel:
         """
         Send termination signal to OMNeT++ simulation
         """
+        self.terminated = True
         if self.omnet_connection:
             return self.omnet_connection.send_termination_signal()
         return False
@@ -548,7 +552,7 @@ class DetailedNetworkModel:
 
         return time_receive_to_message
 
-    async def handle_waiting_with_omnet(self, max_advance_ms, timeout_seconds=30):
+    async def handle_waiting_with_omnet(self, max_advance_ms, timeout_seconds=120):
         logger.info(f'Handle waiting for max advance {max_advance_ms / 1000}.')
         if not self.omnet_connection.running:
             logger.error('Error when handling waiting. ')
@@ -557,6 +561,8 @@ class DetailedNetworkModel:
         self.waiting_for_omnet = True
 
         for retry_count in range(3):
+            if self.terminated:
+                return {}
             if retry_count > 0:
                 logger.warning(f"Retrying waiting message for max advance {max_advance_ms/1000} "
                                f"(attempt {retry_count + 1}/{3})")
@@ -580,6 +586,8 @@ class DetailedNetworkModel:
 
             # First wait for WAITING_ACK with timeout
             while not waiting_ack_received and self.omnet_connection.socket_running:
+                if self.terminated:
+                    return {}
                 if time.time() - start_time > ack_timeout:
                     logger.warning(f"Timeout waiting for WAITING_ACK after {ack_timeout} seconds")
                     break
