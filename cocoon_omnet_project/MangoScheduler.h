@@ -1,23 +1,24 @@
 /*
- * mango_scheduler.h
+ * MangoScheduler.h
  */
-#ifndef __MANGO_SCHEDULER_H
-#define __MANGO_SCHEDULER_H
+
+#ifndef MANGOSCHEDULER_H_
+#define MANGOSCHEDULER_H_
 
 #include <omnetpp.h>
-#include <iostream>
-#include <string>
-#include <cstring>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <fcntl.h>
 #include <thread>
 #include <mutex>
 #include <condition_variable>
 #include <queue>
-#include <chrono>
+#include <atomic>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <cstring>
+#include <vector>
+#include <map>
 
 using namespace omnetpp;
 
@@ -52,66 +53,94 @@ public:
     simtime_t getCreationTime() const { return creationTime; }
 
     void setReceiverPort(int port) { receiverPort = port; }
-      int getReceiverPort() const { return receiverPort; }
+    int getReceiverPort() const { return receiverPort; }
 };
 
+// Structure to hold pending event data from listener thread
+struct PendingEventData {
+    std::string messageId;
+    std::string senderId;
+    std::string receiverId;
+    int64_t messageSize;
+    int receiverPort;
+    double timeSendMs;
+};
+
+// Structure to hold pending configuration data
+struct PendingConfigData {
+    int simulationDuration;
+};
+
+// Structure to hold pending time advance data
+struct PendingTimeAdvanceData {
+    double maxAdvanceMs;
+};
 
 class MangoScheduler : public cScheduler
 {
 private:
-    // Socket related members
+    static const int PORT = 8345;
+
+    // Socket management
     int serverSocket = -1;
     int clientSocket = -1;
-    std::thread* listenerThread = nullptr;
-    bool running = false;
 
-    // Message queue and synchronization
-    std::queue<std::string> messageQueue;
+    // Thread management
+    std::thread* listenerThread = nullptr;
+    std::atomic<bool> running{false};
+    std::atomic<bool> terminationReceived{false};
+
+    // Thread-safe communication between listener and main thread
+    std::mutex pendingDataMutex;
+    std::queue<PendingEventData> pendingEvents;
+    std::queue<PendingConfigData> pendingConfigs;
+    std::queue<PendingTimeAdvanceData> pendingTimeAdvances;
+    std::atomic<bool> hasPendingData{false};
+
+    // Legacy message queue (keeping for compatibility)
     std::mutex queueMutex;
+    std::queue<std::string> messageQueue;
     std::condition_variable queueCondition;
 
-    std::list<omnetpp::cModule*> modules = {};
+    // Thread-safe socket sending
+    std::mutex sendMutex;
 
-    // Socket configuration
-    const int PORT = 8345;
-    const char* HOST = "127.0.0.1";
+    // Simulation control
+    simtime_t maxTimeAdvance = 0;
+    simtime_t simulationDuration = SimTime::ZERO;
 
-    // Helper methods for socket operations
+    // Module management
+    std::vector<cModule*> modules;
+
+    // Helper methods
     void setupServerSocket();
     void listenForMessages();
-    void cleanup();
-
-    // For tracking messages and time bounds
-    simtime_t maxTimeAdvance = SIMTIME_MAX;
-
-    // Flag to track if termination message from Python was received
-    bool terminationReceived = false;
-
-    simtime_t simulationDuration = SIMTIME_ZERO;
-
-    // Add the message processing method
     void processMessage(const std::string& message);
-    cModule *getReceiverModule(std::string module_name);
+    void processPendingData(); // New method to process data from listener thread
+
+    void cleanup();
 
 public:
     MangoScheduler();
     virtual ~MangoScheduler();
 
-    // cScheduler methods
+    // cScheduler interface
+    virtual std::string str() const override;
     virtual void startRun() override;
     virtual void endRun() override;
-    virtual cEvent *guessNextEvent() override;
-    virtual cEvent *takeNextEvent() override;
-    virtual void putBackEvent(cEvent *event) override;
+    virtual cEvent* guessNextEvent() override;
+    virtual cEvent* takeNextEvent() override;
+    virtual void putBackEvent(cEvent* event) override;
 
+
+    // Module registration
     void registerApp(cModule *mod);
+    cModule *getReceiverModule(std::string module_name);
 
-    // Socket communication methods
-    void sendMessage(const std::string& message);
-    std::string receiveMessage(bool blocking = true);
+    // Message handling (legacy)
+    std::string receiveMessage(bool blocking = false);
     bool hasMessage();
-
-    virtual std::string str() const override;
+    void sendMessage(const std::string& message);
 };
 
-#endif // __MANGO_SCHEDULER_H
+#endif /* MANGOSCHEDULER_H_ */
