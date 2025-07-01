@@ -3,7 +3,7 @@
 Simulation Speed Analysis Plotter
 
 This script automatically reads all time advancement CSV files from the 'results' folder
-and creates plots showing simulation speed (simulation time / real time ratio) over time 
+and creates plots showing simulation speed (simulation time / real time ratio) over time
 for different models.
 
 Usage: python simulation_speed_plotter.py
@@ -11,14 +11,37 @@ Usage: python simulation_speed_plotter.py
 
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib
 import numpy as np
 from pathlib import Path
 import re
 from typing import List, Dict, Tuple
 import seaborn as sns
 
+# Add this RIGHT AFTER your imports, before anything else
+import matplotlib
+matplotlib.use('Agg')  # Set backend before importing pyplot
+
+# More aggressive font settings
+matplotlib.rcParams.update({
+    'pdf.fonttype': 42,
+    'ps.fonttype': 42,
+    'svg.fonttype': 'none',
+    'font.family': 'sans-serif',
+    'font.sans-serif': ['Arial'],  # Only Arial
+    'font.serif': ['Arial'],       # Force Arial for serif too
+    'font.monospace': ['Arial'],   # Force Arial for monospace too
+    'font.weight': 'normal',
+    'font.style': 'normal',
+    'axes.labelweight': 'normal',
+    'axes.titleweight': 'normal',
+    'figure.titleweight': 'normal',
+    'mathtext.fontset': 'stix',
+    'text.usetex': False,
+})
+
 # Set style for better-looking plots
-plt.style.use('seaborn-v0_8')
+plt.style.use('default')
 sns.set_palette("husl")
 
 
@@ -48,7 +71,6 @@ class SimulationSpeedAnalyzer:
             return 'detailed model'
         if 'ideal' in filename:
             return 'ideal communication'
-
 
     def load_data(self) -> Dict[str, pd.DataFrame]:
         """
@@ -160,10 +182,11 @@ class SimulationSpeedAnalyzer:
             raise ValueError("No data loaded. Call load_data() first.")
 
         # Create single plot with better styling
-        plt.figure(figsize=(12, 5))
+        fig, ax = plt.subplots(figsize=(12, 5))
 
-        # Set a clean, modern style
-        plt.style.use('seaborn-v0_8-whitegrid')
+        # Apply manual grid styling instead of seaborn
+        ax.grid(True, alpha=0.3, linestyle='-', linewidth=0.8, color='#CCCCCC')
+        ax.set_facecolor('#FAFAFA')
 
         # Define a professional color palette
         colors = ['#6C8EBF', '#67AB9F', '#B5739D', '#C73E1D', '#1B998B']
@@ -176,11 +199,11 @@ class SimulationSpeedAnalyzer:
             # Plot the main line with better styling
             edge_color = plt.cm.colors.rgb2hex([c * 0.6 for c in plt.cm.colors.to_rgb(colors[i % len(colors)])])
 
-            plt.plot(df['relative_real_time_s'], df['simulation_time_s'],
-                     label=model_name, linewidth=3, marker='o', markersize=10,
-                     alpha=0.9, color=colors[i % len(colors)],
-                     markeredgecolor=edge_color,  # Darker shade of same color
-                     markeredgewidth=1.5)
+            ax.plot(df['relative_real_time_s'], df['simulation_time_s'],
+                    label=model_name, linewidth=3, marker='o', markersize=10,
+                    alpha=0.9, color=colors[i % len(colors)],
+                    markeredgecolor=edge_color,  # Darker shade of same color
+                    markeredgewidth=1.5)
 
             # Add substitution marker if available
             if substitution_info and substitution_info['substitution_time_s'] is not None:
@@ -195,36 +218,31 @@ class SimulationSpeedAnalyzer:
                 substitution_sim_time = df.loc[closest_idx, 'simulation_time_s']
 
                 # Add substitution marker with better styling
-                plt.scatter(substitution_relative_time, substitution_sim_time,
-                            s=600, marker='*', color='black', edgecolors='grey',
-                            linewidth=2, zorder=10, label='Substitution', alpha=0.9)
+                ax.scatter(substitution_relative_time, substitution_sim_time,
+                           s=600, marker='*', color='black', edgecolors='grey',
+                           linewidth=2, zorder=10, label='Substitution', alpha=0.9)
 
         fontsize = 20
 
         # Clean up tick styling
-        plt.tick_params(axis='both', labelsize=fontsize, length=6, width=1.2,
-                        colors='#2F2F2F', direction='out')
+        ax.tick_params(axis='both', labelsize=fontsize, length=6, width=1.2,
+                       colors='#2F2F2F', direction='out')
 
-        # Style the plot elements
-        plt.xlabel('Real Time (seconds)', fontsize=fontsize, color='#2F2F2F', weight='semibold')
-        plt.ylabel('Simulation Time (seconds)', fontsize=fontsize, color='#2F2F2F', weight='semibold')
-        plt.title('Real Time vs Simulation Time', fontsize=fontsize, color='#2F2F2F',
-                  fontweight='bold', pad=20)
+        # Style the plot elements - AVOID BOLD/SEMIBOLD WEIGHTS
+        ax.set_xlabel('Real Time (seconds)', fontsize=fontsize, color='#2F2F2F', weight='normal')
+        ax.set_ylabel('Simulation Time (seconds)', fontsize=fontsize, color='#2F2F2F', weight='normal')
+        ax.set_title('Real Time vs Simulation Time', fontsize=fontsize, color='#2F2F2F',
+                     fontweight='normal', pad=20)
 
-        # Improve legend styling
-        legend = plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=fontsize - 2,
-                            frameon=True, fancybox=True, shadow=True, borderpad=0.8)
+        # Improve legend styling - AVOID BOLD FONTS
+        legend = ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=fontsize - 2,
+                           frameon=True, fancybox=True, shadow=True, borderpad=0.8)
         legend.get_frame().set_facecolor('#FFFFFF')
         legend.get_frame().set_edgecolor('#CCCCCC')
         legend.get_frame().set_linewidth(1)
 
-        # Enhance grid styling
-        plt.grid(True, alpha=0.3, linestyle='-', linewidth=0.8, color='#CCCCCC')
-
         # Set axis limits and styling
-        plt.xlim(0, 50)
-        ax = plt.gca()
-        ax.set_facecolor('#FAFAFA')
+        ax.set_xlim(0, 50)
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
         ax.spines['left'].set_linewidth(1.2)
@@ -235,8 +253,11 @@ class SimulationSpeedAnalyzer:
         plt.tight_layout()
 
         if save_plots:
-            output_file = self.data_directory / 'simulation_time_analysis.pdf'
-            plt.savefig(output_file, dpi=300, bbox_inches='tight', format='pdf')
+            output_file = self.data_directory / 'simulation_time_analysis.png'
+            # Additional font safety for PDF output with explicit font embedding
+            plt.savefig(output_file, dpi=300, bbox_inches='tight', format='png',
+                        metadata={'Creator': '', 'Producer': '', 'CreationDate': None},
+                        facecolor='white', edgecolor='none')
             print(f"Plot saved as: {output_file}")
 
         if show_plots:
