@@ -451,6 +451,8 @@ class PoissonSenderRole(Role):
         self._running = False
         self._scheduled_tasks = []
 
+        random.seed = 1
+
         # Configure lambda rate based on traffic configuration
         self.lambda_rate = self._get_lambda_rate_from_config()
 
