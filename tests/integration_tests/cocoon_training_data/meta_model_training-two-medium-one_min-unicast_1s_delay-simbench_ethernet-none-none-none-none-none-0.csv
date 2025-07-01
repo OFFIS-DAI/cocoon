@@ -1,0 +1,3 @@
+msg_id,sender,receiver,payload_size_B,time_send_ms,time_receive_ms,actual_delay_ms,predicted_delay_ms,sender_average_outgoing_delay_ms,sender_average_incoming_delay_ms,sender_num_messages_sent_simultaneously,receiver_average_outgoing_delay_ms,receiver_average_incoming_delay_ms,receiver_num_messages_sent_simultaneously,network_average_delay_ms,network_num_messages_in_transit,network_num_busy_links,network_num_network_nodes,network_num_messages_sent_simultaneously
+msg_0,node0,node1,315,1000,1000,0,,,,1,,,0,,1,1,2,1
+msg_1,node1,node0,315,11000,11002,2,,0.0,,1,,0.0,0,0.0,1,1,2,1
