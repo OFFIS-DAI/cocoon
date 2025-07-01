@@ -1,5 +1,8 @@
+import os
 import random
 import time
+
+import pandas as pd
 import pytest
 from mango import agent_composed_of, JSON, activate, ExternalClock, AgentAddress
 from mango.container.factory import create_external_coupling
@@ -11,8 +14,7 @@ from integration_environment.model_comparison.execute_comparison import get_trai
 from integration_environment.results_recorder import ResultsRecorder
 from integration_environment.roles import ResultsRecorderRole, \
     AggregatorAgentRole, FlexAgentRole
-from integration_environment.scenario_configuration import ScenarioConfiguration, PayloadSizeConfig, ModelType, \
-    ScenarioDuration, TrafficConfig, NumDevices, NetworkModelType, ClusterDistanceThreshold, BatchSizeIPupa
+from integration_environment.scenario_configuration import *
 from tests.integration_tests.utils import setup_logging
 
 logger = setup_logging()
@@ -23,11 +25,37 @@ for deer_message_class in deer_message_classes:
     my_codec.add_serializer(*deer_message_class.__serializer__())
 
 
+def get_training_df(scenario_configuration: ScenarioConfiguration, same_technology=True):
+    # Get the directory where this script is located
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    training_data_path = os.path.join(current_dir, 'cocoon_training_data')
+
+    existing_configurations = [ScenarioConfiguration.from_scenario_id(f.split('.')[0])
+                               for f in os.listdir(training_data_path)]
+    different_traffic_configs = [c for c in existing_configurations
+                                 if c.traffic_configuration != scenario_configuration.traffic_configuration]
+    if same_technology:
+        different_traffic_configs = [c for c in different_traffic_configs
+                                     if c.network_type == scenario_configuration.network_type]
+    dataframes = []
+    for c in different_traffic_configs:
+        try:
+            csv_path = os.path.join(training_data_path, f'{c.scenario_id}.csv')
+            df = pd.read_csv(csv_path)
+        except Exception as e:
+            continue
+        dataframes.append(df)
+    if len(dataframes) == 0:
+        return pd.DataFrame.empty
+    complete_df = pd.concat(dataframes)
+    complete_df.dropna(subset=['actual_delay_ms'], inplace=True)
+    return complete_df
+
+
 @pytest.mark.asyncio
 async def test_run_deer_scenario_with_different_models():
     """Time analysis"""
     scenario_duration = ScenarioDuration.one_day
-
 
     scenario_configuration = ScenarioConfiguration(payload_size=PayloadSizeConfig.none,
                                                    num_devices=NumDevices.ten,
@@ -36,7 +64,9 @@ async def test_run_deer_scenario_with_different_models():
                                                    traffic_configuration=TrafficConfig.deer_use_case,
                                                    network_type=NetworkModelType.simbench_ethernet,
                                                    cluster_distance_threshold=ClusterDistanceThreshold.half,
-                                                   i_pupa=BatchSizeIPupa.ten)
+                                                   i_pupa=BatchSizeIPupa.ten,
+                                                   learning_rate_weighting=LearningRateWeighting.small,
+                                                   butterfly_threshold_value=ButterflyThresholdValue.small_medium)
 
     results_recorder = ResultsRecorder(scenario_configuration=scenario_configuration)
 
@@ -88,6 +118,8 @@ async def test_run_deer_scenario_with_different_models():
                            cluster_distance_threshold=scenario_configuration.cluster_distance_threshold.value,
                            scenario_duration_ms=scenario_configuration.scenario_duration.value,
                            i_pupa=scenario_configuration.i_pupa.value,
+                           learning_rate_weighting=scenario_configuration.learning_rate_weighting.value,
+                           butterfly_threshold_value=0.6,
                            output_file_name='results/cocoon_message_observations/production.csv'))
 
     results_recorder.set_scheduler(communication_network_entity)
