@@ -75,8 +75,8 @@ class BatchSizeIPupa(Enum):
 
 class LearningRateWeighting(Enum):
     none = 0
-    small = 0.7
-    medium = 0.7
+    small = 0.3
+    medium = 0.5
     large = 0.9
 
 
