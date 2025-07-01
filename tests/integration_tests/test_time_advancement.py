@@ -10,7 +10,6 @@ from mango.container.factory import create_external_coupling
 from integration_environment.communication_model_scheduler import (IdealCommunicationScheduler, DetailedModelScheduler,
                                                                    MetaModelScheduler)
 from integration_environment.messages import *
-from integration_environment.model_comparison.execute_comparison import get_training_df
 from integration_environment.results_recorder import ResultsRecorder
 from integration_environment.roles import ResultsRecorderRole, \
     AggregatorAgentRole, FlexAgentRole
