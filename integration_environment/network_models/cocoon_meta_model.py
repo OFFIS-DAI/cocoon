@@ -371,7 +371,8 @@ class CocoonMetaModel:
         dis_matrix = pdist(training_df[self.object_variables], metric='seuclidean')
 
         # Calculate linkages with hierarchical clustering (centroid linkage)
-        linkage_matrix_centroid = linkage(dis_matrix, method='centroid')
+        linkage_matrix_centroid = linkage(dis_matrix, method='centroid')  # centroid linkage
+        # build cluster from the previously calculated distances between (message) objects
         label_cen = fcluster(linkage_matrix_centroid, t=self.clustering_distance_threshold, criterion='distance')
 
         # Add cluster labels to the dataframe
@@ -379,46 +380,25 @@ class CocoonMetaModel:
 
         self.compute_cluster_centroids(training_df)
 
-        # Lightweight hyperparameter grid (fewer options for faster execution)
-        param_grid = {
-            'max_depth': [5, 10, None],
-            'min_samples_split': [2, 10],
-            'min_samples_leaf': [1, 5],
-            'max_leaf_nodes': [50, None],
-            'max_features': ['sqrt', None]
-        }
-
-        scoring = make_scorer(mean_squared_error, greater_is_better=False)
-
-        total_clusters = len(training_df['cluster_cen'].unique())
-        logger.info(f'Starting lightweight grid search for {total_clusters} clusters...')
-
-        # Train a regression model for each cluster with reduced grid search
+        # Train a regression model for each cluster
         for cluster_id in training_df['cluster_cen'].unique():
+            # Select historical data for the current cluster
             cluster_data = training_df[training_df['cluster_cen'] == cluster_id]
+
+            # Extract features (X) and target (y) for the current cluster
             X = cluster_data[self.model_features]
             y = cluster_data['actual_delay_ms']
+            reg = DecisionTreeRegressor(random_state=42)
 
-            base_reg = DecisionTreeRegressor(random_state=42)
-            cv_folds = min(3, len(X) // 2)  # Fewer CV folds
-            cv_folds = max(2, cv_folds)
+            reg.fit(X, y)
 
-            grid_search = GridSearchCV(
-                estimator=base_reg,
-                param_grid=param_grid,
-                cv=cv_folds,
-                scoring=scoring,
-                n_jobs=-1
-            )
-
-            grid_search.fit(X, y)
-            reg = grid_search.best_estimator_
-
+            # Store feature names for later use
             reg.feature_names_in_ = np.array(self.model_features)
-            self.model_for_cluster_id[cluster_id] = reg
-            self.online_models_for_cluster_id[cluster_id] = None
 
-        logger.info(f'Lightweight EGG phase done. {len(self.model_for_cluster_id)} clusters trained.')
+            self.model_for_cluster_id[cluster_id] = reg
+
+        logger.info(f'EGG phase done. Resulting in a number of {len(self.model_for_cluster_id)} '
+                    f'distinct clusters with one regressor each. Computed {len(self.cluster_centroids)} centroids.')
 
     def compute_cluster_centroids(self, training_df: pd.DataFrame):
         """
