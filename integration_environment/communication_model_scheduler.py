@@ -420,8 +420,11 @@ class MetaModelScheduler(DetailedModelScheduler):
                     logger.warning('ID of message cannot be resolved.')
                     continue
                 # time receive must be at minimum the current time
-                time_receive = max(self.current_time, (message_in_transit['time_send_ms']
-                                                       + message_in_transit['delay_ms']) / 1000)
+                if not message_in_transit['delay_ms']:
+                    d = self.meta_model.message_observations[message_in_transit['msg_id']].cluster_predicted_delay_ms
+                else:
+                    d = message_in_transit['delay_ms']
+                time_receive = max(self.current_time, (message_in_transit['time_send_ms'] + d) / 1000)
                 if time_receive not in self._message_buffer:
                     self._message_buffer[time_receive] = []
                 self._message_buffer[time_receive].append(self.msg_id_to_msg[msg_id_num])
