@@ -318,7 +318,7 @@ class CocoonMetaModel:
         self.training_df = None
         # Dictionary containing all pre-trained regressors on historical data
         self.model_for_cluster_id = {}
-        self.online_models_for_cluster_id = {}
+        self.online_model = None
         # create empty dictionary in order track observations for prediction training
         self.message_observations: Dict[str, MessageObservation] = {}
         # define variables for learning
@@ -490,18 +490,16 @@ class CocoonMetaModel:
                 # Extract features (X) and target (y)
                 X = message_observations_as_df[self.model_features]
                 y = message_observations_as_df['actual_delay_ms']
-                reg = clone(self.model_for_cluster_id[closest_cluster])
-                reg.fit(X, y)
-                self.online_models_for_cluster_id[closest_cluster] = reg
+                self.online_model = clone(self.model_for_cluster_id[closest_cluster])
+                self.online_model.fit(X, y)
 
         # Make online prediction if model exists
-        if (closest_cluster in self.online_models_for_cluster_id and
-                self.online_models_for_cluster_id[closest_cluster] is not None):
+        if self.online_model is not None:
             # Create DataFrame correctly with feature values as a dictionary
             prediction_dict = {var: variables_dict[var] for var in self.model_features}
             prediction_data = pd.DataFrame([prediction_dict])
 
-            online_prediction = int(self.online_models_for_cluster_id[closest_cluster].predict(prediction_data)[0])
+            online_prediction = int(self.online_model.predict(prediction_data)[0])
             logger.info(f'Predicted delay time online: d_on_pred = {online_prediction}')
 
         weighted_pred = None
