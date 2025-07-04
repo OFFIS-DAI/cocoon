@@ -111,7 +111,10 @@ class CommunicationScheduler(ABC):
                 # no more activities or messages in mango or external simulation -> finalize scenario
                 logger.info('Finalize scenario because not waiting for messages.')
                 await self._on_scenario_finished()
-                self.scenario_finished.set_result(True)
+                try:
+                    self.scenario_finished.set_result(True)
+                except Exception:
+                    pass
                 break
             # Display progress
             progress = min(self.current_time / self._duration_s, 1.0)
@@ -128,7 +131,10 @@ class CommunicationScheduler(ABC):
                 logger.info(f'Finalize scenario because over simulation duration. Current time = {self.current_time},'
                             f'Duration = {self._duration_s}. Messages left in message buffer: {len(self._message_buffer)}')
                 await self._on_scenario_finished()
-                self.scenario_finished.set_result(True)
+                try:
+                    self.scenario_finished.set_result(True)
+                except Exception:
+                    pass
                 break
 
     def update_next_activities(self, current_next_activities: List[float]):
