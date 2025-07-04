@@ -494,7 +494,8 @@ async def run_scenario_config(scenario_configuration: ScenarioConfiguration,
     if scheduler is not None:
         print(f'Running scenario with config: {scenario_configuration.scenario_id}')
 
-        timeout_seconds = 900 if scenario_configuration.model_type.meta_model_training else 300  # 5 minutes timeout
+        timeout_seconds = 900 if scenario_configuration.model_type == ModelType.meta_model_training \
+            else 300  # 5 minutes timeout
 
         try:
             await asyncio.wait_for(
