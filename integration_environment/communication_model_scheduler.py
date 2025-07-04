@@ -4,7 +4,7 @@ import math
 import time
 from abc import ABC, abstractmethod
 from copy import copy
-from typing import Optional
+from typing import Optional, List
 
 import pandas as pd
 from mango.container.external_coupling import ExternalSchedulingContainer, ExternalAgentMessage
@@ -119,7 +119,7 @@ class CommunicationScheduler(ABC):
             filled_length = int(bar_length * progress)
             bar = '=' * filled_length + '-' * (bar_length - filled_length)
             print(
-                f"\rSimulation Progress: |{bar}| {progress * 100:.1f}% ({self.current_time:.1f}s / {self._duration_s}s)",
+                f"\rSimulation Progress: |{bar}| {progress * 100:.1f}% ({self.current_time:.3f}s / {self._duration_s}s)",
                 end='')
             print()
 
@@ -130,6 +130,17 @@ class CommunicationScheduler(ABC):
                 await self._on_scenario_finished()
                 self.scenario_finished.set_result(True)
                 break
+
+    def update_next_activities(self, current_next_activities: List[float]):
+        current_na = copy(self._next_activities)
+        self._next_activities = [na for na in current_na if na > self.current_time]
+        for na in current_next_activities:
+            if not na:
+                continue
+            if na > self.current_time:
+                self._next_activities.append(na)
+            elif na == self.current_time:
+                self._next_activities.append(self.current_time + 0.001)
 
     async def _on_scenario_start(self):
         pass
@@ -201,8 +212,8 @@ class IdealCommunicationScheduler(CommunicationScheduler):
                 if message.time not in self._message_buffer:
                     self._message_buffer[message.time] = []
                 self._message_buffer[message.time].append(message)
-        self._next_activities.extend([na for na in next_activities if na is not None])
-        self._next_activities = [na for na in self._next_activities if na > self.current_time]
+
+        self.update_next_activities(current_next_activities = next_activities)
 
 
 class ChannelModelScheduler(CommunicationScheduler):
@@ -238,8 +249,7 @@ class ChannelModelScheduler(CommunicationScheduler):
                 if message_departure_time_in_s not in self._message_buffer:
                     self._message_buffer[message_departure_time_in_s] = []
                 self._message_buffer[message_departure_time_in_s].append(message)
-        self._next_activities.extend([na for na in next_activities if na is not None])
-        self._next_activities = [na for na in self._next_activities if na > self.current_time]
+        self.update_next_activities(current_next_activities=next_activities)
 
 
 class DetailedModelScheduler(CommunicationScheduler):
@@ -265,8 +275,7 @@ class DetailedModelScheduler(CommunicationScheduler):
     async def process_message_output(self,
                                      container_messages_dict: dict[str, list[ExternalAgentMessage]],
                                      next_activities):
-        self._next_activities.extend([na for na in next_activities if na is not None])
-        self._next_activities = [na for na in self._next_activities if na > self.current_time]
+        self.update_next_activities(current_next_activities=next_activities)
 
         max_advance = self._get_max_advance_in_ms(self._next_activities)
         if sum([len(values) for values in container_messages_dict.values()]) > 0:
@@ -429,8 +438,7 @@ class MetaModelScheduler(DetailedModelScheduler):
                     self._message_buffer[time_receive] = []
                 self._message_buffer[time_receive].append(self.msg_id_to_msg[msg_id_num])
             # Update next activities
-            self._next_activities.extend([na for na in next_activities if na is not None])
-            self._next_activities = [na for na in self._next_activities if na > self.current_time]
+            self.update_next_activities(current_next_activities=next_activities)
 
         for time_s, messages in self._message_buffer.items():
             for message in messages:
@@ -542,5 +550,4 @@ class StaticDelayGraphModelScheduler(CommunicationScheduler):
                     self._message_buffer[message_delivery_time_s].append(message)
 
         # Update next activities
-        self._next_activities.extend([na for na in next_activities if na is not None])
-        self._next_activities = [na for na in self._next_activities if na > self.current_time]
+        self.update_next_activities(current_next_activities=next_activities)
