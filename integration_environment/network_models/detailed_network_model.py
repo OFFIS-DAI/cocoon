@@ -262,6 +262,7 @@ class OmnetConnection:
                             if message == "TERM":
                                 logger.info("Received termination message from OMNeT++")
                                 self.socket_running = False
+                                self.termination_acknowledged = True
                                 break
                             elif message.startswith("TERM_ACK"):
                                 logger.info("Received termination acknowledgment from OMNeT++")
@@ -501,6 +502,8 @@ class DetailedNetworkModel:
         return success
 
     def waiting_for_messages_from_omnet(self) -> bool:
+        if self.omnet_connection.termination_acknowledged or not self.omnet_connection.socket_running:
+            return False
         messages_sent_but_not_received = [m for m in self.omnet_connection.message_ids_sent
                                           if m not in self.omnet_connection.message_ids_received]
         return len(messages_sent_but_not_received) != 0
@@ -604,7 +607,7 @@ class DetailedNetworkModel:
 
             if not waiting_ack_received:
                 logger.warning(f"Did not receive WAITING_ACK from OMNeT++ (attempt {retry_count + 1})")
-                if retry_count < 3 - 1:  # Not the last attempt
+                if retry_count < 3 - 1 and self.omnet_connection.socket_running:  # Not the last attempt and still running
                     continue  # Retry
                 else:
                     logger.error("Failed to receive WAITING_ACK after all retries")
@@ -623,7 +626,7 @@ class DetailedNetworkModel:
 
                 messages = self.omnet_connection.get_all_messages()
                 for message in messages:
-                    if message.startswith("WAITING"):
+                    if message.startswith("WAITING_COMPLETE"):
                         waiting_complete_received = True
                         logger.info("Received WAITING_COMPLETE from OMNeT++")
                         break
@@ -634,6 +637,9 @@ class DetailedNetworkModel:
                             if delivery_time not in time_receive_to_message:
                                 time_receive_to_message[delivery_time] = []
                             time_receive_to_message[delivery_time].extend(msgs)
+                if len(time_receive_to_message) > 0 or not self.omnet_connection.socket_running:
+                    self.waiting_for_omnet = False
+                    return time_receive_to_message
 
                 if not waiting_complete_received:
                     await asyncio.sleep(0.01)  # Small delay before checking again
@@ -644,6 +650,9 @@ class DetailedNetworkModel:
                 break
             else:
                 logger.warning(f"Did not receive WAITING_COMPLETE from OMNeT++ (attempt {retry_count + 1})")
+                if not self.omnet_connection.socket_running or self.omnet_connection.termination_acknowledged:
+                    self.waiting_for_omnet = False
+                    return time_receive_to_message
                 if retry_count < 3 - 1:  # Not the last attempt
                     # Reset state for retry
                     time_receive_to_message = {}
