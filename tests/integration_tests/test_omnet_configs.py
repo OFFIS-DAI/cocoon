@@ -24,7 +24,7 @@ async def run_with_different_configs():
         scenario_configuration = ScenarioConfiguration(model_type=ModelType.detailed,
                                                        scenario_duration=ScenarioDuration.one_min,
                                                        traffic_configuration=TrafficConfig.cbr_broadcast_1_mpm,
-                                                       num_devices=NumDevices.two)
+                                                       num_devices=NumDevices.five)
         results_recorder = ResultsRecorder(scenario_configuration=scenario_configuration)
 
         clock = ExternalClock(start_time=0)
