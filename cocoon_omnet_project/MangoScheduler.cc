@@ -22,8 +22,13 @@ void handleSignal(int signal) {
 }
 
 class AdvanceTimeEvent : public cMessage {
+private:
+    double maxAdvanceMs;
+
 public:
-    AdvanceTimeEvent() : cMessage("AdvanceTimeEvent") {}
+    AdvanceTimeEvent(double maxAdvanceMs = 0.0) : cMessage("AdvanceTimeEvent"), maxAdvanceMs(maxAdvanceMs) {}
+    double getMaxAdvanceMs() const { return maxAdvanceMs; }
+    void setMaxAdvanceMs(double value) { maxAdvanceMs = value; }
 };
 
 Register_Class(MangoScheduler);
@@ -272,9 +277,14 @@ void MangoScheduler::processMessage(const std::string& message) {
             json data = json::parse(payload);
             double max_advance = data["max_advance"];
 
+            // round to 3 decimal places
+            double max_advance_round = std::round(max_advance / 1000.0 * 1000.0);
+
             // Queue time advance update
             PendingTimeAdvanceData timeAdvance;
-            timeAdvance.maxAdvanceMs = max_advance;
+            timeAdvance.maxAdvanceMs = max_advance_round;
+
+            std::cout << "round max advance to " << max_advance_round << endl;
 
             json messages = data["messages"];
 
@@ -316,8 +326,14 @@ void MangoScheduler::processMessage(const std::string& message) {
             json data = json::parse(payload);
             double max_advance = data["max_advance"];
 
+            // round to 3 decimal places
+            double max_advance_round = std::round(max_advance / 1000.0 * 1000.0);
+
+            std::cout << "round max advance to " << max_advance_round << endl;
+
+
             PendingTimeAdvanceData timeAdvance;
-            timeAdvance.maxAdvanceMs = max_advance;
+            timeAdvance.maxAdvanceMs = max_advance_round;
 
             {
                 std::lock_guard<std::mutex> lock(pendingDataMutex);
@@ -355,8 +371,28 @@ void MangoScheduler::processPendingData() {
         auto timeAdvance = pendingTimeAdvances.front();
         pendingTimeAdvances.pop();
 
+        // Update the current max advance for comparison logic
         maxTimeAdvance = SimTime(timeAdvance.maxAdvanceMs, SIMTIME_MS);
         std::cout << "Applied max time advance: " << maxTimeAdvance.str() << std::endl;
+
+        // Create and insert an AdvanceTimeEvent into the FES for tracking/saving
+        AdvanceTimeEvent* advanceEvent = new AdvanceTimeEvent(timeAdvance.maxAdvanceMs);
+
+        cModule* advancer = getSimulation()->getModuleByPath("timeAdvancer");
+        if (!advancer) {
+            EV << "Warning: timeAdvancer module not found, using system module" << std::endl;
+            advancer = getSimulation()->getSystemModule();
+        }
+
+        // Schedule it at the current simulation time
+        advanceEvent->setSchedulingPriority(0);
+        advanceEvent->setArrival(advancer->getId(), -1, maxTimeAdvance);
+
+        // Insert into FES
+        getSimulation()->getFES()->insert(advanceEvent);
+
+        std::cout << "Inserted AdvanceTimeEvent into FES at time " << simTime()
+                                  << " with max advance value " << timeAdvance.maxAdvanceMs << " seconds" << std::endl;
     }
 
     // Process pending events
@@ -393,8 +429,8 @@ void MangoScheduler::processPendingData() {
             simtime_t currentTime = simTime();
             if (eventTime < currentTime) {
                 std::cout << "Warning: Event time " << eventTime.str()
-                         << " is in the past (current: " << currentTime.str()
-                         << "). Adjusting to current time." << std::endl;
+                                         << " is in the past (current: " << currentTime.str()
+                                         << "). Adjusting to current time." << std::endl;
                 eventTime = currentTime;
             }
             mangoMsg->setCreationTime(eventTime);
@@ -406,7 +442,7 @@ void MangoScheduler::processPendingData() {
             getSimulation()->getFES()->insert(mangoMsg);
 
             std::cout << "Scheduled message " << eventData.messageId << " at time "
-                     << eventTime.str() << std::endl;
+                    << eventTime.str() << std::endl;
         }
         else {
             std::cerr << "Error: Could not find sender module: " << eventData.senderId << std::endl;
@@ -547,17 +583,20 @@ cEvent* MangoScheduler::takeNextEvent() {
     if (event) {
         AdvanceTimeEvent* advanceEvent = dynamic_cast<AdvanceTimeEvent*>(event);
         if (advanceEvent) {
+            std::cout << "Processing AdvanceTimeEvent with max advance: "
+                    << advanceEvent->getMaxAdvanceMs() << " ms at time " << simTime() << std::endl;
             sendMessage("WAITING_COMPLETE|Time advance completed");
         } else {
+            // Handle regular events
             simtime_t currentTime = simTime();
             simtime_t eventTime = event->getArrivalTime();
 
             if (eventTime > maxTimeAdvance) {
                 sendMessage("WAITING");
                 std::cout << "Next event at " << eventTime.str()
-                         << " exceeds max advance limit of " << maxTimeAdvance.str()
-                         << " from current time " << currentTime.str()
-                         << ". Waiting for Python..." << std::endl;
+                                             << " exceeds max advance limit of " << maxTimeAdvance.str()
+                                             << " from current time " << currentTime.str()
+                                             << ". Waiting for Python..." << std::endl;
                 event = nullptr;
             }
         }
@@ -568,7 +607,7 @@ cEvent* MangoScheduler::takeNextEvent() {
             sendMessage("WAITING");
 
             int waitAttempts = 0;
-            const int maxWaitAttempts = 1000;
+            const int maxWaitAttempts = 1500;
 
             while (waitAttempts < maxWaitAttempts && !terminationReceived && !sigintReceived) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -594,13 +633,13 @@ cEvent* MangoScheduler::takeNextEvent() {
 
                 if (waitAttempts % 10 == 0) {
                     std::cout << "Still waiting for Python messages... ("
-                             << waitAttempts / 10 << " seconds)" << " at time " << simTime() << std::endl;
+                            << waitAttempts / 10 << " seconds)" << " at time " << simTime() << std::endl;
                 }
             }
 
             if (waitAttempts >= maxWaitAttempts && !event) {
                 std::cout << "Timeout waiting for Python messages. Current max advance: "
-                         << maxTimeAdvance.str() << std::endl;
+                        << maxTimeAdvance.str() << std::endl;
 
                 event = sim->getFES()->peekFirst();
                 if (event) {
