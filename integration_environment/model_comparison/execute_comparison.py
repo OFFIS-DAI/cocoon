@@ -6,6 +6,7 @@ import time
 from typing import Dict, Optional
 
 import pandas as pd
+import psutil
 from mango import agent_composed_of, JSON, activate, ExternalClock
 from mango.container.external_coupling import ExternalSchedulingContainer
 from mango.container.factory import create_external_coupling
@@ -63,13 +64,14 @@ def get_training_df(scenario_configuration: ScenarioConfiguration, same_technolo
 
 
 def get_scenario_configurations_for_meta_model_training():
+    if not os.path.exists('cocoon_training_data'):
+        os.makedirs('cocoon_training_data')
     existing_configuration_ids = [f.split('.')[0] for f in os.listdir('cocoon_training_data')]
     scenario_configurations = []
-    for network in [NetworkModelType.simbench_lte450, NetworkModelType.simbench_ethernet,
-                    NetworkModelType.simbench_lte, NetworkModelType.simbench_5g]:
-        for payload_size in [PayloadSizeConfig.small, PayloadSizeConfig.medium, PayloadSizeConfig.large]:
-            for n_devices in [NumDevices.two, NumDevices.ten, NumDevices.fifty, NumDevices.hundred]:
-                for scenario_duration, traffic_config in get_duration_traffic_list():
+    for network in [NetworkModelType.simbench_ethernet, NetworkModelType.simbench_5g]:
+        for payload_size in [PayloadSizeConfig.medium]:
+            for n_devices in [NumDevices.ten]:
+                for scenario_duration, traffic_config in get_duration_traffic_list_meta_model_training():
                     config = ScenarioConfiguration(payload_size=payload_size,
                                                    num_devices=n_devices,
                                                    model_type=ModelType.meta_model_training,
@@ -81,14 +83,13 @@ def get_scenario_configurations_for_meta_model_training():
     return scenario_configurations
 
 
-def get_duration_traffic_list():
+def get_duration_traffic_list_meta_model_training():
     return [
         (ScenarioDuration.one_min, TrafficConfig.cbr_broadcast_1_mps),
         (ScenarioDuration.one_hour, TrafficConfig.cbr_broadcast_1_mpm),
         (ScenarioDuration.one_day, TrafficConfig.cbr_broadcast_4_mph),
         (ScenarioDuration.one_min, TrafficConfig.poisson_broadcast_1_mps),
         (ScenarioDuration.one_hour, TrafficConfig.poisson_broadcast_1_mpm),
-        (ScenarioDuration.one_day, TrafficConfig.poisson_broadcast_4_mph),
         (ScenarioDuration.one_min, TrafficConfig.unicast_1s_delay),
         (ScenarioDuration.one_hour, TrafficConfig.unicast_5s_delay),
         (ScenarioDuration.one_day, TrafficConfig.unicast_10s_delay),
@@ -96,56 +97,47 @@ def get_duration_traffic_list():
     ]
 
 
-def get_scenario_configurations():
+def get_duration_traffic_list_for_screening_design():
+    return [
+        (ScenarioDuration.one_min, TrafficConfig.cbr_broadcast_1_mps),
+        (ScenarioDuration.one_min, TrafficConfig.poisson_broadcast_1_mps),
+        (ScenarioDuration.one_day, TrafficConfig.deer_use_case)
+    ]
+
+
+def get_scenario_configurations_for_screening_design():
     scenario_configurations = []
-    for payload_size in [PayloadSizeConfig.small, PayloadSizeConfig.medium, PayloadSizeConfig.large]:
+    for payload_size in [PayloadSizeConfig.small, PayloadSizeConfig.large]:
         for model_type in [ModelType.detailed,
                            ModelType.ideal,
                            ModelType.meta_model,
                            ModelType.channel,
                            ModelType.static_graph,
-                           ModelType.detailed
                            ]:
             if not model_type == ModelType.ideal:
-                networks = [NetworkModelType.simbench_ethernet, NetworkModelType.simbench_lte450,
-                            NetworkModelType.simbench_lte, NetworkModelType.simbench_5g]
+                networks = [NetworkModelType.simbench_ethernet,
+                            NetworkModelType.simbench_5g]
             else:
                 networks = [NetworkModelType.none]
             for network in networks:
-                for n_devices in [NumDevices.two, NumDevices.ten, NumDevices.fifty, NumDevices.hundred]:
-                    for scenario_duration, traffic_config in get_duration_traffic_list():
+                for n_devices in [
+                    NumDevices.five,
+                    NumDevices.hundred
+                ]:
+                    for scenario_duration, traffic_config in get_duration_traffic_list_for_screening_design():
                         if model_type == ModelType.meta_model:
-                            for cluster_distance_threshold in [ClusterDistanceThreshold.half,
-                                                               ClusterDistanceThreshold.one,
-                                                               ClusterDistanceThreshold.three,
-                                                               ClusterDistanceThreshold.five]:
-                                for i_pupa in [BatchSizeIPupa.ten,
-                                               BatchSizeIPupa.fifty,
-                                               BatchSizeIPupa.hundred]:
-                                    for learning_rate in [LearningRateWeighting.small,
-                                                          LearningRateWeighting.medium,
-                                                          LearningRateWeighting.large]:
-                                        for butterfly_threshold_value in [ButterflyThresholdValue.small,
-                                                                          ButterflyThresholdValue.small_medium,
-                                                                          ButterflyThresholdValue.medium,
-                                                                          ButterflyThresholdValue.large]:
-                                            for substitution_priority in [SubstitutionPriority.none,
-                                                                          SubstitutionPriority.error_level,
-                                                                          SubstitutionPriority.error_trend,
-                                                                          SubstitutionPriority.cluster_distance,
-                                                                          SubstitutionPriority.topology_stability]:
-                                                scenario_configurations.append(
-                                                    ScenarioConfiguration(payload_size=payload_size,
-                                                                          num_devices=n_devices,
-                                                                          model_type=model_type,
-                                                                          scenario_duration=scenario_duration,
-                                                                          traffic_configuration=traffic_config,
-                                                                          network_type=network,
-                                                                          cluster_distance_threshold=cluster_distance_threshold,
-                                                                          i_pupa=i_pupa,
-                                                                          learning_rate_weighting=learning_rate,
-                                                                          butterfly_threshold_value=butterfly_threshold_value,
-                                                                          substitution_priority=substitution_priority))
+                            scenario_configurations.append(
+                                ScenarioConfiguration(payload_size=payload_size,
+                                                      num_devices=n_devices,
+                                                      model_type=model_type,
+                                                      scenario_duration=scenario_duration,
+                                                      traffic_configuration=traffic_config,
+                                                      network_type=network,
+                                                      cluster_distance_threshold=ClusterDistanceThreshold.one,
+                                                      i_pupa=BatchSizeIPupa.ten,
+                                                      learning_rate_weighting=LearningRateWeighting.center,
+                                                      butterfly_threshold_value=ButterflyThresholdValue.center,
+                                                      substitution_priority=SubstitutionPriority.none))
                         else:
                             scenario_configurations.append(
                                 ScenarioConfiguration(payload_size=payload_size,
@@ -154,6 +146,126 @@ def get_scenario_configurations():
                                                       scenario_duration=scenario_duration,
                                                       traffic_configuration=traffic_config,
                                                       network_type=network))
+    return scenario_configurations
+
+
+def get_scenario_configurations_for_central_composite_design():
+    scenario_configurations = []
+    payload_size = PayloadSizeConfig.medium
+    n_devices = NumDevices.ten
+
+    for model_type in [ModelType.detailed,
+                       ModelType.ideal,
+                       ModelType.meta_model,
+                       ModelType.channel,
+                       ModelType.static_graph,
+                       ]:
+        if not model_type == ModelType.ideal:
+            network = NetworkModelType.simbench_5g
+        else:
+            network = NetworkModelType.none
+
+        for scenario_duration, traffic_config in get_duration_traffic_list_for_screening_design():
+            if model_type == ModelType.meta_model:
+                # first, combine all cube points
+                for dt in [ClusterDistanceThreshold.half, ClusterDistanceThreshold.three]:
+                    for ip in [BatchSizeIPupa.fifty, BatchSizeIPupa.hundred_fifty]:
+                        for lr in [LearningRateWeighting.small_medium, LearningRateWeighting.large_medium]:
+                            for bt in [ButterflyThresholdValue.small_medium, ButterflyThresholdValue.large_medium]:
+                                for sp in [SubstitutionPriority.error_trend, SubstitutionPriority.error_level]:
+                                    scenario_configurations.append(
+                                        ScenarioConfiguration(payload_size=payload_size,
+                                                              num_devices=n_devices,
+                                                              model_type=model_type,
+                                                              scenario_duration=scenario_duration,
+                                                              traffic_configuration=traffic_config,
+                                                              network_type=network,
+                                                              cluster_distance_threshold=dt,
+                                                              i_pupa=ip,
+                                                              learning_rate_weighting=lr,
+                                                              butterfly_threshold_value=bt,
+                                                              substitution_priority=sp))
+
+                dt_center = ClusterDistanceThreshold.two
+                ip_center = BatchSizeIPupa.hundred
+                lr_center = LearningRateWeighting.center
+                bt_center = ButterflyThresholdValue.center
+                sp_center = SubstitutionPriority.none
+
+                for dt in [ClusterDistanceThreshold.zero_one,
+                           ClusterDistanceThreshold.five]:
+                    scenario_configurations.append(
+                        ScenarioConfiguration(payload_size=payload_size,
+                                              num_devices=n_devices,
+                                              model_type=model_type,
+                                              scenario_duration=scenario_duration,
+                                              traffic_configuration=traffic_config,
+                                              network_type=network,
+                                              cluster_distance_threshold=dt,
+                                              i_pupa=ip_center,
+                                              learning_rate_weighting=lr_center,
+                                              butterfly_threshold_value=bt_center,
+                                              substitution_priority=sp_center))
+                for ip in [BatchSizeIPupa.ten, BatchSizeIPupa.two_hundred]:
+                    scenario_configurations.append(
+                        ScenarioConfiguration(payload_size=payload_size,
+                                              num_devices=n_devices,
+                                              model_type=model_type,
+                                              scenario_duration=scenario_duration,
+                                              traffic_configuration=traffic_config,
+                                              network_type=network,
+                                              cluster_distance_threshold=dt_center,
+                                              i_pupa=ip,
+                                              learning_rate_weighting=lr_center,
+                                              butterfly_threshold_value=bt_center,
+                                              substitution_priority=sp_center))
+                for lr in [LearningRateWeighting.small, LearningRateWeighting.large]:
+                    scenario_configurations.append(
+                        ScenarioConfiguration(payload_size=payload_size,
+                                              num_devices=n_devices,
+                                              model_type=model_type,
+                                              scenario_duration=scenario_duration,
+                                              traffic_configuration=traffic_config,
+                                              network_type=network,
+                                              cluster_distance_threshold=dt_center,
+                                              i_pupa=ip_center,
+                                              learning_rate_weighting=lr,
+                                              butterfly_threshold_value=bt_center,
+                                              substitution_priority=sp_center))
+                for bt in [ButterflyThresholdValue.small, ButterflyThresholdValue.large]:
+                    scenario_configurations.append(
+                        ScenarioConfiguration(payload_size=payload_size,
+                                              num_devices=n_devices,
+                                              model_type=model_type,
+                                              scenario_duration=scenario_duration,
+                                              traffic_configuration=traffic_config,
+                                              network_type=network,
+                                              cluster_distance_threshold=dt_center,
+                                              i_pupa=ip_center,
+                                              learning_rate_weighting=lr_center,
+                                              butterfly_threshold_value=bt,
+                                              substitution_priority=sp_center))
+                for sp in [SubstitutionPriority.cluster_distance, SubstitutionPriority.topology_stability]:
+                    scenario_configurations.append(
+                        ScenarioConfiguration(payload_size=payload_size,
+                                              num_devices=n_devices,
+                                              model_type=model_type,
+                                              scenario_duration=scenario_duration,
+                                              traffic_configuration=traffic_config,
+                                              network_type=network,
+                                              cluster_distance_threshold=dt_center,
+                                              i_pupa=ip_center,
+                                              learning_rate_weighting=lr_center,
+                                              butterfly_threshold_value=bt_center,
+                                              substitution_priority=sp))
+            else:
+                scenario_configurations.append(
+                    ScenarioConfiguration(payload_size=payload_size,
+                                          num_devices=n_devices,
+                                          model_type=model_type,
+                                          scenario_duration=scenario_duration,
+                                          traffic_configuration=traffic_config,
+                                          network_type=network))
     return scenario_configurations
 
 
@@ -212,7 +324,7 @@ async def initialize_constant_bitrate_broadcast_agents(clock: ExternalClock,
                                                        scenario_configuration: ScenarioConfiguration):
     container_mapping = {}
     receiver_addresses = []
-    for n_agents in range(scenario_configuration.num_devices.value-1):
+    for n_agents in range(scenario_configuration.num_devices.value - 1):
         index = n_agents
         container = create_external_coupling(addr=f'node{index}', codec=my_codec, clock=clock)
         cbr_receiver_role = ReceiverRole()
@@ -221,14 +333,14 @@ async def initialize_constant_bitrate_broadcast_agents(clock: ExternalClock,
         receiver_addresses.append(cbr_receiver_role_agent.addr)
         container_mapping[f'node{index}'] = container
 
-    container2 = create_external_coupling(addr=f'node{scenario_configuration.num_devices.value-1}',
+    container2 = create_external_coupling(addr=f'node{scenario_configuration.num_devices.value - 1}',
                                           codec=my_codec, clock=clock)
     cbr_sender_role_agent = agent_composed_of(
         ConstantBitrateSenderRole(receiver_addresses=receiver_addresses, scenario_config=scenario_configuration),
         ResultsRecorderRole(results_recorder))
     container2.register(cbr_sender_role_agent)
 
-    container_mapping[f'node{scenario_configuration.num_devices.value-1}'] = container2
+    container_mapping[f'node{scenario_configuration.num_devices.value - 1}'] = container2
 
     return container_mapping
 
@@ -247,14 +359,14 @@ async def initialize_poisson_broadcast_agents(clock: ExternalClock,
         receiver_addresses.append(receiver_role_agent.addr)
         container_mapping[f'node{index}'] = container
 
-    container2 = create_external_coupling(addr=f'node{scenario_configuration.num_devices.value-1}',
+    container2 = create_external_coupling(addr=f'node{scenario_configuration.num_devices.value - 1}',
                                           codec=my_codec, clock=clock)
     poisson_sender_role_agent = agent_composed_of(
         PoissonSenderRole(receiver_addresses=receiver_addresses, scenario_config=scenario_configuration),
         ResultsRecorderRole(results_recorder))
     container2.register(poisson_sender_role_agent)
 
-    container_mapping[f'node{scenario_configuration.num_devices.value-1}'] = container2
+    container_mapping[f'node{scenario_configuration.num_devices.value - 1}'] = container2
 
     return container_mapping
 
@@ -341,8 +453,104 @@ async def run_scenario(container_mapping: Dict[str, ExternalSchedulingContainer]
     results_recorder.stop_scenario_recording()
 
 
-async def run_benchmark_suite():
-    num_repetitions = 2
+async def run_scenario_config(scenario_configuration: ScenarioConfiguration,
+                              run: int = 0):
+    scenario_configuration.run = run
+
+    results_recorder = ResultsRecorder(scenario_configuration=scenario_configuration)
+    clock = ExternalClock(start_time=0)
+
+    container_mapping = {}
+    if scenario_configuration.traffic_configuration in [TrafficConfig.cbr_broadcast_1_mps,
+                                                        TrafficConfig.cbr_broadcast_1_mpm,
+                                                        TrafficConfig.cbr_broadcast_4_mph]:
+        container_mapping = \
+            await initialize_constant_bitrate_broadcast_agents(clock=clock,
+                                                               results_recorder=results_recorder,
+                                                               scenario_configuration=scenario_configuration)
+    elif scenario_configuration.traffic_configuration in [TrafficConfig.poisson_broadcast_1_mps,
+                                                          TrafficConfig.poisson_broadcast_1_mpm,
+                                                          TrafficConfig.poisson_broadcast_4_mph]:
+        container_mapping = \
+            await initialize_poisson_broadcast_agents(clock=clock,
+                                                      results_recorder=results_recorder,
+                                                      scenario_configuration=scenario_configuration)
+    elif scenario_configuration.traffic_configuration in [TrafficConfig.unicast_1s_delay,
+                                                          TrafficConfig.unicast_5s_delay,
+                                                          TrafficConfig.unicast_10s_delay]:
+        container_mapping = \
+            await initialize_unicast_communication_agents(clock=clock,
+                                                          results_recorder=results_recorder,
+                                                          scenario_configuration=scenario_configuration)
+    elif scenario_configuration.traffic_configuration == TrafficConfig.deer_use_case:
+        container_mapping = \
+            await initialize_deer_use_case_agents(clock=clock,
+                                                  results_recorder=results_recorder,
+                                                  scenario_configuration=scenario_configuration)
+
+    scheduler = get_scheduler(scenario_configuration=scenario_configuration,
+                              container_mapping=container_mapping)
+
+    if scheduler is not None:
+        print(f'Running scenario with config: {scenario_configuration.scenario_id}')
+
+        timeout_seconds = 900 if scenario_configuration.model_type.meta_model_training else 300  # 5 minutes timeout
+
+        try:
+            await asyncio.wait_for(
+                run_scenario(container_mapping=container_mapping,
+                             results_recorder=results_recorder,
+                             scheduler=scheduler),
+                timeout=timeout_seconds
+            )
+
+            print(f'Scenario {scenario_configuration.scenario_id} completed successfully')
+        except asyncio.TimeoutError:
+            print(
+                f'ERROR: Scenario {scenario_configuration.scenario_id} timed out after {timeout_seconds} seconds')
+            results_recorder.record_timeout(
+                timeout_seconds=timeout_seconds,
+                error_message=f"Scenario execution exceeded {timeout_seconds} second timeout"
+            )
+            await kill_omnet_processes()
+            await asyncio.sleep(5)
+        except Exception as e:
+            print(f'ERROR: Scenario {scenario_configuration.scenario_id} failed with error: {e}')
+            results_recorder.record_error(
+                error_message=f"Scenario execution failed: {str(e)}",
+                exception=e
+            )
+            await kill_omnet_processes()
+            await asyncio.sleep(5)
+
+
+async def kill_omnet_processes():
+    """Kill any remaining OMNeT++ or simulation processes"""
+    try:
+        # Find and kill OMNeT++ processes
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            try:
+                process_info = proc.info
+                cmdline = ' '.join(process_info['cmdline'] or [])
+
+                # Kill processes related to your simulation
+                if any(keyword in cmdline.lower() for keyword in [
+                    'omnetpp', 'opp_run', 'inet', 'simu5g',
+                    'simbenchnetwork', 'mango', 'ned'
+                ]):
+                    logger.debug(f"Killing simulation process {process_info['pid']}: {process_info['name']}")
+                    proc.kill()
+                    await asyncio.sleep(0.1)
+
+            except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                continue
+
+    except Exception as e:
+        logger.error(f"Error killing OMNeT++ processes: {e}")
+
+
+async def run_benchmark_suite_screening():
+    num_repetitions = 1
     # Check if 'results' folder exists, create if it doesn't
     if not os.path.exists('results'):
         os.makedirs('results')
@@ -354,77 +562,22 @@ async def run_benchmark_suite():
                 os.remove(file_path)
 
     meta_model_training_configs = get_scenario_configurations_for_meta_model_training()
-    evaluation_configs = get_scenario_configurations()
+    evaluation_configs = get_scenario_configurations_for_screening_design()
+    face_centered_central_composite_design_configs = get_scenario_configurations_for_central_composite_design()
 
-    print(f'Start running {len(meta_model_training_configs)} scenarios for meta-model training. '
-          f'Afterwards, {len(evaluation_configs)} scenarios for model comparison will be executed. ')
+    num_scen = (len(meta_model_training_configs) + len(evaluation_configs) +
+                len(face_centered_central_composite_design_configs))
+
+    print(f'Phase 0: {len(meta_model_training_configs)} scenarios for meta-model training.\n '
+          f'Phase 1: {len(evaluation_configs)} scenarios for model comparison. \n'
+          f'Phase 2: {len(face_centered_central_composite_design_configs)} scenarios for meta-model optimization.'
+          f'Worst case execution time: {(len(meta_model_training_configs) + len(evaluation_configs)) * 5} minutes /'
+          f'{num_scen * 5 / 60} hours.')
 
     for r in range(num_repetitions):
         for scenario_configuration in (meta_model_training_configs + evaluation_configs):
-            scenario_configuration.run = r
-
-            results_recorder = ResultsRecorder(scenario_configuration=scenario_configuration)
-            clock = ExternalClock(start_time=0)
-
-            container_mapping = {}
-            if scenario_configuration.traffic_configuration in [TrafficConfig.cbr_broadcast_1_mps,
-                                                                TrafficConfig.cbr_broadcast_1_mpm,
-                                                                TrafficConfig.cbr_broadcast_4_mph]:
-                container_mapping = \
-                    await initialize_constant_bitrate_broadcast_agents(clock=clock,
-                                                                       results_recorder=results_recorder,
-                                                                       scenario_configuration=scenario_configuration)
-            elif scenario_configuration.traffic_configuration in [TrafficConfig.poisson_broadcast_1_mps,
-                                                                  TrafficConfig.poisson_broadcast_1_mpm,
-                                                                  TrafficConfig.poisson_broadcast_4_mph]:
-                container_mapping = \
-                    await initialize_poisson_broadcast_agents(clock=clock,
-                                                              results_recorder=results_recorder,
-                                                              scenario_configuration=scenario_configuration)
-            elif scenario_configuration.traffic_configuration in [TrafficConfig.unicast_1s_delay,
-                                                                  TrafficConfig.unicast_5s_delay,
-                                                                  TrafficConfig.unicast_10s_delay]:
-                container_mapping = \
-                    await initialize_unicast_communication_agents(clock=clock,
-                                                                  results_recorder=results_recorder,
-                                                                  scenario_configuration=scenario_configuration)
-            elif scenario_configuration.traffic_configuration == TrafficConfig.deer_use_case:
-                container_mapping = \
-                    await initialize_deer_use_case_agents(clock=clock,
-                                                          results_recorder=results_recorder,
-                                                          scenario_configuration=scenario_configuration)
-
-            scheduler = get_scheduler(scenario_configuration=scenario_configuration,
-                                      container_mapping=container_mapping)
-
-            if scheduler is not None:
-                print(f'Running scenario with config: {scenario_configuration.scenario_id}')
-
-                timeout_seconds = 300  # 5 minutes timeout
-
-                try:
-                    await asyncio.wait_for(
-                        run_scenario(container_mapping=container_mapping,
-                                     results_recorder=results_recorder,
-                                     scheduler=scheduler),
-                        timeout=timeout_seconds
-                    )
-
-                    print(f'Scenario {scenario_configuration.scenario_id} completed successfully')
-                except asyncio.TimeoutError:
-                    print(
-                        f'ERROR: Scenario {scenario_configuration.scenario_id} timed out after {timeout_seconds} seconds')
-                    results_recorder.record_timeout(
-                        timeout_seconds=timeout_seconds,
-                        error_message=f"Scenario execution exceeded {timeout_seconds} second timeout"
-                    )
-                except Exception as e:
-                    print(f'ERROR: Scenario {scenario_configuration.scenario_id} failed with error: {e}')
-                    results_recorder.record_error(
-                        error_message=f"Scenario execution failed: {str(e)}",
-                        exception=e
-                    )
+            await run_scenario_config(scenario_configuration=scenario_configuration, run=r)
 
 
 if __name__ == "__main__":
-    asyncio.run(run_benchmark_suite())
+    asyncio.run(run_benchmark_suite_screening())
