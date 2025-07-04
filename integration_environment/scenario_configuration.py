@@ -36,7 +36,7 @@ class ModelType(Enum):
 
 
 class NumDevices(Enum):
-    two = 2
+    five = 5
     ten = 10
     fifty = 50
     hundred = 100
@@ -60,8 +60,10 @@ class TrafficConfig(Enum):
 
 class ClusterDistanceThreshold(Enum):
     none = 0
+    zero_one = 0.1
     half = 0.5
     one = 1
+    two = 2
     three = 3
     five = 5
 
@@ -70,21 +72,26 @@ class BatchSizeIPupa(Enum):
     none = 0
     ten = 10
     fifty = 50
-    hundred = 1000
+    hundred = 100
+    hundred_fifty = 150
+    two_hundred = 200
 
 
 class LearningRateWeighting(Enum):
     none = 0
-    small = 0.3
-    medium = 0.5
+    small = 0.1
+    small_medium = 0.4
+    center = 0.5
+    large_medium = 0.6
     large = 0.9
 
 
 class ButterflyThresholdValue(Enum):
     none = 0
-    small = 0.5
-    small_medium = 0.75
-    medium = 0.8
+    small = 0.1
+    small_medium = 0.4
+    center = 0.5
+    large_medium = 0.6
     large = 0.9
 
 
