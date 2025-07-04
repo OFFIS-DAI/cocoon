@@ -138,7 +138,7 @@ async def run_scenario_with_static_graph_model():
 async def test_run_scenario_with_detailed_communication_simulation():
     for run in range(3):
         scenario_configuration = ScenarioConfiguration(payload_size=PayloadSizeConfig.small,
-                                                       num_devices=NumDevices.two,
+                                                       num_devices=NumDevices.five,
                                                        model_type=ModelType.detailed,
                                                        scenario_duration=ScenarioDuration.one_min,
                                                        traffic_configuration=TrafficConfig.cbr_broadcast_1_mps,
@@ -170,7 +170,7 @@ async def test_run_scenario_with_detailed_communication_simulation():
 @pytest.mark.asyncio
 async def test_run_scenario_with_meta_model():
     scenario_configuration = ScenarioConfiguration(payload_size=PayloadSizeConfig.small,
-                                                   num_devices=NumDevices.two,
+                                                   num_devices=NumDevices.five,
                                                    model_type=ModelType.meta_model,
                                                    scenario_duration=ScenarioDuration.one_min,
                                                    traffic_configuration=TrafficConfig.cbr_broadcast_1_mps,
