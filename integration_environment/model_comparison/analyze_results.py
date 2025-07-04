@@ -15,10 +15,7 @@ from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
 import re
 
-from integration_environment.scenario_configuration import (
-    ScenarioConfiguration,
-    ModelType, ClusterDistanceThreshold
-)
+from integration_environment.scenario_configuration import *
 
 
 @dataclass
@@ -661,6 +658,22 @@ def save_detailed_results(results: List[EvaluationResult], output_file: str):
                 'after_sub_prediction_rmse_ms': None,
                 'after_sub_prediction_mae_ms': None
             })
+
+        config = result.scenario_config
+        row.update({
+            # Factor values (raw)
+            'cluster_distance_threshold': config.cluster_distance_threshold.value if config.cluster_distance_threshold else None,
+            'batch_size_ipupa': config.i_pupa.value if config.i_pupa else None,
+            'learning_rate_weighting': config.learning_rate_weighting.value if config.learning_rate_weighting else None,
+            'butterfly_threshold_value': config.butterfly_threshold_value.value if config.butterfly_threshold_value else None,
+            'substitution_priority': config.substitution_priority.name if config.substitution_priority else None,
+
+            # Factor names (for analysis)
+            'cluster_distance_threshold_name': config.cluster_distance_threshold.name if config.cluster_distance_threshold else None,
+            'batch_size_ipupa_name': config.i_pupa.name if config.i_pupa else None,
+            'learning_rate_weighting_name': config.learning_rate_weighting.name if config.learning_rate_weighting else None,
+            'butterfly_threshold_value_name': config.butterfly_threshold_value.name if config.butterfly_threshold_value else None,
+})
 
         data.append(row)
 
@@ -1984,7 +1997,6 @@ error_analysis = analyze_error_scenarios('results')
 # Print all summaries
 print_summary(results)
 
-# NEW: Print stochastic analysis
 if stochastic_results:
     print_stochastic_analysis(stochastic_results)
     save_stochastic_analysis(stochastic_results, 'stochastic_analysis.csv')
