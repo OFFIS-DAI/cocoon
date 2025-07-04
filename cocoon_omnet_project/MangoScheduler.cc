@@ -340,8 +340,8 @@ void MangoScheduler::processMessage(const std::string& message) {
                 pendingTimeAdvances.push(timeAdvance);
                 hasPendingData = true;
             }
-
-            sendMessage("WAITING_ACK|Time advance scheduled");
+            std::string waitingMsg = "WAITING_ACK|" + simTime().str();
+            sendMessage(waitingMsg);
         }
         else {
             std::cout << "Unhandled message type: " << type << std::endl;
@@ -585,14 +585,16 @@ cEvent* MangoScheduler::takeNextEvent() {
         if (advanceEvent) {
             std::cout << "Processing AdvanceTimeEvent with max advance: "
                     << advanceEvent->getMaxAdvanceMs() << " ms at time " << simTime() << std::endl;
-            sendMessage("WAITING_COMPLETE|Time advance completed");
+            std::string waitingMsg = "WAITING_COMPLETE|" + simTime().str();
+            sendMessage(waitingMsg);
         } else {
             // Handle regular events
             simtime_t currentTime = simTime();
             simtime_t eventTime = event->getArrivalTime();
 
             if (eventTime > maxTimeAdvance) {
-                sendMessage("WAITING");
+                std::string waitingMsg = "WAITING|" + simTime().str();
+                sendMessage(waitingMsg);
                 std::cout << "Next event at " << eventTime.str()
                                              << " exceeds max advance limit of " << maxTimeAdvance.str()
                                              << " from current time " << currentTime.str()
@@ -604,7 +606,8 @@ cEvent* MangoScheduler::takeNextEvent() {
 
     if (!event) {
         if (!terminationReceived) {
-            sendMessage("WAITING");
+            std::string waitingMsg = "WAITING|" + simTime().str();
+            sendMessage(waitingMsg);
 
             int waitAttempts = 0;
             const int maxWaitAttempts = 1500;
