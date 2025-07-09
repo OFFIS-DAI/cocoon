@@ -86,12 +86,12 @@ def get_scenario_configurations_for_meta_model_training():
 def get_duration_traffic_list_meta_model_training():
     return [
         (ScenarioDuration.one_min, TrafficConfig.cbr_broadcast_1_mps),
-        (ScenarioDuration.one_hour, TrafficConfig.cbr_broadcast_1_mpm),
+        (ScenarioDuration.thirty_min, TrafficConfig.cbr_broadcast_1_mpm),
         (ScenarioDuration.one_day, TrafficConfig.cbr_broadcast_4_mph),
         (ScenarioDuration.one_min, TrafficConfig.poisson_broadcast_1_mps),
-        (ScenarioDuration.one_hour, TrafficConfig.poisson_broadcast_1_mpm),
+        (ScenarioDuration.thirty_min, TrafficConfig.poisson_broadcast_1_mpm),
         (ScenarioDuration.one_min, TrafficConfig.unicast_1s_delay),
-        (ScenarioDuration.one_hour, TrafficConfig.unicast_5s_delay),
+        (ScenarioDuration.thirty_min, TrafficConfig.unicast_5s_delay),
         (ScenarioDuration.one_day, TrafficConfig.unicast_10s_delay),
         (ScenarioDuration.one_day, TrafficConfig.deer_use_case)
     ]
@@ -122,7 +122,7 @@ def get_scenario_configurations_for_screening_design():
             for network in networks:
                 for n_devices in [
                     NumDevices.five,
-                    NumDevices.hundred
+                    NumDevices.fifty
                 ]:
                     for scenario_duration, traffic_config in get_duration_traffic_list_for_screening_design():
                         if model_type == ModelType.meta_model:
@@ -133,7 +133,7 @@ def get_scenario_configurations_for_screening_design():
                                                       scenario_duration=scenario_duration,
                                                       traffic_configuration=traffic_config,
                                                       network_type=network,
-                                                      cluster_distance_threshold=ClusterDistanceThreshold.one,
+                                                      cluster_distance_threshold=ClusterDistanceThreshold.half,
                                                       i_pupa=BatchSizeIPupa.ten,
                                                       learning_rate_weighting=LearningRateWeighting.center,
                                                       butterfly_threshold_value=ButterflyThresholdValue.center,
@@ -287,14 +287,14 @@ def get_scheduler(scenario_configuration: ScenarioConfiguration,
     elif scenario_configuration.model_type == ModelType.detailed:
         return DetailedModelScheduler(container_mapping=container_mapping,
                                       scenario_duration_ms=scenario_configuration.scenario_duration.value,
-                                      config_name=scenario_configuration.network_type.value,
+                                      config_name=scenario_configuration.omnet_config,
                                       inet_installation_path='/home/malin/cocoon_omnet_workspace/inet4.5/src',
                                       simu5G_installation_path='/home/malin/PycharmProjects/trace/Simu5G-1.2.2/src',
                                       omnet_project_path='/home/malin/PycharmProjects/cocoon_DAI/cocoon_omnet_project/')
     elif scenario_configuration.model_type == ModelType.meta_model:
         return MetaModelScheduler(container_mapping=container_mapping,
                                   scenario_duration_ms=scenario_configuration.scenario_duration.value,
-                                  config_name=scenario_configuration.network_type.value,
+                                  config_name=scenario_configuration.omnet_config,
                                   inet_installation_path='/home/malin/cocoon_omnet_workspace/inet4.5/src',
                                   simu5G_installation_path='/home/malin/PycharmProjects/trace/Simu5G-1.2.2/src',
                                   omnet_project_path='/home/malin/PycharmProjects/cocoon_DAI/cocoon_omnet_project/',
@@ -307,7 +307,7 @@ def get_scheduler(scenario_configuration: ScenarioConfiguration,
     elif scenario_configuration.model_type == ModelType.meta_model_training:
         return MetaModelScheduler(container_mapping=container_mapping,
                                   scenario_duration_ms=scenario_configuration.scenario_duration.value,
-                                  config_name=scenario_configuration.network_type.value,
+                                  config_name=scenario_configuration.omnet_config,
                                   inet_installation_path='/home/malin/cocoon_omnet_workspace/inet4.5/src',
                                   simu5G_installation_path='/home/malin/PycharmProjects/trace/Simu5G-1.2.2/src',
                                   omnet_project_path='/home/malin/PycharmProjects/cocoon_DAI/cocoon_omnet_project/',
@@ -495,7 +495,7 @@ async def run_scenario_config(scenario_configuration: ScenarioConfiguration,
         print(f'Running scenario with config: {scenario_configuration.scenario_id}')
 
         timeout_seconds = 900 if scenario_configuration.model_type == ModelType.meta_model_training \
-            else 300  # 5 minutes timeout
+            else 600  # 10 minutes timeout
 
         try:
             await asyncio.wait_for(
@@ -569,11 +569,11 @@ async def run_benchmark_suite_screening():
     num_scen = (len(meta_model_training_configs) + len(evaluation_configs) +
                 len(face_centered_central_composite_design_configs))
 
-    print(f'Phase 0: {len(meta_model_training_configs)} scenarios for meta-model training.\n '
+    print(f'Phase 0: {len(meta_model_training_configs)} scenarios for meta-model training.\n'
           f'Phase 1: {len(evaluation_configs)} scenarios for model comparison. \n'
-          f'Phase 2: {len(face_centered_central_composite_design_configs)} scenarios for meta-model optimization.'
+          f'Phase 2: {len(face_centered_central_composite_design_configs)} scenarios for meta-model optimization. \n'
           f'Worst case execution time: {(len(meta_model_training_configs) + len(evaluation_configs)) * 5} minutes /'
-          f'{num_scen * 5 / 60} hours.')
+          f'{num_scen * 10 / 60} hours.')
 
     for r in range(num_repetitions):
         for scenario_configuration in (meta_model_training_configs + evaluation_configs):
