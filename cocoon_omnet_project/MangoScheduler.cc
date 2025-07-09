@@ -37,6 +37,7 @@ MangoScheduler::MangoScheduler()
 {
     std::cout << "MangoScheduler initialized." << std::endl;
     terminationReceived = false;
+    protocol = nullptr;
 
     // Set up signal handler for graceful interruption
     struct sigaction sa;
@@ -58,6 +59,11 @@ void MangoScheduler::cleanup() {
             delete listenerThread;
             listenerThread = nullptr;
         }
+    }
+
+    if (protocol) {
+        delete protocol;
+        protocol = nullptr;
     }
 
     if (clientSocket >= 0) {
@@ -156,6 +162,8 @@ void MangoScheduler::setupServerSocket() {
             flags = fcntl(clientSocket, F_GETFL, 0);
             fcntl(clientSocket, F_SETFL, flags | O_NONBLOCK);
 
+            protocol = new SimpleMessageProtocol(clientSocket);
+
             std::cout << "Python client connected" << std::endl;
 
             running = true;
@@ -182,57 +190,37 @@ void MangoScheduler::setupServerSocket() {
 }
 
 void MangoScheduler::listenForMessages() {
-    char buffer[4096];
-
-    struct timeval tv;
-    tv.tv_sec = 0;
-    tv.tv_usec = 100000; // 100ms
-    setsockopt(clientSocket, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof tv);
+    if (!protocol) {
+        std::cerr << "Protocol not initialized" << std::endl;
+        return;
+    }
 
     while (running && !sigintReceived) {
-        memset(buffer, 0, sizeof(buffer));
-
         fd_set readfds;
         FD_ZERO(&readfds);
         FD_SET(clientSocket, &readfds);
 
         struct timeval timeout;
         timeout.tv_sec = 0;
-        timeout.tv_usec = 50000; // 50ms
+        timeout.tv_usec = 200000;
 
         int activity = select(clientSocket + 1, &readfds, NULL, NULL, &timeout);
 
-        if (activity < 0 && errno != EINTR) {
-            std::cerr << "Error in select: " << strerror(errno) << std::endl;
-            break;
-        }
-
         if (activity > 0 && FD_ISSET(clientSocket, &readfds)) {
-            ssize_t bytesRead = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
-
-            if (bytesRead > 0) {
-                std::string message(buffer, bytesRead);
+            std::string message;
+            if (protocol->receiveMessage(message)) {
                 std::cout << "Received message from Python: " << message << std::endl;
 
-                // THREAD SAFETY FIX: Only parse and queue data, don't manipulate OMNeT++ objects
                 processMessage(message);
 
-                // Legacy message queue for compatibility
                 {
                     std::lock_guard<std::mutex> lock(queueMutex);
                     messageQueue.push(message);
                 }
                 queueCondition.notify_one();
-            }
-            else if (bytesRead == 0) {
-                std::cout << "Python client disconnected" << std::endl;
+            } else {
+                std::cout << "Failed to receive message or connection closed" << std::endl;
                 break;
-            }
-            else {
-                if (errno != EAGAIN && errno != EWOULDBLOCK) {
-                    std::cerr << "Error reading from socket: " << strerror(errno) << std::endl;
-                    break;
-                }
             }
         }
 
@@ -241,7 +229,7 @@ void MangoScheduler::listenForMessages() {
             break;
         }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
 
     std::cout << "Listener thread exiting" << std::endl;
@@ -355,6 +343,7 @@ void MangoScheduler::processMessage(const std::string& message) {
 
 // NEW METHOD: Process pending data from listener thread in main thread
 void MangoScheduler::processPendingData() {
+    std::cout << "process pending" << endl;
     std::lock_guard<std::mutex> lock(pendingDataMutex);
 
     // Process pending configurations
@@ -380,7 +369,7 @@ void MangoScheduler::processPendingData() {
 
         cModule* advancer = getSimulation()->getModuleByPath("timeAdvancer");
         if (!advancer) {
-            EV << "Warning: timeAdvancer module not found, using system module" << std::endl;
+            std::cout << "Warning: timeAdvancer module not found, using system module" << std::endl;
             advancer = getSimulation()->getSystemModule();
         }
 
@@ -392,7 +381,7 @@ void MangoScheduler::processPendingData() {
         getSimulation()->getFES()->insert(advanceEvent);
 
         std::cout << "Inserted AdvanceTimeEvent into FES at time " << simTime()
-                                  << " with max advance value " << timeAdvance.maxAdvanceMs << " seconds" << std::endl;
+                                                                                  << " with max advance value " << timeAdvance.maxAdvanceMs << " seconds" << std::endl;
     }
 
     // Process pending events
@@ -429,8 +418,8 @@ void MangoScheduler::processPendingData() {
             simtime_t currentTime = simTime();
             if (eventTime < currentTime) {
                 std::cout << "Warning: Event time " << eventTime.str()
-                                         << " is in the past (current: " << currentTime.str()
-                                         << "). Adjusting to current time." << std::endl;
+                                                                                         << " is in the past (current: " << currentTime.str()
+                                                                                         << "). Adjusting to current time." << std::endl;
                 eventTime = currentTime;
             }
             mangoMsg->setCreationTime(eventTime);
@@ -453,15 +442,10 @@ void MangoScheduler::processPendingData() {
 }
 
 void MangoScheduler::sendMessage(const std::string& message) {
-    // Thread-safe socket access
     std::lock_guard<std::mutex> lock(sendMutex);
 
-    // Update maxTimeAdvance only if called from main simulation thread
-    // (simTime() is only valid in main thread)
     if (message.find("RECEIVED|") == 0) {
         try {
-            // Only call simTime() if we're in the main simulation thread
-            // This is a bit of a hack, but necessary since simTime() isn't thread-safe
             if (getSimulation() && getSimulation()->getContextModule()) {
                 maxTimeAdvance = simTime();
             }
@@ -471,38 +455,12 @@ void MangoScheduler::sendMessage(const std::string& message) {
         }
     }
 
-    if (clientSocket >= 0) {
-        std::string delimitedMessage = message + "\n";
-
-        fd_set writefds;
-        FD_ZERO(&writefds);
-        FD_SET(clientSocket, &writefds);
-
-        struct timeval timeout;
-        timeout.tv_sec = 1;
-        timeout.tv_usec = 0;
-
-        int result = select(clientSocket + 1, NULL, &writefds, NULL, &timeout);
-
-        if (result > 0 && FD_ISSET(clientSocket, &writefds)) {
-            ssize_t bytesSent = send(clientSocket, delimitedMessage.c_str(), delimitedMessage.length(), 0);
-
-            if (bytesSent < 0) {
-                std::cerr << "Error sending message: " << strerror(errno) << std::endl;
-            }
-            else if (bytesSent < (ssize_t)delimitedMessage.length()) {
-                std::cerr << "Warning: Only sent " << bytesSent << " of " << delimitedMessage.length() << " bytes" << std::endl;
-            }
+    if (protocol && clientSocket >= 0) {
+        if (!protocol->sendMessage(message)) {
+            std::cerr << "Failed to send message: " << message << std::endl;
         }
-        else if (result < 0) {
-            std::cerr << "Error in select for sending: " << strerror(errno) << std::endl;
-        }
-        else {
-            std::cerr << "Socket not ready for writing" << std::endl;
-        }
-    }
-    else {
-        std::cerr << "Cannot send message: Socket not connected" << std::endl;
+    } else {
+        std::cerr << "Cannot send message: Protocol not initialized or socket not connected" << std::endl;
     }
 }
 
@@ -566,7 +524,6 @@ cEvent* MangoScheduler::takeNextEvent() {
     if (hasPendingData) {
         processPendingData();
     }
-
     if (sigintReceived) {
         std::cout << "Simulation interrupted by signal, ending gracefully" << std::endl;
         throw cTerminationException(SA_INTERRUPT);
@@ -581,6 +538,16 @@ cEvent* MangoScheduler::takeNextEvent() {
     cEvent* event = sim->getFES()->peekFirst();
 
     if (event) {
+
+        simtime_t eventTime = event->getArrivalTime();
+
+        if (eventTime < maxTimeAdvance) {
+            cEvent* tmp = sim->getFES()->removeFirst();
+            ASSERT(tmp == event);
+
+            return event;
+        }
+
         AdvanceTimeEvent* advanceEvent = dynamic_cast<AdvanceTimeEvent*>(event);
         if (advanceEvent) {
             std::cout << "Processing AdvanceTimeEvent with max advance: "
@@ -596,9 +563,9 @@ cEvent* MangoScheduler::takeNextEvent() {
                 std::string waitingMsg = "WAITING|" + simTime().str();
                 sendMessage(waitingMsg);
                 std::cout << "Next event at " << eventTime.str()
-                                             << " exceeds max advance limit of " << maxTimeAdvance.str()
-                                             << " from current time " << currentTime.str()
-                                             << ". Waiting for Python..." << std::endl;
+                                                                                             << " exceeds max advance limit of " << maxTimeAdvance.str()
+                                                                                             << " from current time " << currentTime.str()
+                                                                                             << ". Waiting for Python..." << std::endl;
                 event = nullptr;
             }
         }
@@ -613,7 +580,7 @@ cEvent* MangoScheduler::takeNextEvent() {
             const int maxWaitAttempts = 1500;
 
             while (waitAttempts < maxWaitAttempts && !terminationReceived && !sigintReceived) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
                 waitAttempts++;
 
                 // Check for pending data and process it
@@ -623,7 +590,6 @@ cEvent* MangoScheduler::takeNextEvent() {
 
                 event = sim->getFES()->peekFirst();
                 if (event) {
-                    simtime_t currentTime = simTime();
                     simtime_t eventTime = event->getArrivalTime();
 
                     if (eventTime <= maxTimeAdvance) {
@@ -634,9 +600,9 @@ cEvent* MangoScheduler::takeNextEvent() {
                     }
                 }
 
-                if (waitAttempts % 10 == 0) {
+                if (waitAttempts % 20 == 0) {
                     std::cout << "Still waiting for Python messages... ("
-                            << waitAttempts / 10 << " seconds)" << " at time " << simTime() << std::endl;
+                            << waitAttempts / 20 << " seconds)" << " at time " << simTime() << std::endl;
                 }
             }
 
