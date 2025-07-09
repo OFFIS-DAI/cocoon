@@ -4,12 +4,6 @@ import logging
 from integration_environment.model_comparison.execute_comparison import run_scenario_config
 from integration_environment.scenario_configuration import ScenarioConfiguration
 
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-)
-logger = logging.getLogger(__name__)
-
 
 async def run_scenario_by_id(scenario_id: str):
     config = ScenarioConfiguration.from_scenario_id(scenario_id=scenario_id)
