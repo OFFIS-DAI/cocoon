@@ -313,6 +313,7 @@ class DetailedModelScheduler(CommunicationScheduler):
         time_of_next_msg = min(self._message_buffer.keys()) if len(self._message_buffer) > 0 else None
         if time_of_next_msg:
             max_advance = min(max_advance, time_of_next_msg)
+        max_advance = math.ceil(max_advance)
         return max_advance
 
     def _waiting_for_messages(self):
