@@ -20,6 +20,7 @@ class PayloadSizeConfig(Enum):
 class ScenarioDuration(Enum):
     one_min = 60 * 1000
     five_min = 5 * 60 * 1000
+    thirty_min = 30 * 60 * 1000
     one_hour = 60 * 60 * 1000
     one_day = 60 * 60 * 1000 * 24
     none = 0
@@ -128,6 +129,10 @@ class ScenarioConfiguration:
                 f"-{self.traffic_configuration.name}-{self.network_type.name}-{self.cluster_distance_threshold.name}-"
                 f"{self.i_pupa.name}-{self.learning_rate_weighting.name}-{self.butterfly_threshold_value.name}"
                 f"-{self.substitution_priority.name}-{self.run}")
+
+    @property
+    def omnet_config(self):
+        return f"{self.network_type.value}_{self.num_devices.value}"
 
     @classmethod
     def from_scenario_id(cls, scenario_id: str) -> 'ScenarioConfiguration':
