@@ -8,7 +8,7 @@ import inet.node.inet.StandardHost;
 import MangoTimeAdvancer;
 
 
-network SimbenchNetworkEthernet {
+network SimbenchNetworkEthernet_100 {
 parameters: @display("i=block/network2;bgb=389.35363110608887,1766.448845718056");
 submodules:
     
@@ -226,4 +226,201 @@ connections:
 	router_2.pppg++ <--> Eth10M <--> node83.pppg++;
 	router_2.pppg++ <--> Eth10M <--> node85.pppg++;
 	router_2.pppg++ <--> Eth10M <--> node95.pppg++;
+}
+
+network SimbenchNetworkEthernet_50 {
+parameters: @display("i=block/network2;bgb=389.35363110608887,1766.448845718056");
+submodules:
+    
+    timeAdvancer: MangoTimeAdvancer {
+            @display("p=337,40");
+        }
+
+	router_central: Router{@display("p=100,100");}
+	configurator: Ipv4NetworkConfigurator{@display("p=100,100");}
+	router_0: Router{@display("p=345,270");}
+	router_1: Router{@display("p=217,974");}
+	router_2: Router{@display("p=175,1461");}
+	node0: StandardHost {@display("p=62,1246");}
+	node1: StandardHost {@display("p=62,1246");}
+	node2: StandardHost {@display("p=306,1655");}
+	node3: StandardHost {@display("p=310,1543");}
+	node4: StandardHost {@display("p=336,976");}
+	node5: StandardHost {@display("p=336,976");}
+	node6: StandardHost {@display("p=221,1262");}
+	node7: StandardHost {@display("p=221,1262");}
+	node8: StandardHost {@display("p=221,1262");}
+	node9: StandardHost {@display("p=316,1377");}
+	node10: StandardHost {@display("p=336,208");}
+	node11: StandardHost {@display("p=339,687");}
+	node12: StandardHost {@display("p=339,687");}
+	node13: StandardHost {@display("p=312,1488");}
+	node14: StandardHost {@display("p=350,387");}
+	node15: StandardHost {@display("p=36,1634");}
+	node16: StandardHost {@display("p=64,1190");}
+	node17: StandardHost {@display("p=215,1429");}
+	node18: StandardHost {@display("p=338,921");}
+	node19: StandardHost {@display("p=338,921");}
+	node20: StandardHost {@display("p=127,1303");}
+	node21: StandardHost {@display("p=389,210");}
+	node22: StandardHost {@display("p=344,732");}
+	node23: StandardHost {@display("p=344,732");}
+	node24: StandardHost {@display("p=117,1581");}
+	node25: StandardHost {@display("p=128,1248");}
+	node26: StandardHost {@display("p=13,1144");}
+	node27: StandardHost {@display("p=220,1485");}
+	node28: StandardHost {@display("p=344,732");}
+	node29: StandardHost {@display("p=344,732");}
+	node30: StandardHost {@display("p=328,1021");}
+	node31: StandardHost {@display("p=345,531");}
+	node32: StandardHost {@display("p=345,531");}
+	node33: StandardHost {@display("p=308,1599");}
+	node34: StandardHost {@display("p=334,832");}
+	node35: StandardHost {@display("p=111,1748");}
+	node36: StandardHost {@display("p=324,1332");}
+	node37: StandardHost {@display("p=324,1332");}
+	node38: StandardHost {@display("p=228,1040");}
+	node39: StandardHost {@display("p=228,1040");}
+	node40: StandardHost {@display("p=123,1415");}
+	node41: StandardHost {@display("p=123,1415");}
+	node42: StandardHost {@display("p=230,995");}
+	node43: StandardHost {@display("p=230,995");}
+	node44: StandardHost {@display("p=10,1244");}
+	node45: StandardHost {@display("p=314,1432");}
+	node46: StandardHost {@display("p=121,1470");}
+	node47: StandardHost {@display("p=19,955");}
+	node48: StandardHost {@display("p=19,955");}
+	node49: StandardHost {@display("p=349,587");}
+	node50: StandardHost {@display("p=29,855");}
+
+connections:
+	router_0.pppg++ <--> Eth10M <--> router_central.pppg++;
+	router_0.pppg++ <--> Eth10M <--> node10.pppg++;
+	router_0.pppg++ <--> Eth10M <--> node14.pppg++;
+	router_0.pppg++ <--> Eth10M <--> node21.pppg++;
+	router_0.pppg++ <--> Eth10M <--> node31.pppg++;
+	router_0.pppg++ <--> Eth10M <--> node32.pppg++;
+	router_0.pppg++ <--> Eth10M <--> node49.pppg++;
+	router_1.pppg++ <--> Eth10M <--> node4.pppg++;
+	router_1.pppg++ <--> Eth10M <--> node5.pppg++;
+	router_1.pppg++ <--> Eth10M <--> node11.pppg++;
+	router_1.pppg++ <--> Eth10M <--> node12.pppg++;
+	router_1.pppg++ <--> Eth10M <--> node16.pppg++;
+	router_1.pppg++ <--> Eth10M <--> node18.pppg++;
+	router_1.pppg++ <--> Eth10M <--> node19.pppg++;
+	router_1.pppg++ <--> Eth10M <--> node22.pppg++;
+	router_1.pppg++ <--> Eth10M <--> node23.pppg++;
+	router_1.pppg++ <--> Eth10M <--> node26.pppg++;
+	router_1.pppg++ <--> Eth10M <--> node28.pppg++;
+	router_1.pppg++ <--> Eth10M <--> node29.pppg++;
+	router_1.pppg++ <--> Eth10M <--> node30.pppg++;
+	router_1.pppg++ <--> Eth10M <--> node34.pppg++;
+	router_1.pppg++ <--> Eth10M <--> node38.pppg++;
+	router_1.pppg++ <--> Eth10M <--> node39.pppg++;
+	router_1.pppg++ <--> Eth10M <--> node42.pppg++;
+	router_1.pppg++ <--> Eth10M <--> node43.pppg++;
+	router_1.pppg++ <--> Eth10M <--> node47.pppg++;
+	router_1.pppg++ <--> Eth10M <--> node48.pppg++;
+	router_1.pppg++ <--> Eth10M <--> node50.pppg++;
+
+	router_2.pppg++ <--> Eth10M <--> router_central.pppg++;
+	router_2.pppg++ <--> Eth10M <--> node0.pppg++;
+	router_2.pppg++ <--> Eth10M <--> node1.pppg++;
+	router_2.pppg++ <--> Eth10M <--> node2.pppg++;
+	router_2.pppg++ <--> Eth10M <--> node3.pppg++;
+	router_2.pppg++ <--> Eth10M <--> node6.pppg++;
+	router_2.pppg++ <--> Eth10M <--> node7.pppg++;
+	router_2.pppg++ <--> Eth10M <--> node8.pppg++;
+	router_2.pppg++ <--> Eth10M <--> node9.pppg++;
+	router_2.pppg++ <--> Eth10M <--> node13.pppg++;
+	router_2.pppg++ <--> Eth10M <--> node15.pppg++;
+	router_2.pppg++ <--> Eth10M <--> node17.pppg++;
+	router_2.pppg++ <--> Eth10M <--> node20.pppg++;
+	router_2.pppg++ <--> Eth10M <--> node24.pppg++;
+	router_2.pppg++ <--> Eth10M <--> node25.pppg++;
+	router_2.pppg++ <--> Eth10M <--> node27.pppg++;
+	router_2.pppg++ <--> Eth10M <--> node33.pppg++;
+	router_2.pppg++ <--> Eth10M <--> node35.pppg++;
+	router_2.pppg++ <--> Eth10M <--> node36.pppg++;
+	router_2.pppg++ <--> Eth10M <--> node37.pppg++;
+	router_2.pppg++ <--> Eth10M <--> node40.pppg++;
+	router_2.pppg++ <--> Eth10M <--> node41.pppg++;
+	router_2.pppg++ <--> Eth10M <--> node44.pppg++;
+	router_2.pppg++ <--> Eth10M <--> node45.pppg++;
+	router_2.pppg++ <--> Eth10M <--> node46.pppg++;
+}
+
+network SimbenchNetworkEthernet_10 {
+parameters: @display("i=block/network2;bgb=389.35363110608887,1766.448845718056");
+submodules:
+    
+    timeAdvancer: MangoTimeAdvancer {
+            @display("p=337,40");
+        }
+
+	router_central: Router{@display("p=100,100");}
+	configurator: Ipv4NetworkConfigurator{@display("p=100,100");}
+	router_0: Router{@display("p=345,270");}
+	router_1: Router{@display("p=217,974");}
+	router_2: Router{@display("p=175,1461");}
+	node0: StandardHost {@display("p=62,1246");}
+	node1: StandardHost {@display("p=62,1246");}
+	node2: StandardHost {@display("p=306,1655");}
+	node3: StandardHost {@display("p=310,1543");}
+	node4: StandardHost {@display("p=336,976");}
+	node5: StandardHost {@display("p=336,976");}
+	node6: StandardHost {@display("p=221,1262");}
+	node7: StandardHost {@display("p=221,1262");}
+	node8: StandardHost {@display("p=221,1262");}
+	node9: StandardHost {@display("p=316,1377");}
+	
+connections:
+	router_0.pppg++ <--> Eth10M <--> router_central.pppg++;
+	
+	router_1.pppg++ <--> Eth10M <--> router_central.pppg++;
+	router_1.pppg++ <--> Eth10M <--> node4.pppg++;
+	router_1.pppg++ <--> Eth10M <--> node5.pppg++;
+	
+
+	router_2.pppg++ <--> Eth10M <--> router_central.pppg++;
+	router_2.pppg++ <--> Eth10M <--> node0.pppg++;
+	router_2.pppg++ <--> Eth10M <--> node1.pppg++;
+	router_2.pppg++ <--> Eth10M <--> node2.pppg++;
+	router_2.pppg++ <--> Eth10M <--> node3.pppg++;
+	router_2.pppg++ <--> Eth10M <--> node6.pppg++;
+	router_2.pppg++ <--> Eth10M <--> node7.pppg++;
+	router_2.pppg++ <--> Eth10M <--> node8.pppg++;
+	router_2.pppg++ <--> Eth10M <--> node9.pppg++;
+	
+}
+
+network SimbenchNetworkEthernet_5 {
+parameters: @display("i=block/network2;bgb=389.35363110608887,1766.448845718056");
+submodules:
+    
+    timeAdvancer: MangoTimeAdvancer {
+            @display("p=337,40");
+        }
+
+	router_central: Router{@display("p=100,100");}
+	configurator: Ipv4NetworkConfigurator{@display("p=100,100");}
+	router_0: Router{@display("p=345,270");}
+	router_1: Router{@display("p=217,974");}
+	router_2: Router{@display("p=175,1461");}
+	node0: StandardHost {@display("p=62,1246");}
+	node1: StandardHost {@display("p=62,1246");}
+	node2: StandardHost {@display("p=306,1655");}
+	node3: StandardHost {@display("p=310,1543");}
+	node4: StandardHost {@display("p=336,976");}
+	
+connections:
+	router_0.pppg++ <--> Eth10M <--> router_central.pppg++;
+	router_1.pppg++ <--> Eth10M <--> router_central.pppg++;
+	router_1.pppg++ <--> Eth10M <--> node4.pppg++;
+	router_2.pppg++ <--> Eth10M <--> router_central.pppg++;
+	router_2.pppg++ <--> Eth10M <--> node0.pppg++;
+	router_2.pppg++ <--> Eth10M <--> node1.pppg++;
+	router_2.pppg++ <--> Eth10M <--> node2.pppg++;
+	router_2.pppg++ <--> Eth10M <--> node3.pppg++;
+	
 }
