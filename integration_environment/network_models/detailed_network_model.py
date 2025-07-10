@@ -641,7 +641,6 @@ class DetailedNetworkModel:
                         if omnet_time >= max_advance_ms:
                             # OMNeT++ has already waited "enough"
                             waiting_complete_received = True
-                        break
                     elif message.startswith("WAITING"):
                         omnet_time = get_time_from_waiting_message(message)
                         if omnet_time:
