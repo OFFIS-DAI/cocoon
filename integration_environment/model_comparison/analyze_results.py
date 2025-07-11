@@ -673,7 +673,7 @@ def save_detailed_results(results: List[EvaluationResult], output_file: str):
             'batch_size_ipupa_name': config.i_pupa.name if config.i_pupa else None,
             'learning_rate_weighting_name': config.learning_rate_weighting.name if config.learning_rate_weighting else None,
             'butterfly_threshold_value_name': config.butterfly_threshold_value.name if config.butterfly_threshold_value else None,
-})
+        })
 
         data.append(row)
 
@@ -1985,25 +1985,25 @@ def updated_parse_filename_to_config(filename: str):
         return None
 
 
+phase = 1
 # Analyze regular results
-results = analyze_results('results', 'analysis_results.csv')
+results = analyze_results(f'results/phase{phase}', 'analysis_results/aggregated_results.csv')
 
-# NEW: Analyze stochastic behavior
 stochastic_results = analyze_stochastic_behavior(results)
 
 # Analyze error scenarios
-error_analysis = analyze_error_scenarios('results')
+error_analysis = analyze_error_scenarios(f'results/phase{phase}')
 
 # Print all summaries
 print_summary(results)
 
 if stochastic_results:
     print_stochastic_analysis(stochastic_results)
-    save_stochastic_analysis(stochastic_results, 'stochastic_analysis.csv')
+    save_stochastic_analysis(stochastic_results, 'analysis_results/stochastic_analysis.csv')
 else:
     print("No stochastic analysis performed - no scenarios with multiple runs found.")
 
 print_error_analysis(error_analysis)
 
 # Save error analysis
-save_error_analysis(error_analysis, 'error_analysis')
+save_error_analysis(error_analysis, 'analysis_results/error_analysis')
