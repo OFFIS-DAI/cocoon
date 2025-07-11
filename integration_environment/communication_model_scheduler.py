@@ -409,43 +409,42 @@ class MetaModelScheduler(DetailedModelScheduler):
 
         stand_alone_meta_model_before = copy(self.meta_model_only)
         await self.meta_model.process_observations()
-        if self.meta_model.mode == CocoonMetaModel.Mode.TRAINING:
-            return
-        self.meta_model_only = self.meta_model.substitution_threshold_reached
+        if self.meta_model.mode == CocoonMetaModel.Mode.PRODUCTION:
+            self.meta_model_only = self.meta_model.substitution_threshold_reached
 
-        if not stand_alone_meta_model_before and self.meta_model_only:
-            logger.info('Now switching to meta-model only mode.')
-            self.detailed_network_model.cleanup()
-            self.meta_model_msg_counter = max(self.detailed_network_model.msg_id_to_msg.keys()) + 1
-            self.msg_id_to_msg = self.detailed_network_model.msg_id_to_msg
-            logger.debug(f'Message counter starts at {self.meta_model_msg_counter}')
-            await asyncio.sleep(0.1)  # wait to terminate OMNeT++
+            if not stand_alone_meta_model_before and self.meta_model_only:
+                logger.info('Now switching to meta-model only mode.')
+                self.detailed_network_model.cleanup()
+                self.meta_model_msg_counter = max(self.detailed_network_model.msg_id_to_msg.keys()) + 1
+                self.msg_id_to_msg = self.detailed_network_model.msg_id_to_msg
+                logger.debug(f'Message counter starts at {self.meta_model_msg_counter}')
+                await asyncio.sleep(0.1)  # wait to terminate OMNeT++
 
-        if self.meta_model_only:
-            messages_in_transit = await self.meta_model.get_messages_in_transit()
-            for message_in_transit in messages_in_transit:
-                if ('msg_id' not in message_in_transit
-                        or 'time_send_ms' not in message_in_transit
-                        or 'delay_ms' not in message_in_transit):
-                    logger.warning('Missing keys in message.')
-                    continue
-                msg_id_num = message_in_transit['msg_id'].split('_')
-                if len(msg_id_num) == 2:
-                    msg_id_num = int(msg_id_num[1])
-                else:
-                    logger.warning('ID of message cannot be resolved.')
-                    continue
-                # time receive must be at minimum the current time
-                if not message_in_transit['delay_ms']:
-                    d = self.meta_model.message_observations[message_in_transit['msg_id']].cluster_predicted_delay_ms
-                else:
-                    d = message_in_transit['delay_ms']
-                time_receive = max(self.current_time, (message_in_transit['time_send_ms'] + d) / 1000)
-                if time_receive not in self._message_buffer:
-                    self._message_buffer[time_receive] = []
-                self._message_buffer[time_receive].append(self.msg_id_to_msg[msg_id_num])
-            # Update next activities
-            self.update_next_activities(current_next_activities=next_activities)
+            if self.meta_model_only:
+                messages_in_transit = await self.meta_model.get_messages_in_transit()
+                for message_in_transit in messages_in_transit:
+                    if ('msg_id' not in message_in_transit
+                            or 'time_send_ms' not in message_in_transit
+                            or 'delay_ms' not in message_in_transit):
+                        logger.warning('Missing keys in message.')
+                        continue
+                    msg_id_num = message_in_transit['msg_id'].split('_')
+                    if len(msg_id_num) == 2:
+                        msg_id_num = int(msg_id_num[1])
+                    else:
+                        logger.warning('ID of message cannot be resolved.')
+                        continue
+                    # time receive must be at minimum the current time
+                    if not message_in_transit['delay_ms']:
+                        d = self.meta_model.message_observations[message_in_transit['msg_id']].cluster_predicted_delay_ms
+                    else:
+                        d = message_in_transit['delay_ms']
+                    time_receive = max(self.current_time, (message_in_transit['time_send_ms'] + d) / 1000)
+                    if time_receive not in self._message_buffer:
+                        self._message_buffer[time_receive] = []
+                    self._message_buffer[time_receive].append(self.msg_id_to_msg[msg_id_num])
+                # Update next activities
+                self.update_next_activities(current_next_activities=next_activities)
 
         for time_s, messages in self._message_buffer.items():
             for message in messages:
