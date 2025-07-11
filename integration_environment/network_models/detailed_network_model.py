@@ -646,8 +646,7 @@ class DetailedNetworkModel:
                         if omnet_time:
                             if omnet_time >= max_advance_ms:
                                 # OMNeT++ has the same or advanced time, therefore continue with advancing in time
-                                self.waiting_for_omnet = False
-                                return time_receive_to_message
+                                waiting_complete_received = True
                             elif omnet_time < max_advance_ms:
                                 # send new message
                                 await asyncio.sleep(1)  # Small delay before checking again
@@ -695,14 +694,12 @@ class DetailedNetworkModel:
                         else:
                             waiting_complete_received = True
                             logger.info("Received WAITING_COMPLETE from OMNeT++")
-                            break
                     elif message.startswith("WAITING"):
                         omnet_time = get_time_from_waiting_message(message)
                         if omnet_time:
                             if omnet_time >= max_advance_ms:
                                 # OMNeT++ has the same or advanced time, therefore continue with advancing in time
-                                self.waiting_for_omnet = False
-                                return time_receive_to_message
+                                waiting_complete_received = True
                             elif omnet_time < max_advance_ms:
                                 await asyncio.sleep(2)  # Small delay before checking again
                                 # send new message
