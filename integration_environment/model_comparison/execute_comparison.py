@@ -149,128 +149,87 @@ def get_scenario_configurations_for_screening_design():
     return scenario_configurations
 
 
-def get_scenario_configurations_for_central_composite_design():
+def get_central_composite_design():
+    # using a face-centered central composite design
+    central_composite_design = pd.DataFrame(ccdesign(n=5,
+                                                     face='ccf'))
+    central_composite_design.rename(columns={0: 'C-DT',
+                                             1: 'C-IP',
+                                             2: 'C-LR',
+                                             3: 'C-BT',
+                                             4: 'C-SP'},
+                                    inplace=True)
+    factor_mappings = {
+        'C-DT': {
+            -1: ClusterDistanceThreshold.one,  # 1 (cube point low)
+            0: ClusterDistanceThreshold.three,  # 3 (center point)
+            1: ClusterDistanceThreshold.five,  # 5 (cube point high)
+        },
+        'C-IP': {
+            -1: BatchSizeIPupa.fifty,  # 50 (cube point low)
+            0: BatchSizeIPupa.hundred,  # 100 (center point)
+            1: BatchSizeIPupa.hundred_fifty,  # 150 (cube point high)
+        },
+        'C-LR': {
+            -1: LearningRateWeighting.small,  # 0.1 (cube point low)
+            0: LearningRateWeighting.center,  # 0.5 (center point)
+            1: LearningRateWeighting.large,  # 0.9 (cube point high)
+        },
+        'C-BT': {
+            -1: ButterflyThresholdValue.small,  # 0.1 (cube point low)
+            0: ButterflyThresholdValue.center,  # 0.5 (center point)
+            1: ButterflyThresholdValue.large,  # 0.9 (cube point high)
+        },
+        'C-SP': {
+            -1: SubstitutionPriority.error_level,  # error_level (cube point low)
+            0: SubstitutionPriority.none,  # none (center point)
+            1: SubstitutionPriority.error_trend,  # error_trend (cube point high)
+        }
+    }
+    for col in central_composite_design.columns:
+        # Map to enum values
+        central_composite_design[col] = central_composite_design[col].map(factor_mappings[col])
+    return central_composite_design
+
+
+def get_scenario_configurations_for_phase_1():
     scenario_configurations = []
     payload_size = PayloadSizeConfig.medium
-    n_devices = NumDevices.ten
+    n_devices = NumDevices.five
+    network = NetworkModelType.simbench_5g
 
-    for model_type in [ModelType.detailed,
-                       ModelType.ideal,
-                       ModelType.meta_model,
-                       ModelType.channel,
-                       ModelType.static_graph,
-                       ]:
-        if not model_type == ModelType.ideal:
-            network = NetworkModelType.simbench_5g
-        else:
-            network = NetworkModelType.none
+    central_composite_design = get_central_composite_design()
 
-        for scenario_duration, traffic_config in get_duration_traffic_list_for_screening_design():
-            if model_type == ModelType.meta_model:
-                # first, combine all cube points
-                for dt in [ClusterDistanceThreshold.half, ClusterDistanceThreshold.three]:
-                    for ip in [BatchSizeIPupa.fifty, BatchSizeIPupa.hundred_fifty]:
-                        for lr in [LearningRateWeighting.small_medium, LearningRateWeighting.large_medium]:
-                            for bt in [ButterflyThresholdValue.small_medium, ButterflyThresholdValue.large_medium]:
-                                for sp in [SubstitutionPriority.error_trend, SubstitutionPriority.error_level]:
-                                    scenario_configurations.append(
-                                        ScenarioConfiguration(payload_size=payload_size,
-                                                              num_devices=n_devices,
-                                                              model_type=model_type,
-                                                              scenario_duration=scenario_duration,
-                                                              traffic_configuration=traffic_config,
-                                                              network_type=network,
-                                                              cluster_distance_threshold=dt,
-                                                              i_pupa=ip,
-                                                              learning_rate_weighting=lr,
-                                                              butterfly_threshold_value=bt,
-                                                              substitution_priority=sp))
+    for scenario_duration, traffic_config in get_duration_traffic_list_for_screening_design():
+        # detailed model
+        scenario_configurations.append(
+            ScenarioConfiguration(payload_size=payload_size,
+                                  num_devices=n_devices,
+                                  model_type=ModelType.detailed,
+                                  scenario_duration=scenario_duration,
+                                  traffic_configuration=traffic_config,
+                                  network_type=network))
+        # meta-model
+        for i, row in central_composite_design.iterrows():
+            scenario_configurations.append(
+                ScenarioConfiguration(payload_size=payload_size,
+                                      num_devices=n_devices,
+                                      model_type=ModelType.meta_model,
+                                      scenario_duration=scenario_duration,
+                                      traffic_configuration=traffic_config,
+                                      network_type=network,
+                                      cluster_distance_threshold=row['C-DT'],
+                                      i_pupa=row['C-IP'],
+                                      learning_rate_weighting=row['C-LR'],
+                                      butterfly_threshold_value=row['C-BT'],
+                                      substitution_priority=row['C-SP']))
 
-                dt_center = ClusterDistanceThreshold.two
-                ip_center = BatchSizeIPupa.hundred
-                lr_center = LearningRateWeighting.center
-                bt_center = ButterflyThresholdValue.center
-                sp_center = SubstitutionPriority.none
-
-                for dt in [ClusterDistanceThreshold.zero_one,
-                           ClusterDistanceThreshold.five]:
-                    scenario_configurations.append(
-                        ScenarioConfiguration(payload_size=payload_size,
-                                              num_devices=n_devices,
-                                              model_type=model_type,
-                                              scenario_duration=scenario_duration,
-                                              traffic_configuration=traffic_config,
-                                              network_type=network,
-                                              cluster_distance_threshold=dt,
-                                              i_pupa=ip_center,
-                                              learning_rate_weighting=lr_center,
-                                              butterfly_threshold_value=bt_center,
-                                              substitution_priority=sp_center))
-                for ip in [BatchSizeIPupa.ten, BatchSizeIPupa.two_hundred]:
-                    scenario_configurations.append(
-                        ScenarioConfiguration(payload_size=payload_size,
-                                              num_devices=n_devices,
-                                              model_type=model_type,
-                                              scenario_duration=scenario_duration,
-                                              traffic_configuration=traffic_config,
-                                              network_type=network,
-                                              cluster_distance_threshold=dt_center,
-                                              i_pupa=ip,
-                                              learning_rate_weighting=lr_center,
-                                              butterfly_threshold_value=bt_center,
-                                              substitution_priority=sp_center))
-                for lr in [LearningRateWeighting.small, LearningRateWeighting.large]:
-                    scenario_configurations.append(
-                        ScenarioConfiguration(payload_size=payload_size,
-                                              num_devices=n_devices,
-                                              model_type=model_type,
-                                              scenario_duration=scenario_duration,
-                                              traffic_configuration=traffic_config,
-                                              network_type=network,
-                                              cluster_distance_threshold=dt_center,
-                                              i_pupa=ip_center,
-                                              learning_rate_weighting=lr,
-                                              butterfly_threshold_value=bt_center,
-                                              substitution_priority=sp_center))
-                for bt in [ButterflyThresholdValue.small, ButterflyThresholdValue.large]:
-                    scenario_configurations.append(
-                        ScenarioConfiguration(payload_size=payload_size,
-                                              num_devices=n_devices,
-                                              model_type=model_type,
-                                              scenario_duration=scenario_duration,
-                                              traffic_configuration=traffic_config,
-                                              network_type=network,
-                                              cluster_distance_threshold=dt_center,
-                                              i_pupa=ip_center,
-                                              learning_rate_weighting=lr_center,
-                                              butterfly_threshold_value=bt,
-                                              substitution_priority=sp_center))
-                for sp in [SubstitutionPriority.cluster_distance, SubstitutionPriority.topology_stability]:
-                    scenario_configurations.append(
-                        ScenarioConfiguration(payload_size=payload_size,
-                                              num_devices=n_devices,
-                                              model_type=model_type,
-                                              scenario_duration=scenario_duration,
-                                              traffic_configuration=traffic_config,
-                                              network_type=network,
-                                              cluster_distance_threshold=dt_center,
-                                              i_pupa=ip_center,
-                                              learning_rate_weighting=lr_center,
-                                              butterfly_threshold_value=bt_center,
-                                              substitution_priority=sp))
-            else:
-                scenario_configurations.append(
-                    ScenarioConfiguration(payload_size=payload_size,
-                                          num_devices=n_devices,
-                                          model_type=model_type,
-                                          scenario_duration=scenario_duration,
-                                          traffic_configuration=traffic_config,
-                                          network_type=network))
     return scenario_configurations
 
 
 def get_scheduler(scenario_configuration: ScenarioConfiguration,
-                  container_mapping: Dict[str, ExternalSchedulingContainer]) -> Optional[CommunicationScheduler]:
+                  container_mapping: Dict[str, ExternalSchedulingContainer],
+                  phase: int) -> Optional[CommunicationScheduler]:
     if scenario_configuration.model_type == ModelType.ideal:
         return IdealCommunicationScheduler(container_mapping=container_mapping,
                                            scenario_duration_ms=scenario_configuration.scenario_duration.value)
@@ -300,9 +259,13 @@ def get_scheduler(scenario_configuration: ScenarioConfiguration,
                                   omnet_project_path='/home/malin/PycharmProjects/cocoon_DAI/cocoon_omnet_project/',
                                   training_df=get_training_df(scenario_configuration),
                                   in_training_mode=False,
-                                  output_file_name=f'results/cocoon_{scenario_configuration.scenario_id}.csv',
+                                  output_file_name=f'results/phase{phase}/cocoon_{scenario_configuration.scenario_id}.csv'
+                                  if phase is not None else f'results/cocoon_{scenario_configuration.scenario_id}.csv',
                                   cluster_distance_threshold=scenario_configuration.cluster_distance_threshold.value,
-                                  i_pupa=scenario_configuration.i_pupa.value
+                                  i_pupa=scenario_configuration.i_pupa.value,
+                                  butterfly_threshold_value=scenario_configuration.butterfly_threshold_value.value,
+                                  learning_rate_weighting=scenario_configuration.learning_rate_weighting.value,
+                                  substitution_priority=scenario_configuration.substitution_priority.value
                                   )
     elif scenario_configuration.model_type == ModelType.meta_model_training:
         return MetaModelScheduler(container_mapping=container_mapping,
@@ -453,11 +416,14 @@ async def run_scenario(container_mapping: Dict[str, ExternalSchedulingContainer]
     results_recorder.stop_scenario_recording()
 
 
-async def run_scenario_config(scenario_configuration: ScenarioConfiguration,
+async def run_scenario_config(scenario_configuration: ScenarioConfiguration, phase: int = None,
                               run: int = 0):
     scenario_configuration.run = run
-
-    results_recorder = ResultsRecorder(scenario_configuration=scenario_configuration)
+    if phase is not None:
+        output_dir = f'results/phase{phase}'
+    else:
+        output_dir = 'results'
+    results_recorder = ResultsRecorder(scenario_configuration=scenario_configuration, output_dir=output_dir)
     clock = ExternalClock(start_time=0)
 
     container_mapping = {}
@@ -489,13 +455,14 @@ async def run_scenario_config(scenario_configuration: ScenarioConfiguration,
                                                   scenario_configuration=scenario_configuration)
 
     scheduler = get_scheduler(scenario_configuration=scenario_configuration,
-                              container_mapping=container_mapping)
+                              container_mapping=container_mapping,
+                              phase=phase)
 
     if scheduler is not None:
         print(f'Running scenario with config: {scenario_configuration.scenario_id}')
 
-        timeout_seconds = 900 if scenario_configuration.model_type == ModelType.meta_model_training \
-            else 600  # 10 minutes timeout
+        timeout_seconds = 1200 if scenario_configuration.model_type == ModelType.meta_model_training \
+            else 600  # 10 minutes timeout for testing, 20 minutes timeout for training
 
         try:
             await asyncio.wait_for(
@@ -550,35 +517,56 @@ async def kill_omnet_processes():
         logger.error(f"Error killing OMNeT++ processes: {e}")
 
 
-async def run_benchmark_suite_screening():
+async def run_benchmark_suite_screening(phase: int = None):
     num_repetitions = 1
-    # Check if 'results' folder exists, create if it doesn't
-    if not os.path.exists('results'):
-        os.makedirs('results')
+    if phase is None or phase == 1 or phase == 2:
+        # Check if 'results' folder exists, create if it doesn't
+        if not os.path.exists(f'results/phase{phase}'):
+            os.makedirs(f'results/phase{phase}')
+        else:
+            # If folder exists, remove all files in it
+            for f in os.listdir(f'results/phase{phase}'):
+                file_path = os.path.join(f'results/phase{phase}', f)
+                if os.path.isfile(file_path):  # Only remove files, not subdirectories
+                    os.remove(file_path)
+    if phase is None or phase == 0:
+        meta_model_training_configs = get_scenario_configurations_for_phase_0()
     else:
-        # If folder exists, remove all files in it
-        for f in os.listdir('results'):
-            file_path = os.path.join('results', f)
-            if os.path.isfile(file_path):  # Only remove files, not subdirectories
-                os.remove(file_path)
+        meta_model_training_configs = []
 
-    meta_model_training_configs = get_scenario_configurations_for_meta_model_training()
-    evaluation_configs = get_scenario_configurations_for_screening_design()
-    face_centered_central_composite_design_configs = get_scenario_configurations_for_central_composite_design()
+    if phase is None or phase == 1:
+        face_centered_central_composite_design_configs = get_scenario_configurations_for_phase_1()
+    else:
+        face_centered_central_composite_design_configs = []
+
+    if phase is None or phase == 2:
+        evaluation_configs = get_scenario_configurations_for_phase_2()
+    else:
+        evaluation_configs = []
 
     num_scen = (len(meta_model_training_configs) + len(evaluation_configs) +
                 len(face_centered_central_composite_design_configs))
 
     print(f'Phase 0: {len(meta_model_training_configs)} scenarios for meta-model training.\n'
-          f'Phase 1: {len(evaluation_configs)} scenarios for model comparison. \n'
-          f'Phase 2: {len(face_centered_central_composite_design_configs)} scenarios for meta-model optimization. \n'
+          f'Phase 1: {len(face_centered_central_composite_design_configs)} scenarios for meta-model optimization. \n'
+          f'Phase 2: {len(evaluation_configs)} scenarios for model comparison. \n'
           f'Worst case execution time: {(len(meta_model_training_configs) + len(evaluation_configs)) * 5} minutes /'
           f'{num_scen * 10 / 60} hours.')
 
     for r in range(num_repetitions):
-        for scenario_configuration in (meta_model_training_configs + evaluation_configs):
-            await run_scenario_config(scenario_configuration=scenario_configuration, run=r)
+        for scenario_configuration in meta_model_training_configs:
+            await run_scenario_config(scenario_configuration=scenario_configuration, run=r,
+                                      phase=0)
+        for scenario_configuration in face_centered_central_composite_design_configs:
+            await run_scenario_config(scenario_configuration=scenario_configuration, run=r,
+                                      phase=1)
+        for scenario_configuration in evaluation_configs:
+            await run_scenario_config(scenario_configuration=scenario_configuration, run=r,
+                                      phase=2)
 
 
 if __name__ == "__main__":
-    asyncio.run(run_benchmark_suite_screening())
+    # 0: meta-model training data generation
+    # 1: meta-model optimization
+    # 2: base model comparison
+    asyncio.run(run_benchmark_suite_screening(phase=1))
