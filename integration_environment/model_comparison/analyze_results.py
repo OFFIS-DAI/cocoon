@@ -1478,7 +1478,7 @@ def save_error_analysis(error_analysis: dict, output_file: str):
         })
 
     summary_df = pd.DataFrame(summary_data)
-    summary_file = f"{output_file}_summary.csv"
+    summary_file = f"{output_file}.csv"
     summary_df.to_csv(summary_file, index=False)
     print(f"Error analysis summary saved to: {summary_file}")
 
@@ -1987,7 +1987,7 @@ def updated_parse_filename_to_config(filename: str):
 
 phase = 1
 # Analyze regular results
-results = analyze_results(f'results/phase{phase}', 'analysis_results/aggregated_results.csv')
+results = analyze_results(f'results/phase{phase}', f'analysis_results/aggregated_results{phase}.csv')
 
 stochastic_results = analyze_stochastic_behavior(results)
 
@@ -1999,11 +1999,11 @@ print_summary(results)
 
 if stochastic_results:
     print_stochastic_analysis(stochastic_results)
-    save_stochastic_analysis(stochastic_results, 'analysis_results/stochastic_analysis.csv')
+    save_stochastic_analysis(stochastic_results, f'analysis_results/stochastic_analysis{phase}.csv')
 else:
     print("No stochastic analysis performed - no scenarios with multiple runs found.")
 
 print_error_analysis(error_analysis)
 
 # Save error analysis
-save_error_analysis(error_analysis, 'analysis_results/error_analysis')
+save_error_analysis(error_analysis, f'analysis_results/error_analysis{phase}')
