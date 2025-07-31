@@ -56,7 +56,7 @@ class CommunicationScheduler(ABC):
         container_msgs = []
         for time, messages in self._message_buffer.items():
             for message in messages:
-                if message.receiver == container_name:
+                if message.receiver == container_name and time <= self.current_time:
                     container_msgs.append(message.message)
             self._message_buffer[time] = [m for m in self._message_buffer[time] if m.message not in container_msgs]
 
