@@ -10,6 +10,7 @@ import psutil
 from mango import agent_composed_of, JSON, activate, ExternalClock
 from mango.container.external_coupling import ExternalSchedulingContainer
 from mango.container.factory import create_external_coupling
+from pyDOE3 import *
 
 from integration_environment.communication_model_scheduler import IdealCommunicationScheduler, ChannelModelScheduler, \
     StaticDelayGraphModelScheduler, DetailedModelScheduler, MetaModelScheduler, CommunicationScheduler
@@ -63,7 +64,7 @@ def get_training_df(scenario_configuration: ScenarioConfiguration, same_technolo
     return complete_df
 
 
-def get_scenario_configurations_for_meta_model_training():
+def get_scenario_configurations_for_phase_0():
     if not os.path.exists('cocoon_training_data'):
         os.makedirs('cocoon_training_data')
     existing_configuration_ids = [f.split('.')[0] for f in os.listdir('cocoon_training_data')]
@@ -87,13 +88,13 @@ def get_duration_traffic_list_meta_model_training():
     return [
         (ScenarioDuration.one_min, TrafficConfig.cbr_broadcast_1_mps),
         (ScenarioDuration.thirty_min, TrafficConfig.cbr_broadcast_1_mpm),
-        (ScenarioDuration.one_day, TrafficConfig.cbr_broadcast_4_mph),
+        (ScenarioDuration.thirty_min, TrafficConfig.cbr_broadcast_4_mph),
         (ScenarioDuration.one_min, TrafficConfig.poisson_broadcast_1_mps),
         (ScenarioDuration.thirty_min, TrafficConfig.poisson_broadcast_1_mpm),
         (ScenarioDuration.one_min, TrafficConfig.unicast_1s_delay),
         (ScenarioDuration.thirty_min, TrafficConfig.unicast_5s_delay),
-        (ScenarioDuration.one_day, TrafficConfig.unicast_10s_delay),
-        (ScenarioDuration.one_day, TrafficConfig.deer_use_case)
+        (ScenarioDuration.thirty_min, TrafficConfig.unicast_10s_delay),
+        (ScenarioDuration.thirty_min, TrafficConfig.deer_use_case)
     ]
 
 
@@ -105,9 +106,11 @@ def get_duration_traffic_list_for_screening_design():
     ]
 
 
-def get_scenario_configurations_for_screening_design():
+def get_scenario_configurations_for_phase_2():
     scenario_configurations = []
-    for payload_size in [PayloadSizeConfig.small, PayloadSizeConfig.large]:
+    for payload_size in [PayloadSizeConfig.small,
+                         PayloadSizeConfig.large
+                         ]:
         for model_type in [ModelType.detailed,
                            ModelType.ideal,
                            ModelType.meta_model,
@@ -133,8 +136,8 @@ def get_scenario_configurations_for_screening_design():
                                                       scenario_duration=scenario_duration,
                                                       traffic_configuration=traffic_config,
                                                       network_type=network,
-                                                      cluster_distance_threshold=ClusterDistanceThreshold.half,
-                                                      i_pupa=BatchSizeIPupa.ten,
+                                                      cluster_distance_threshold=ClusterDistanceThreshold.three,
+                                                      i_pupa=BatchSizeIPupa.hundred,
                                                       learning_rate_weighting=LearningRateWeighting.center,
                                                       butterfly_threshold_value=ButterflyThresholdValue.center,
                                                       substitution_priority=SubstitutionPriority.none))
@@ -518,7 +521,7 @@ async def kill_omnet_processes():
 
 
 async def run_benchmark_suite_screening(phase: int = None):
-    num_repetitions = 1
+    num_repetitions = 3
     if phase is None or phase == 1 or phase == 2:
         # Check if 'results' folder exists, create if it doesn't
         if not os.path.exists(f'results/phase{phase}'):
