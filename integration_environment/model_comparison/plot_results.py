@@ -5,6 +5,7 @@ from pathlib import Path
 import matplotlib.patches as mpatches
 
 results_dir = 'analysis_results/plots_phase1/'
+Path(results_dir).mkdir(parents=True, exist_ok=True)  # create dir if not exists
 
 
 def load_results(phase: int):
@@ -14,7 +15,6 @@ def load_results(phase: int):
 
 
 def plot_main_effects(df: pd.DataFrame, response: str, fig_name: str):
-    # only use results from meta-model
     df = df[df['model_type'] == 'meta_model']
     renaming_map = {
         'cluster_distance_threshold_name': 'C-DT',
@@ -43,7 +43,6 @@ def plot_main_effects(df: pd.DataFrame, response: str, fig_name: str):
         mpatches.Patch(color='white', label='C-SP: Substitution Priority'),
     ]
 
-    # Place the legend below the plots
     fig.legend(handles=legend_elements,
                loc='lower center',
                ncol=2,
@@ -52,16 +51,36 @@ def plot_main_effects(df: pd.DataFrame, response: str, fig_name: str):
 
     plt.tight_layout()
     plt.subplots_adjust(bottom=0.3)
-    plt.savefig(results_dir + fig_name)
+    plt.savefig('analysis_results/plots_phase1/' + fig_name)
+    plt.close()
 
 
-# --- Main Execution ---
-df_main = pd.read_csv("analysis_results/aggregated_results1.csv")
-for response, fig_name in [('after_substitution_rmse_ms', 'rmse'),
-                           ('after_substitution_mae_ms', 'mae'),
+def plot_model_comparison(df: pd.DataFrame, response: str, fig_name: str):
+    """Compare different model types for the given response metric."""
+    if 'model_type' not in df.columns:
+        return
+    df['model_type'] = df['model_type'].astype(str)  # Ensure string for plotting
+    plt.figure(figsize=(8, 6))
+    sns.boxplot(data=df, x='model_type', y=response)
+    plt.title(f'Model Comparison: {response}')
+    plt.xlabel("Model Type")
+    plt.ylabel(response)
+    plt.tight_layout()
+    plt.savefig('analysis_results/plots_phase2/' + fig_name)
+    plt.close()
+
+
+# --- Phase 1: Main Effects ---
+df_main = load_results(phase=1)
+for response, fig_name in [
                            ('execution_time_s', 'execution_time'),
-                           ('memory_peak_mb', 'memory_peak'),
                            ('substitution_message_index', 'substitution_message_index'),
                            ('substitution_occurred', 'substitution_occurred')
                            ]:
-    plot_main_effects(df_main, response=response, fig_name=fig_name)
+    plot_main_effects(df_main.copy(), response=response, fig_name=f"phase1_main_effects_{fig_name}.png")
+
+# --- Phase 2: Model Comparison ---
+df_phase2 = load_results(phase=2)
+for response, fig_name in [('execution_time_s', 'execution_time'),
+                           ]:
+    plot_model_comparison(df_phase2.copy(), response=response, fig_name=f"phase2_model_comparison_{fig_name}.png")
