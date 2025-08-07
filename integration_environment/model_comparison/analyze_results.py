@@ -13,16 +13,8 @@ import json
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
-import re
 
 from integration_environment.scenario_configuration import *
-
-
-@dataclass
-class SubstitutionInfo:
-    """Container for meta-model substitution information."""
-    substitution_occurred: bool
-    substitution_message_index: Optional[int] = None
 
 
 @dataclass
