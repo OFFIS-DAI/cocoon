@@ -1,0 +1,17 @@
+msg_id,sender,receiver,payload_size_B,time_send_ms,time_receive_ms,actual_delay_ms,predicted_delay_ms,sender_average_outgoing_delay_ms,sender_average_incoming_delay_ms,sender_num_messages_sent_simultaneously,receiver_average_outgoing_delay_ms,receiver_average_incoming_delay_ms,receiver_num_messages_sent_simultaneously,network_average_delay_ms,network_num_messages_in_transit,network_num_busy_links,network_num_network_nodes,network_num_messages_sent_simultaneously
+msg_0,node1,node0,253,300000,300055.0,55.0,,,,1,,,0,,4,4,5,4
+msg_1,node2,node0,253,300000,300066.0,66.0,,,,1,57.5,,0,57.5,2,2,5,4
+msg_2,node3,node0,253,300000,,,,1183.0,,1,1454.5,274.0,0,703.2727272727273,5,4,5,4
+msg_3,node4,node0,253,300000,300060.0,60.0,,,,1,55.0,,0,55.0,3,3,5,4
+msg_4,node0,node1,271,897000,897055.0,55.0,,60.333333333333336,,3,,55.0,0,60.333333333333336,4,4,5,3
+msg_5,node0,node2,271,897000,897077.0,77.0,,60.333333333333336,55.0,3,,66.0,0,59.0,3,3,5,3
+msg_6,node0,node4,271,897000,897066.0,66.0,,60.333333333333336,55.0,3,,60.0,0,59.0,3,3,5,3
+msg_7,node2,node0,289,897077,902714.0,5637.0,,77.0,66.0,1,60.333333333333336,66.0,0,63.166666666666664,2,2,5,1
+msg_8,node0,node1,278,902714,902882.0,168.0,,1454.5,66.0,4,55.0,55.0,0,859.4285714285714,5,5,5,4
+msg_9,node0,node2,278,902714,902904.0,190.0,,1454.5,109.0,4,77.0,2851.5,0,707.0,4,4,5,4
+msg_10,node0,node3,278,902714,903897.0,1183.0,,1454.5,109.0,4,,,0,707.0,4,4,5,4
+msg_11,node0,node4,278,902714,902893.0,179.0,,1454.5,66.0,4,66.0,60.0,0,859.4285714285714,5,5,5,4
+msg_12,node1,node0,316,902882,,,,111.5,55.0,1,1454.5,274.0,0,703.2727272727273,5,4,5,1
+msg_13,node4,node0,316,902893,,,,122.5,60.0,1,1454.5,274.0,0,703.2727272727273,5,4,5,1
+msg_14,node2,node0,316,902904,,,,133.5,2851.5,1,1454.5,274.0,0,703.2727272727273,5,4,5,1
+msg_15,node3,node0,316,903897,,,,1183.0,,1,1454.5,274.0,0,703.2727272727273,5,4,5,1

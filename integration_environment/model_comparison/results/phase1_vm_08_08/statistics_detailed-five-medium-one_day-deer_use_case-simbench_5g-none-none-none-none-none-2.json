@@ -1,0 +1,21 @@
+{
+  "scenario_id": "detailed-five-medium-one_day-deer_use_case-simbench_5g-none-none-none-none-none-2",
+  "execution_start_time": "2025-08-07 17:13:40.123599",
+  "execution_end_time": "2025-08-07 17:23:40.121921",
+  "execution_run_time_s": 599.9983217716217,
+  "timeout_occurred": true,
+  "timeout_limit_s": 600,
+  "timeout_error_message": "Scenario execution exceeded 600 second timeout",
+  "messages_sent": 34,
+  "messages_received": 29,
+  "messages_completed": 29,
+  "memory_statistics": {
+    "initial_memory_mb": 200.64453125,
+    "final_memory_mb": 200.64453125,
+    "peak_memory_mb": 200.64453125,
+    "min_memory_mb": 200.64453125,
+    "avg_memory_mb": 200.64453125,
+    "memory_change_mb": 0.0,
+    "measurements_count": 600
+  }
+}

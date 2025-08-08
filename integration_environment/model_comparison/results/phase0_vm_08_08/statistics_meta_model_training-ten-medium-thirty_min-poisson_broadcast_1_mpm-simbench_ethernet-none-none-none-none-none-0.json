@@ -1,0 +1,21 @@
+{
+  "scenario_id": "meta_model_training-ten-medium-thirty_min-poisson_broadcast_1_mpm-simbench_ethernet-none-none-none-none-none-0",
+  "execution_start_time": "2025-08-06 17:14:13.987552",
+  "execution_end_time": "2025-08-06 17:22:08.806248",
+  "execution_run_time_s": 474.81869554519653,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 177.70703125,
+    "final_memory_mb": 178.6015625,
+    "peak_memory_mb": 178.6015625,
+    "min_memory_mb": 177.70703125,
+    "avg_memory_mb": 178.02576480263158,
+    "memory_change_mb": 0.89453125,
+    "measurements_count": 475
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": false
+  }
+}

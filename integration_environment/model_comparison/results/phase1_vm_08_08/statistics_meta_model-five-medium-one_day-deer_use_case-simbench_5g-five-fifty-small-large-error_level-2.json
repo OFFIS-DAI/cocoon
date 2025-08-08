@@ -1,0 +1,21 @@
+{
+  "scenario_id": "meta_model-five-medium-one_day-deer_use_case-simbench_5g-five-fifty-small-large-error_level-2",
+  "execution_start_time": "2025-08-07 18:17:03.145797",
+  "execution_end_time": "2025-08-07 18:19:21.611932",
+  "execution_run_time_s": 138.46613574028015,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 200.64453125,
+    "final_memory_mb": 200.64453125,
+    "peak_memory_mb": 200.64453125,
+    "min_memory_mb": 200.64453125,
+    "avg_memory_mb": 200.64453125,
+    "memory_change_mb": 0.0,
+    "measurements_count": 139
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": false
+  }
+}
