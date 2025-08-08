@@ -174,8 +174,9 @@ class CocoonNetworkNode:
         # Count simultaneous messages
         num_messages_sent_simultaneously = len([msg for msg in self.messages_sent if msg.time_send_ms == time_ms])
 
-        self.node_state = NodeState(average_incoming_delay_ms, average_outgoing_delay_ms,
-                                    num_messages_sent_simultaneously)
+        self.node_state = NodeState(average_incoming_delay_ms=average_incoming_delay_ms,
+                                    average_outgoing_delay_ms=average_outgoing_delay_ms,
+                                    num_messages_sent_simultaneously=num_messages_sent_simultaneously)
 
         return copy.deepcopy(self.node_state)
 
