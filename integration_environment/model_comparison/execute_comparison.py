@@ -70,8 +70,8 @@ def get_scenario_configurations_for_phase_0():
     existing_configuration_ids = [f.split('.')[0] for f in os.listdir('cocoon_training_data')]
     scenario_configurations = []
     for network in [NetworkModelType.simbench_ethernet, NetworkModelType.simbench_5g]:
-        for payload_size in [PayloadSizeConfig.medium]:
-            for n_devices in [NumDevices.ten]:
+        for payload_size in [PayloadSizeConfig.small, PayloadSizeConfig.medium, PayloadSizeConfig.large]:
+            for n_devices in [NumDevices.five, NumDevices.ten, NumDevices.fifty]:
                 for scenario_duration, traffic_config in get_duration_traffic_list_meta_model_training():
                     config = ScenarioConfiguration(payload_size=payload_size,
                                                    num_devices=n_devices,
@@ -94,7 +94,7 @@ def get_duration_traffic_list_meta_model_training():
         (ScenarioDuration.one_min, TrafficConfig.unicast_1s_delay),
         (ScenarioDuration.thirty_min, TrafficConfig.unicast_5s_delay),
         (ScenarioDuration.thirty_min, TrafficConfig.unicast_10s_delay),
-        (ScenarioDuration.thirty_min, TrafficConfig.deer_use_case)
+        #(ScenarioDuration.thirty_min, TrafficConfig.deer_use_case)
     ]
 
 
@@ -102,7 +102,7 @@ def get_duration_traffic_list_for_screening_design():
     return [
         (ScenarioDuration.one_min, TrafficConfig.cbr_broadcast_1_mps),
         (ScenarioDuration.one_min, TrafficConfig.poisson_broadcast_1_mps),
-        (ScenarioDuration.one_day, TrafficConfig.deer_use_case)
+        #(ScenarioDuration.one_day, TrafficConfig.deer_use_case)
     ]
 
 
