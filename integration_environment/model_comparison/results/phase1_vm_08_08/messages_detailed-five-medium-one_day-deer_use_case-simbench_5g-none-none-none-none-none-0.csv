@@ -1,0 +1,12 @@
+msg_id,sender,receiver,size_B,time_send_ms,time_receive_ms,delay_ms
+node1_planning_data_0,node1,node0,100,300000,300054,54
+node2_planning_data_0,node2,node0,100,300000,300065,65
+node4_planning_data_0,node4,node0,100,300000,300059,59
+node0_fixed_power_0,node0,node1,8,897000,897054,54
+node0_fixed_power_1,node0,node2,8,897000,897076,76
+node0_fixed_power_2,node0,node4,8,897000,897065,65
+node2_infeasible_power_1,node2,node0,100,897076,902624,5548
+node0_power_deviation_request_3,node0,node1,8,902624,902828,204
+node0_power_deviation_request_4,node0,node2,8,902624,902850,226
+node0_power_deviation_request_5,node0,node3,8,902624,903849,1225
+node0_power_deviation_request_6,node0,node4,8,902624,902839,215

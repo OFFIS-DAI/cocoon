@@ -1,0 +1,21 @@
+{
+  "scenario_id": "meta_model_training-ten-medium-one_min-unicast_1s_delay-simbench_5g-none-none-none-none-none-0",
+  "execution_start_time": "2025-08-06 18:26:05.452297",
+  "execution_end_time": "2025-08-06 18:30:19.256263",
+  "execution_run_time_s": 253.80396676063538,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 181.734375,
+    "final_memory_mb": 181.796875,
+    "peak_memory_mb": 181.796875,
+    "min_memory_mb": 181.734375,
+    "avg_memory_mb": 181.75083046259843,
+    "memory_change_mb": 0.0625,
+    "measurements_count": 254
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": false
+  }
+}
