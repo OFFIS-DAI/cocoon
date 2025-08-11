@@ -1,0 +1,21 @@
+{
+  "scenario_id": "meta_model_training-fifty-small-thirty_min-cbr_broadcast_4_mph-simbench_5g-none-none-none-none-none-0",
+  "execution_start_time": "2025-08-09 00:18:12.131611",
+  "execution_end_time": "2025-08-09 00:27:13.438042",
+  "execution_run_time_s": 541.3064312934875,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 201.43359375,
+    "final_memory_mb": 201.43359375,
+    "peak_memory_mb": 201.43359375,
+    "min_memory_mb": 201.43359375,
+    "avg_memory_mb": 201.43359375,
+    "memory_change_mb": 0.0,
+    "measurements_count": 541
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": false
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "scenario_id": "meta_model_training-fifty-medium-one_min-cbr_broadcast_1_mps-simbench_ethernet-none-none-none-none-none-0",
+  "execution_start_time": "2025-08-08 16:34:39.442527",
+  "execution_end_time": "2025-08-08 16:54:39.444022",
+  "execution_run_time_s": 1200.001494884491,
+  "timeout_occurred": true,
+  "timeout_limit_s": 1200,
+  "timeout_error_message": "Scenario execution exceeded 1200 second timeout",
+  "messages_sent": 1764,
+  "messages_received": 1015,
+  "messages_completed": 1015,
+  "memory_statistics": {
+    "initial_memory_mb": 199.03515625,
+    "final_memory_mb": 199.2265625,
+    "peak_memory_mb": 199.2265625,
+    "min_memory_mb": 199.03515625,
+    "avg_memory_mb": 199.06393530360322,
+    "memory_change_mb": 0.19140625,
+    "measurements_count": 1124
+  }
+}

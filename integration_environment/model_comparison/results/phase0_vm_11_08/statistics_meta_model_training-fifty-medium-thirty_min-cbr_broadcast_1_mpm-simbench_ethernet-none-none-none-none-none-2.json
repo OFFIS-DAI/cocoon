@@ -1,0 +1,21 @@
+{
+  "scenario_id": "meta_model_training-fifty-medium-thirty_min-cbr_broadcast_1_mpm-simbench_ethernet-none-none-none-none-none-2",
+  "execution_start_time": "2025-08-10 12:26:25.770252",
+  "execution_end_time": "2025-08-10 12:41:08.581247",
+  "execution_run_time_s": 882.8109948635101,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 190.44921875,
+    "final_memory_mb": 190.44921875,
+    "peak_memory_mb": 190.48046875,
+    "min_memory_mb": 190.44921875,
+    "avg_memory_mb": 190.47569238744074,
+    "memory_change_mb": 0.0,
+    "measurements_count": 844
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": false
+  }
+}

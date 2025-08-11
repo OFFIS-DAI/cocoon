@@ -1,0 +1,17 @@
+msg_id,sender,receiver,size_B,time_send_ms,time_receive_ms,delay_ms
+node0_0,node0,node1,200,1000,1053,53
+node0_1,node0,node2,200,6000,6060,60
+node0_2,node0,node3,200,11000,11083,83
+node1_0,node1,node0,200,11000,11055,55
+node0_3,node0,node4,200,16000,16055,55
+node1_1,node1,node2,200,16000,16056,56
+node1_2,node1,node3,200,21000,21061,61
+node2_0,node2,node0,200,21000,21062,62
+node1_3,node1,node4,200,26000,26049,49
+node2_1,node2,node1,200,26000,26055,55
+node2_2,node2,node3,200,31000,31072,72
+node2_3,node2,node4,200,36000,36055,55
+node4_0,node4,node0,200,41000,44080,3080
+node4_1,node4,node1,200,46000,46058,58
+node4_2,node4,node2,200,51000,51055,55
+node4_3,node4,node3,200,56000,57072,1072

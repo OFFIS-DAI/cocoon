@@ -1,0 +1,4 @@
+msg_id,sender,receiver,size_B,time_send_ms,time_receive_ms,delay_ms
+node4_0,node4,node0,8,900000,900001,1
+node4_1,node4,node1,8,900000,900001,1
+node4_2,node4,node2,8,900000,900001,1

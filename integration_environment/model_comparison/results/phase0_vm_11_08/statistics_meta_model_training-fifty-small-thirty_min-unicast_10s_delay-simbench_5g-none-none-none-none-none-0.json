@@ -1,0 +1,21 @@
+{
+  "scenario_id": "meta_model_training-fifty-small-thirty_min-unicast_10s_delay-simbench_5g-none-none-none-none-none-0",
+  "execution_start_time": "2025-08-09 01:31:37.475218",
+  "execution_end_time": "2025-08-09 01:51:37.348941",
+  "execution_run_time_s": 1199.8737235069275,
+  "timeout_occurred": true,
+  "timeout_limit_s": 1200,
+  "timeout_error_message": "Scenario execution exceeded 1200 second timeout",
+  "messages_sent": 741,
+  "messages_received": 597,
+  "messages_completed": 597,
+  "memory_statistics": {
+    "initial_memory_mb": 201.4375,
+    "final_memory_mb": 201.4375,
+    "peak_memory_mb": 201.4375,
+    "min_memory_mb": 201.4375,
+    "avg_memory_mb": 201.4375,
+    "memory_change_mb": 0.0,
+    "measurements_count": 1199
+  }
+}

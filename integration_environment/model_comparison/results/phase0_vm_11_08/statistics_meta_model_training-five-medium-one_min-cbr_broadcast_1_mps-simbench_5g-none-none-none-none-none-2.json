@@ -1,0 +1,21 @@
+{
+  "scenario_id": "meta_model_training-five-medium-one_min-cbr_broadcast_1_mps-simbench_5g-none-none-none-none-none-2",
+  "execution_start_time": "2025-08-10 21:23:07.294978",
+  "execution_end_time": "2025-08-10 21:28:09.315184",
+  "execution_run_time_s": 302.0202054977417,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 190.47265625,
+    "final_memory_mb": 190.47265625,
+    "peak_memory_mb": 190.50390625,
+    "min_memory_mb": 190.47265625,
+    "avg_memory_mb": 190.4972837334437,
+    "memory_change_mb": 0.0,
+    "measurements_count": 302
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": false
+  }
+}

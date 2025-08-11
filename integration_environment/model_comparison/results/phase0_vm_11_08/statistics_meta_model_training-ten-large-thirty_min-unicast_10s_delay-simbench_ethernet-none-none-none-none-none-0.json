@@ -1,0 +1,21 @@
+{
+  "scenario_id": "meta_model_training-ten-large-thirty_min-unicast_10s_delay-simbench_ethernet-none-none-none-none-none-0",
+  "execution_start_time": "2025-08-08 19:49:33.712988",
+  "execution_end_time": "2025-08-08 19:51:40.133538",
+  "execution_run_time_s": 126.42054986953735,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 201.13671875,
+    "final_memory_mb": 201.3359375,
+    "peak_memory_mb": 201.3359375,
+    "min_memory_mb": 201.13671875,
+    "avg_memory_mb": 201.22087229330708,
+    "memory_change_mb": 0.19921875,
+    "measurements_count": 127
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": false
+  }
+}
