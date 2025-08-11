@@ -368,8 +368,14 @@ class CocoonMetaModel:
         training_df[self.object_variables] = training_df[self.object_variables].fillna(0)
 
         self.training_df = training_df
+
+        # make df smaller for clustering
+        reduced_df = training_df.copy()
+        reduced_df.drop_duplicates(inplace=True)
+        reduced_df = reduced_df.sample(n=1000, random_state=42)
+
         # calculate pairwise distances with squared Euclidean distance metric
-        dis_matrix = pdist(training_df[self.object_variables], metric='seuclidean')
+        dis_matrix = pdist(reduced_df[self.object_variables], metric='seuclidean')
 
         # Calculate linkages with hierarchical clustering (centroid linkage)
         linkage_matrix_centroid = linkage(dis_matrix, method='centroid')  # centroid linkage
@@ -377,14 +383,14 @@ class CocoonMetaModel:
         label_cen = fcluster(linkage_matrix_centroid, t=self.clustering_distance_threshold, criterion='distance')
 
         # Add cluster labels to the dataframe
-        training_df['cluster_cen'] = label_cen.tolist()
+        reduced_df['cluster_cen'] = label_cen.tolist()
 
-        self.compute_cluster_centroids(training_df)
+        self.compute_cluster_centroids(reduced_df)
 
         # Train a regression model for each cluster
-        for cluster_id in training_df['cluster_cen'].unique():
+        for cluster_id in reduced_df['cluster_cen'].unique():
             # Select historical data for the current cluster
-            cluster_data = training_df[training_df['cluster_cen'] == cluster_id]
+            cluster_data = reduced_df[reduced_df['cluster_cen'] == cluster_id]
 
             # Extract features (X) and target (y) for the current cluster
             X = cluster_data[self.model_features]
