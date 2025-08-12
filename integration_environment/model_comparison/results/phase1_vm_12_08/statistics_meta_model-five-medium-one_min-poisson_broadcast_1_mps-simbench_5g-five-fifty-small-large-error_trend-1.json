@@ -1,0 +1,21 @@
+{
+  "scenario_id": "meta_model-five-medium-one_min-poisson_broadcast_1_mps-simbench_5g-five-fifty-small-large-error_trend-1",
+  "execution_start_time": "2025-08-11 17:10:10.546042",
+  "execution_end_time": "2025-08-11 17:15:55.626301",
+  "execution_run_time_s": 345.0802581310272,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 229.4921875,
+    "final_memory_mb": 229.4921875,
+    "peak_memory_mb": 229.4921875,
+    "min_memory_mb": 229.4921875,
+    "avg_memory_mb": 229.4921875,
+    "memory_change_mb": 0.0,
+    "measurements_count": 345
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": false
+  }
+}
