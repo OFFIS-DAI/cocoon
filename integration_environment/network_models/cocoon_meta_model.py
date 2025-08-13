@@ -14,8 +14,7 @@ from scipy.cluster.hierarchy import linkage, fcluster
 from scipy.spatial.distance import pdist
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.base import clone
-from sklearn.model_selection import GridSearchCV
-from sklearn.metrics import mean_squared_error, make_scorer
+from sklearn.ensemble import RandomForestRegressor
 
 logger = logging.getLogger(__name__)
 
@@ -315,6 +314,8 @@ class CocoonMetaModel:
         self.clustering_distance_threshold = cluster_distance_threshold
         self.cluster_centroids = {}  # {cluster_id: centroid_vector}
 
+        self.use_random_forest = True
+
         # DataFrame containing training data for the regressors
         self.training_df = None
         # Dictionary containing all pre-trained regressors on historical data
@@ -395,7 +396,18 @@ class CocoonMetaModel:
             # Extract features (X) and target (y) for the current cluster
             X = cluster_data[self.model_features]
             y = cluster_data['actual_delay_ms']
-            reg = DecisionTreeRegressor(random_state=42)
+            if self.use_random_forest:
+                reg = RandomForestRegressor(
+                    n_estimators=100,  # Number of trees in the forest
+                    max_depth=5,  # Prevent overfitting
+                    min_samples_split=5,  # Minimum samples required to split
+                    min_samples_leaf=2,  # Minimum samples in leaf nodes
+                    max_features='sqrt',  # Number of features to consider for splits
+                    random_state=42,
+                    n_jobs=-1  # Use all available cores
+                )
+            else:
+                reg = DecisionTreeRegressor(random_state=42)
 
             reg.fit(X, y)
 
@@ -497,7 +509,18 @@ class CocoonMetaModel:
                 # Extract features (X) and target (y)
                 X = message_observations_as_df[self.model_features]
                 y = message_observations_as_df['actual_delay_ms']
-                self.online_model = clone(self.model_for_cluster_id[closest_cluster])
+                if self.use_random_forest:
+                    self.online_model = RandomForestRegressor(
+                        n_estimators=50,  # Fewer trees for faster online training
+                        max_depth=8,
+                        min_samples_split=3,
+                        min_samples_leaf=2,
+                        max_features='sqrt',
+                        random_state=42,
+                        n_jobs=-1
+                    )
+                else:
+                    self.online_model = clone(self.model_for_cluster_id[closest_cluster])
                 self.online_model.fit(X, y)
 
         # Make online prediction if model exists
@@ -833,7 +856,9 @@ class CocoonMetaModel:
                 'time_send_ms': msg_obs.time_send_ms,
                 'time_receive_ms': msg_obs.time_receive_ms if msg_obs.time_receive_ms != math.inf else None,
                 'actual_delay_ms': msg_obs.actual_delay_ms if msg_obs.actual_delay_ms != math.inf else None,
-                'predicted_delay_ms': msg_obs.weighted_predicted_delay_ms if msg_obs.weighted_predicted_delay_ms != math.inf else None
+                'online_predicted_delay_ms': msg_obs.online_predicted_delay_ms if msg_obs.online_predicted_delay_ms != math.inf else None,
+                'cluster_predicted_delay_ms': msg_obs.cluster_predicted_delay_ms if msg_obs.cluster_predicted_delay_ms != math.inf else None,
+                'weighted_predicted_delay_ms': msg_obs.weighted_predicted_delay_ms if msg_obs.weighted_predicted_delay_ms != math.inf else None
             }
             obs_dict.update(msg_obs.sender_node_state.get_as_sender_node_dict())
             obs_dict.update(msg_obs.receiver_node_state.get_as_receiver_node_dict())
@@ -853,7 +878,9 @@ class CocoonMetaModel:
                 'time_send_ms': msg_obs.time_send_ms,
                 'time_receive_ms': msg_obs.time_receive_ms if msg_obs.time_receive_ms != math.inf else None,
                 'actual_delay_ms': msg_obs.actual_delay_ms if msg_obs.actual_delay_ms != math.inf else None,
-                'predicted_delay_ms': msg_obs.weighted_predicted_delay_ms if msg_obs.weighted_predicted_delay_ms != math.inf else None
+                'online_predicted_delay_ms': msg_obs.online_predicted_delay_ms if msg_obs.online_predicted_delay_ms != math.inf else None,
+                'cluster_predicted_delay_ms': msg_obs.cluster_predicted_delay_ms if msg_obs.cluster_predicted_delay_ms != math.inf else None,
+                'weighted_predicted_delay_ms': msg_obs.weighted_predicted_delay_ms if msg_obs.weighted_predicted_delay_ms != math.inf else None
             }
             obs_dict.update(msg_obs.sender_node_state.get_as_sender_node_dict())
             obs_dict.update(msg_obs.receiver_node_state.get_as_receiver_node_dict())
