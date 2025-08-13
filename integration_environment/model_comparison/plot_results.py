@@ -73,10 +73,14 @@ def plot_model_comparison(df: pd.DataFrame, response: str, fig_name: str):
 # --- Phase 1: Main Effects ---
 df_main = load_results(phase=1)
 for response, fig_name in [
-                           ('execution_time_s', 'execution_time'),
-                           ('substitution_message_index', 'substitution_message_index'),
-                           ('substitution_occurred', 'substitution_occurred')
-                           ]:
+    ('mean_in_one_sigma_interval', 'mean_in_one_sigma_interval'),
+    ('nrmse_mean', 'nrmse_mean'),
+    ('nrmse_std', 'nrmse_std'),
+    ('execution_time_s', 'execution_time'),
+    ('substitution_message_index', 'substitution_message_index'),
+    ('substitution_occurred', 'substitution_occurred'),
+    ('score', 'score')
+]:
     plot_main_effects(df_main.copy(), response=response, fig_name=f"phase1_main_effects_{fig_name}.png")
 
 # --- Phase 2: Model Comparison ---
