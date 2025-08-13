@@ -1,5 +1,0 @@
-msg_id,sender,receiver,size_B,time_send_ms,time_receive_ms,delay_ms
-node4_0,node4,node0,200,900000,900053,53
-node4_1,node4,node1,200,900000,900059,59
-node4_2,node4,node2,200,900000,900070,70
-node4_3,node4,node3,200,900000,900081,81
