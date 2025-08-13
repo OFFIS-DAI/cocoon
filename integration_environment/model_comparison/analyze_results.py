@@ -23,6 +23,11 @@ class EvaluationResult:
     scenario_config: ScenarioConfiguration
     model_type: ModelType
 
+    # data properties
+    mean: Optional[float]
+    std: Optional[float]
+    mean_message_cv: Optional[float]
+
     # accuracy metrics
     nrmse_mean: Optional[float]
     nrmse_std: Optional[float]
@@ -190,6 +195,40 @@ def calculate_metrics_grouped(detailed_dfs: List[pd.DataFrame], model_dfs: List[
     return nrmse_means, nrmse_std, np.mean(means_in_sigma_interval)
 
 
+def calculate_delay_statistics(dataframes: List[pd.DataFrame]) -> Tuple[float, float, float]:
+    """Calculate mean, std, and mean coefficient of variation across all messages in all runs."""
+    # Overall statistics across all messages
+    all_delays = []
+    for df in dataframes:
+        all_delays.extend(df['delay_ms'].tolist())
+
+    all_delays = np.array(all_delays)
+    mean_delay = np.mean(all_delays)
+    std_delay = np.std(all_delays)
+
+    # Per-message coefficient of variation
+    message_delays = {}
+    for df in dataframes:
+        indexed = df.set_index(['msg_id', 'sender', 'receiver'])['delay_ms']
+        for msg_key, delay in indexed.items():
+            if msg_key not in message_delays:
+                message_delays[msg_key] = []
+            message_delays[msg_key].append(delay)
+
+    # Calculate CV for each message and take mean
+    cvs = []
+    for msg_key, delays in message_delays.items():
+        delays = np.array(delays)
+        msg_mean = np.mean(delays)
+        msg_std = np.std(delays)
+        if msg_mean > 0:
+            cvs.append(msg_std / msg_mean)
+
+    mean_cv = np.mean(cvs) if cvs else 0
+
+    return mean_delay, std_delay, mean_cv
+
+
 def analyze_results(results_folder: str) -> List[EvaluationResult]:
     """
     Analyze all simulation results in the given folder.
@@ -303,6 +342,9 @@ def analyze_results(results_folder: str) -> List[EvaluationResult]:
             execution_times = group_data['execution_times']
             substitution_data = group_data['substitution_data']
 
+            # Calculate delay statistics for all scenarios
+            mean_delay, std_delay, cv = calculate_delay_statistics(dataframes)
+
             if config.model_type == ModelType.detailed:
                 mean_execution_time = float(np.mean(execution_times))
 
@@ -314,6 +356,9 @@ def analyze_results(results_folder: str) -> List[EvaluationResult]:
                 result = EvaluationResult(
                     scenario_config=config,
                     model_type=config.model_type,
+                    mean=mean_delay,
+                    std=std_delay,
+                    mean_message_cv=cv,
                     nrmse_mean=None,  # No RMSE for baseline
                     nrmse_std=None,  # No MAE for baseline
                     mean_in_sigma_interval=None,
@@ -342,6 +387,9 @@ def analyze_results(results_folder: str) -> List[EvaluationResult]:
                 result = EvaluationResult(
                     scenario_config=config,
                     model_type=config.model_type,
+                    mean=mean_delay,
+                    std=std_delay,
+                    mean_message_cv=cv,
                     nrmse_mean=nrmse_means,
                     nrmse_std=nrmse_std,
                     mean_in_sigma_interval=mean_in_one_sigma_interval,
@@ -384,6 +432,11 @@ def save_evaluation_results_to_csv(
             # Basic identifiers
             'scenario_id': result.scenario_config.scenario_id,
             'model_type': result.model_type.value,
+
+            # Data properties
+            'mean': result.mean,
+            'std': result.std,
+            'mean_message_cv': result.mean_message_cv,
 
             # Accuracy metrics
             'nrmse_mean': result.nrmse_mean,
