@@ -120,22 +120,47 @@ def find_matching_detailed_simulations(config: ScenarioConfiguration, detailed_r
             return matching_results
 
 
-def calculate_metrics_grouped(detailed_dfs: List[pd.DataFrame], model_dfs: List[pd.DataFrame]) -> Tuple[
+def find_matching_ideal_simulations(config: ScenarioConfiguration, ideal_results: Dict[str, pd.DataFrame]) -> \
+        List[pd.DataFrame]:
+    """Find the ideal simulation result that matches the given configuration."""
+    # Create an ideal version of the config
+    ideal_config = ScenarioConfiguration(
+        payload_size=config.payload_size,
+        num_devices=config.num_devices,
+        model_type=ModelType.ideal,
+        scenario_duration=config.scenario_duration,
+        traffic_configuration=config.traffic_configuration,
+        network_type=NetworkModelType.none  # Ideal simulations use 'none' network type
+    )
+    matching_results = []
+    run = 0
+    while True:
+        ideal_config.run = run
+        ideal_scenario_id = ideal_config.scenario_id
+        ideal_result = ideal_results.get(ideal_scenario_id)
+        if ideal_result is not None:
+            matching_results.append(ideal_result)
+            run += 1
+        else:
+            return matching_results
+
+
+def calculate_metrics_grouped(baseline_dfs: List[pd.DataFrame], model_dfs: List[pd.DataFrame]) -> Tuple[
     float, float, float]:
-    if len(detailed_dfs) != len(model_dfs):
-        raise ValueError(f"Mismatch in number of runs: {len(detailed_dfs)} detailed vs {len(model_dfs)} model")
+    if len(baseline_dfs) != len(model_dfs):
+        raise ValueError(f"Mismatch in number of runs: {len(baseline_dfs)} baseline vs {len(model_dfs)} model")
 
     # Collect delays for each message across all runs
-    detailed_delays_by_message = {}
+    baseline_delays_by_message = {}
     model_delays_by_message = {}
 
-    for detailed_df, model_df in zip(detailed_dfs, model_dfs):
-        # Process detailed simulation
-        detailed_indexed = detailed_df.set_index(['msg_id', 'sender', 'receiver'])['delay_ms']
-        for msg_key, delay in detailed_indexed.items():
-            if msg_key not in detailed_delays_by_message:
-                detailed_delays_by_message[msg_key] = []
-            detailed_delays_by_message[msg_key].append(delay)
+    for baseline_df, model_df in zip(baseline_dfs, model_dfs):
+        # Process baseline simulation
+        baseline_indexed = baseline_df.set_index(['msg_id', 'sender', 'receiver'])['delay_ms']
+        for msg_key, delay in baseline_indexed.items():
+            if msg_key not in baseline_delays_by_message:
+                baseline_delays_by_message[msg_key] = []
+            baseline_delays_by_message[msg_key].append(delay)
 
         # Process model simulation
         model_indexed = model_df.set_index(['msg_id', 'sender', 'receiver'])['delay_ms']
@@ -144,56 +169,56 @@ def calculate_metrics_grouped(detailed_dfs: List[pd.DataFrame], model_dfs: List[
                 model_delays_by_message[msg_key] = []
             model_delays_by_message[msg_key].append(delay)
 
-    # Find common messages across both detailed and model simulations
-    common_messages = set(detailed_delays_by_message.keys()).intersection(set(model_delays_by_message.keys()))
+    # Find common messages across both baseline and model simulations
+    common_messages = set(baseline_delays_by_message.keys()).intersection(set(model_delays_by_message.keys()))
 
     if len(common_messages) == 0:
-        raise ValueError("No common messages found between detailed and model simulations across all runs")
+        raise ValueError("No common messages found between baseline and model simulations across all runs")
 
     # Calculate mean delay for each message across runs
-    detailed_mean_delays = []
+    baseline_mean_delays = []
     model_mean_delays = []
 
-    detailed_std_delays = []
+    baseline_std_delays = []
     model_std_delays = []
 
     means_in_sigma_interval = []
 
     for msg_key in common_messages:
         # calculate mean value of same messages
-        detailed_mean = np.mean(detailed_delays_by_message[msg_key])
+        baseline_mean = np.mean(baseline_delays_by_message[msg_key])
         model_mean = np.mean(model_delays_by_message[msg_key])
-        detailed_mean_delays.append(detailed_mean)
+        baseline_mean_delays.append(baseline_mean)
         model_mean_delays.append(model_mean)
 
         # calculate std value of same messages
-        detailed_std = np.std(detailed_delays_by_message[msg_key])
+        baseline_std = np.std(baseline_delays_by_message[msg_key])
         model_std = np.std(model_delays_by_message[msg_key])
-        detailed_std_delays.append(detailed_std)
+        baseline_std_delays.append(baseline_std)
         model_std_delays.append(model_std)
 
         # calculate the one-sigma-interval
-        interval_lower = detailed_mean - abs(detailed_std)
-        interval_upper = detailed_mean + abs(detailed_std)
+        interval_lower = baseline_mean - abs(baseline_std)
+        interval_upper = baseline_mean + abs(baseline_std)
         messages_in_interval = [interval_lower <= m <= interval_upper for m in model_delays_by_message[msg_key]]
         mean_in_interval = np.mean(messages_in_interval)
         means_in_sigma_interval.append(mean_in_interval)
 
     # Convert to numpy arrays for calculations
-    detailed_mean_delays = np.array(detailed_mean_delays)
+    baseline_mean_delays = np.array(baseline_mean_delays)
     model_mean_delays = np.array(model_mean_delays)
-    detailed_std_delays = np.array(detailed_std_delays)
+    baseline_std_delays = np.array(baseline_std_delays)
     model_std_delays = np.array(model_std_delays)
 
     # Calculate RMSE and MAE between the mean delays
-    differences = model_mean_delays - detailed_mean_delays
+    differences = model_mean_delays - baseline_mean_delays
     rmse_means = np.sqrt(np.mean(differences ** 2))
-    nrmse_means = rmse_means / np.mean(detailed_mean_delays)
+    nrmse_means = rmse_means / np.mean(baseline_mean_delays) if np.mean(baseline_mean_delays) > 0 else float('inf')
 
-    # Calculate RMSE and MAE between the mean delays
-    differences_std = model_std_delays - detailed_std_delays
+    # Calculate RMSE and MAE between the std delays
+    differences_std = model_std_delays - baseline_std_delays
     rmse_std = np.sqrt(np.mean(differences_std ** 2))
-    nrmse_std = rmse_std / np.mean(detailed_std_delays)
+    nrmse_std = rmse_std / np.mean(baseline_std_delays) if np.mean(baseline_std_delays) > 0 else float('inf')
 
     return nrmse_means, nrmse_std, np.mean(means_in_sigma_interval)
 
@@ -239,8 +264,8 @@ def calculate_hyperparameter_scores(evaluation_results: List[EvaluationResult]) 
     Score = (n-idx(nrmse_mean) + n-idx(nrmse_std) + idx(intv) + n-idx(execution_time)) * (substitution success)
     """
     # Filter for meta-model results with valid metrics
-    metamodel_results = [r for r in evaluation_results if r.model_type == ModelType.meta_model]
-    valid_results = [r for r in metamodel_results if
+    meta_model_results = [r for r in evaluation_results if r.model_type == ModelType.meta_model]
+    valid_results = [r for r in meta_model_results if
                      r.nrmse_mean is not None and r.nrmse_std is not None and
                      r.mean_in_sigma_interval is not None and r.execution_time_s is not None]
 
@@ -300,7 +325,6 @@ def analyze_results(results_folder: str) -> List[EvaluationResult]:
 
     Args:
         results_folder: Path to folder containing CSV result files and JSON statistics files
-        output_file: Optional path to save detailed results CSV
 
     Returns:
         List of EvaluationResult objects
@@ -319,6 +343,7 @@ def analyze_results(results_folder: str) -> List[EvaluationResult]:
     # Load all simulation data and performance data
     all_results = {}
     detailed_results = {}
+    ideal_results = {}
     execution_runtime_data = {}
     substitution_occurred_data = {}
     substitution_message_index_data = {}
@@ -339,6 +364,10 @@ def analyze_results(results_folder: str) -> List[EvaluationResult]:
         # Store detailed simulations separately
         if config.model_type == ModelType.detailed:
             detailed_results[scenario_id] = df
+
+        # Store ideal simulations separately
+        elif config.model_type == ModelType.ideal:
+            ideal_results[scenario_id] = df
 
     # Load JSON files (performance and substitution data)
     for json_file in json_files:
@@ -410,7 +439,7 @@ def analyze_results(results_folder: str) -> List[EvaluationResult]:
             # Calculate delay statistics for all scenarios
             mean_delay, std_delay, cv = calculate_delay_statistics(dataframes)
 
-            if config.model_type == ModelType.detailed:
+            if config.model_type in [ModelType.detailed, ModelType.ideal]:
                 mean_execution_time = float(np.mean(execution_times))
 
                 # For substitution data, use the first run's data (or aggregate as needed)
@@ -424,8 +453,8 @@ def analyze_results(results_folder: str) -> List[EvaluationResult]:
                     mean=mean_delay,
                     std=std_delay,
                     mean_message_cv=cv,
-                    nrmse_mean=None,  # No RMSE for baseline
-                    nrmse_std=None,  # No MAE for baseline
+                    nrmse_mean=None,  # No RMSE for baseline models
+                    nrmse_std=None,  # No MAE for baseline models
                     mean_in_sigma_interval=None,
                     execution_time_s=mean_execution_time,
                     substitution_occurred=substitution_occurred,
@@ -433,14 +462,22 @@ def analyze_results(results_folder: str) -> List[EvaluationResult]:
                 )
 
             else:
-                # For non-detailed simulations, find matching detailed simulations and calculate accuracy metrics
-                detailed_dfs = find_matching_detailed_simulations(config, detailed_results)
-                if len(detailed_dfs) == 0:
-                    print(f"Warning: No matching detailed simulation found for {base_scenario_id}")
+                # For other model types, find matching baseline simulations and calculate accuracy metrics
+                # First try to find detailed simulations as baseline
+                baseline_dfs = find_matching_detailed_simulations(config, detailed_results)
+                baseline_type = "detailed"
+
+                # If no detailed simulations found, try ideal simulations
+                if len(baseline_dfs) == 0:
+                    baseline_dfs = find_matching_ideal_simulations(config, ideal_results)
+                    baseline_type = "ideal"
+
+                if len(baseline_dfs) == 0:
+                    print(f"Warning: No matching baseline simulation found for {base_scenario_id}")
                     continue
 
                 # Calculate overall metrics across all runs
-                nrmse_means, nrmse_std, mean_in_one_sigma_interval = calculate_metrics_grouped(detailed_dfs, dataframes)
+                nrmse_means, nrmse_std, mean_in_one_sigma_interval = calculate_metrics_grouped(baseline_dfs, dataframes)
 
                 mean_execution_time = float(np.mean(execution_times))
 
@@ -595,12 +632,15 @@ if __name__ == "__main__":
 
     print(f"Analysis complete. Processed {len(results)} scenarios.")
 
-    # Print some basic statistics
-    detailed_count = sum(1 for r in results if r.model_type.value == 'detailed')
-    model_count = len(results) - detailed_count
+    # Print basic statistics
+    model_counts = {}
+    for r in results:
+        model_type = r.model_type.value
+        model_counts[model_type] = model_counts.get(model_type, 0) + 1
 
-    print(f"- {detailed_count} detailed simulations (baseline)")
-    print(f"- {model_count} model simulations")
+    print(f"\nModel distribution:")
+    for model_type, count in model_counts.items():
+        print(f"- {count} {model_type} simulations")
 
     if phase == 1:
         # Print top scoring hyperparameter configurations
