@@ -1,0 +1,21 @@
+{
+  "scenario_id": "ideal-fifty-small-one_min-poisson_broadcast_1_mps-none-none-none-none-none-none-0",
+  "execution_start_time": "2025-08-14 10:07:37.697574",
+  "execution_end_time": "2025-08-14 10:07:44.560185",
+  "execution_run_time_s": 6.862611532211304,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 184.89453125,
+    "final_memory_mb": 186.09375,
+    "peak_memory_mb": 186.09375,
+    "min_memory_mb": 184.89453125,
+    "avg_memory_mb": 185.1875,
+    "memory_change_mb": 1.19921875,
+    "measurements_count": 7
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": false
+  }
+}

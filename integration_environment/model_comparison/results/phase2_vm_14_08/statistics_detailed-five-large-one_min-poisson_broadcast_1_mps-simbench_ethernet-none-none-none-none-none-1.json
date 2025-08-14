@@ -1,0 +1,21 @@
+{
+  "scenario_id": "detailed-five-large-one_min-poisson_broadcast_1_mps-simbench_ethernet-none-none-none-none-none-1",
+  "execution_start_time": "2025-08-14 12:48:02.178108",
+  "execution_end_time": "2025-08-14 12:55:55.156570",
+  "execution_run_time_s": 472.97846269607544,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 242.32421875,
+    "final_memory_mb": 242.31640625,
+    "peak_memory_mb": 242.32421875,
+    "min_memory_mb": 242.31640625,
+    "avg_memory_mb": 242.3216421115222,
+    "memory_change_mb": -0.0078125,
+    "measurements_count": 473
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": false
+  }
+}
