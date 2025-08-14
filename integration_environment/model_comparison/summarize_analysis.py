@@ -27,12 +27,12 @@ def analyze_general_properties(df: pd.DataFrame):
     print("=" * 60)
 
     total_scenarios = len(df)
-    detailed_count = len(df[df['model_type'] == 'detailed'])
-    metamodel_count = len(df[df['model_type'] == 'meta_model'])
+    model_counts = df['model_type'].value_counts()
 
     print(f"Total scenarios: {total_scenarios}")
-    print(f"Detailed simulations: {detailed_count}")
-    print(f"Meta-model simulations: {metamodel_count}")
+    print("Model type distribution:")
+    for model_type, count in model_counts.items():
+        print(f"  {model_type}: {count}")
     print()
 
     # Traffic configurations
@@ -45,12 +45,14 @@ def analyze_general_properties(df: pd.DataFrame):
 
 
 def analyze_delay_by_traffic(df: pd.DataFrame):
-    """Analyze mean and std delay values by traffic configuration."""
+    """Analyze mean and std delay values by traffic configuration and network type."""
     print("=" * 60)
-    print("MEAN AND STD DELAY VALUES BY TRAFFIC CONFIG")
+    print("MEAN AND STD DELAY VALUES BY TRAFFIC CONFIG AND NETWORK TYPE")
     print("=" * 60)
 
-    for model_type in ['detailed', 'meta_model']:
+    model_types = df['model_type'].unique()
+
+    for model_type in sorted(model_types):
         print(f"\n{model_type.upper()} SIMULATIONS:")
         model_df = df[df['model_type'] == model_type]
 
@@ -58,22 +60,33 @@ def analyze_delay_by_traffic(df: pd.DataFrame):
             print(f"  No {model_type} simulations found")
             continue
 
-        traffic_stats = model_df.groupby('traffic_config_clean').agg({
+        # Filter out rows where mean is NaN
+        valid_model_df = model_df[model_df['mean'].notna()]
+        if len(valid_model_df) == 0:
+            print(f"  No valid delay data for {model_type} simulations")
+            continue
+
+        # Group by both traffic config and network type
+        traffic_network_stats = valid_model_df.groupby(['traffic_config_clean', 'network_type']).agg({
             'mean': ['mean', 'std', 'min', 'max'],
             'std': ['mean', 'std', 'min', 'max']
         }).round(2)
 
-        print(f"{'Traffic Config':<30} {'Mean Delay':<15} {'Std Delay':<15}")
-        print(f"{'':^30} {'Avg±Std':<15} {'Avg±Std':<15}")
-        print("-" * 65)
+        print(f"{'Traffic Config':<30} {'Network Type':<20} {'Mean Delay':<15} {'Std Delay':<15}")
+        print(f"{'':^30} {'':^20} {'Avg±Std':<15} {'Avg±Std':<15}")
+        print("-" * 85)
 
-        for traffic in traffic_stats.index:
-            mean_avg = traffic_stats.loc[traffic, ('mean', 'mean')]
-            mean_std = traffic_stats.loc[traffic, ('mean', 'std')]
-            std_avg = traffic_stats.loc[traffic, ('std', 'mean')]
-            std_std = traffic_stats.loc[traffic, ('std', 'std')]
+        for (traffic, network), stats in traffic_network_stats.iterrows():
+            mean_avg = stats[('mean', 'mean')]
+            mean_std = stats[('mean', 'std')]
+            std_avg = stats[('std', 'mean')]
+            std_std = stats[('std', 'std')]
 
-            print(f"{traffic:<30} {mean_avg:.1f}±{mean_std:.1f}{'ms':<8} {std_avg:.1f}±{std_std:.1f}ms")
+            # Clean network type name for display
+            network_clean = str(network).replace('NetworkModelType.', '')
+
+            print(
+                f"{traffic:<30} {network_clean:<20} {mean_avg:.1f}±{mean_std:.1f}{'ms':<8} {std_avg:.1f}±{std_std:.1f}ms")
     print()
 
 
@@ -83,36 +96,31 @@ def analyze_variation_properties(df: pd.DataFrame):
     print("VARIATION PROPERTIES")
     print("=" * 60)
 
-    print("MEAN CV OF DETAILED SIMULATIONS (by traffic config):")
-    detailed_df = df[df['model_type'] == 'detailed']
+    model_types = df['model_type'].unique()
 
-    if len(detailed_df) > 0:
-        detailed_cv_stats = detailed_df.groupby('traffic_config_clean')['mean_message_cv'].agg([
+    for model_type in sorted(model_types):
+        print(f"\nMEAN CV OF {model_type.upper()} SIMULATIONS (by traffic config):")
+        model_df = df[df['model_type'] == model_type]
+
+        if len(model_df) == 0:
+            print(f"  No {model_type} simulations found")
+            continue
+
+        # Filter out rows where mean_message_cv is NaN
+        valid_model_df = model_df[model_df['mean_message_cv'].notna()]
+        if len(valid_model_df) == 0:
+            print(f"  No valid CV data for {model_type} simulations")
+            continue
+
+        cv_stats = valid_model_df.groupby('traffic_config_clean')['mean_message_cv'].agg([
             'mean', 'std', 'min', 'max'
         ]).round(6)
 
         print(f"{'Traffic Config':<30} {'Mean CV':<20}")
         print("-" * 55)
-        for traffic in detailed_cv_stats.index:
-            cv_mean = detailed_cv_stats.loc[traffic, 'mean']
-            cv_std = detailed_cv_stats.loc[traffic, 'std']
-            print(f"{traffic:<30} {cv_mean:.6f}±{cv_std:.6f}")
-    else:
-        print("  No detailed simulations found")
-
-    print("\nMEAN CV OF META-MODEL SIMULATIONS (by traffic config):")
-    metamodel_df = df[df['model_type'] == 'meta_model']
-
-    if len(metamodel_df) > 0:
-        metamodel_cv_stats = metamodel_df.groupby('traffic_config_clean')['mean_message_cv'].agg([
-            'mean', 'std', 'min', 'max'
-        ]).round(6)
-
-        print(f"{'Traffic Config':<30} {'Mean CV':<20}")
-        print("-" * 55)
-        for traffic in metamodel_cv_stats.index:
-            cv_mean = metamodel_cv_stats.loc[traffic, 'mean']
-            cv_std = metamodel_cv_stats.loc[traffic, 'std']
+        for traffic in cv_stats.index:
+            cv_mean = cv_stats.loc[traffic, 'mean']
+            cv_std = cv_stats.loc[traffic, 'std']
             print(f"{traffic:<30} {cv_mean:.6f}±{cv_std:.6f}")
     print()
 
@@ -171,52 +179,52 @@ def analyze_metamodel_properties(df: pd.DataFrame):
 
 
 def analyze_accuracy_comparison(df: pd.DataFrame):
-    """Analyze accuracy comparison metrics."""
+    """Analyze accuracy comparison metrics for all approximation models."""
     print("=" * 60)
     print("ACCURACY COMPARISON")
     print("=" * 60)
 
-    metamodel_df = df[df['model_type'] == 'meta_model']
+    # Find all models that have accuracy metrics (non-baseline models)
+    approximation_models = df[df['nrmse_mean'].notna()]
 
-    # Filter for valid accuracy data
-    valid_accuracy = metamodel_df[
-        metamodel_df['nrmse_mean'].notna() &
-        metamodel_df['mean_in_one_sigma_interval'].notna()
-        ]
-
-    if len(valid_accuracy) == 0:
+    if len(approximation_models) == 0:
         print("No valid accuracy data found")
         return
 
-    print("NRMSE VALUES BY TRAFFIC CONFIG:")
-    print(f"{'Traffic Config':<30} {'NRMSE Mean':<15} {'NRMSE Std':<15}")
-    print("-" * 65)
+    model_types = approximation_models['model_type'].unique()
 
-    nrmse_stats = valid_accuracy.groupby('traffic_config_clean').agg({
-        'nrmse_mean': ['mean', 'std', 'min', 'max'],
-        'nrmse_std': ['mean', 'std', 'min', 'max']
-    }).round(4)
+    for model_type in sorted(model_types):
+        model_df = approximation_models[approximation_models['model_type'] == model_type]
 
-    for traffic in nrmse_stats.index:
-        nrmse_mean_avg = nrmse_stats.loc[traffic, ('nrmse_mean', 'mean')]
-        nrmse_mean_std = nrmse_stats.loc[traffic, ('nrmse_mean', 'std')]
-        nrmse_std_avg = nrmse_stats.loc[traffic, ('nrmse_std', 'mean')]
-        nrmse_std_std = nrmse_stats.loc[traffic, ('nrmse_std', 'std')]
+        print(f"\n{model_type.upper()} - NRMSE VALUES BY TRAFFIC CONFIG:")
+        print(f"{'Traffic Config':<30} {'NRMSE Mean':<15} {'NRMSE Std':<15}")
+        print("-" * 65)
 
-        print(f"{traffic:<30} {nrmse_mean_avg:.4f}±{nrmse_mean_std:.4f}   {nrmse_std_avg:.4f}±{nrmse_std_std:.4f}")
+        nrmse_stats = model_df.groupby('traffic_config_clean').agg({
+            'nrmse_mean': ['mean', 'std', 'min', 'max'],
+            'nrmse_std': ['mean', 'std', 'min', 'max']
+        }).round(4)
 
-    print("\nMEAN-IN-ONE-SIGMA VALUES BY TRAFFIC CONFIG:")
-    print(f"{'Traffic Config':<30} {'Reliability %':<15}")
-    print("-" * 50)
+        for traffic in nrmse_stats.index:
+            nrmse_mean_avg = nrmse_stats.loc[traffic, ('nrmse_mean', 'mean')]
+            nrmse_mean_std = nrmse_stats.loc[traffic, ('nrmse_mean', 'std')]
+            nrmse_std_avg = nrmse_stats.loc[traffic, ('nrmse_std', 'mean')]
+            nrmse_std_std = nrmse_stats.loc[traffic, ('nrmse_std', 'std')]
 
-    sigma_stats = valid_accuracy.groupby('traffic_config_clean')['mean_in_one_sigma_interval'].agg([
-        'mean', 'std', 'min', 'max'
-    ]).round(4)
+            print(f"{traffic:<30} {nrmse_mean_avg:.4f}±{nrmse_mean_std:.4f}   {nrmse_std_avg:.4f}±{nrmse_std_std:.4f}")
 
-    for traffic in sigma_stats.index:
-        sigma_mean = sigma_stats.loc[traffic, 'mean'] * 100
-        sigma_std = sigma_stats.loc[traffic, 'std'] * 100
-        print(f"{traffic:<30} {sigma_mean:.1f}±{sigma_std:.1f}%")
+        print(f"\n{model_type.upper()} - MEAN-IN-ONE-SIGMA VALUES BY TRAFFIC CONFIG:")
+        print(f"{'Traffic Config':<30} {'Reliability %':<15}")
+        print("-" * 50)
+
+        sigma_stats = model_df.groupby('traffic_config_clean')['mean_in_one_sigma_interval'].agg([
+            'mean', 'std', 'min', 'max'
+        ]).round(4)
+
+        for traffic in sigma_stats.index:
+            sigma_mean = sigma_stats.loc[traffic, 'mean'] * 100
+            sigma_std = sigma_stats.loc[traffic, 'std'] * 100
+            print(f"{traffic:<30} {sigma_mean:.1f}±{sigma_std:.1f}%")
     print()
 
 
@@ -226,42 +234,28 @@ def analyze_variability_vs_accuracy(df: pd.DataFrame):
     print("DEPENDENCY: VARIABILITY OF DELAYS VS. PREDICTION ACCURACY")
     print("=" * 60)
 
-    metamodel_df = df[df['model_type'] == 'meta_model']
-    valid_data = metamodel_df[
-        metamodel_df['nrmse_mean'].notna() &
-        metamodel_df['mean_message_cv'].notna()
-        ]
+    # Analyze for each approximation model type
+    approximation_models = df[df['nrmse_mean'].notna()]
+    model_types = approximation_models['model_type'].unique()
 
-    if len(valid_data) == 0:
-        print("No valid data for correlation analysis")
-        return
+    for model_type in sorted(model_types):
+        print(f"\n{model_type.upper()} MODEL:")
+        model_df = approximation_models[approximation_models['model_type'] == model_type]
+        valid_data = model_df[
+            model_df['nrmse_mean'].notna() &
+            model_df['mean_message_cv'].notna()
+            ]
 
-    # Calculate correlation
-    cv_nrmse_corr = valid_data['mean_message_cv'].corr(valid_data['nrmse_mean'])
-    cv_reliability_corr = valid_data['mean_message_cv'].corr(valid_data['mean_in_one_sigma_interval'])
+        if len(valid_data) == 0:
+            print("  No valid data for correlation analysis")
+            continue
 
-    print(f"Correlation between Message CV and NRMSE Mean: {cv_nrmse_corr:.4f}")
-    print(f"Correlation between Message CV and Reliability: {cv_reliability_corr:.4f}")
+        # Calculate correlation
+        cv_nrmse_corr = valid_data['mean_message_cv'].corr(valid_data['nrmse_mean'])
+        cv_reliability_corr = valid_data['mean_message_cv'].corr(valid_data['mean_in_one_sigma_interval'])
 
-    # Binned analysis
-    print("\nBINNED ANALYSIS (by CV quartiles):")
-    valid_data['cv_quartile'] = pd.qcut(valid_data['mean_message_cv'], 4, labels=['Q1', 'Q2', 'Q3', 'Q4'])
-
-    quartile_stats = valid_data.groupby('cv_quartile').agg({
-        'mean_message_cv': ['mean', 'std'],
-        'nrmse_mean': ['mean', 'std'],
-        'mean_in_one_sigma_interval': ['mean', 'std']
-    }).round(4)
-
-    print(f"{'Quartile':<10} {'CV Range':<15} {'NRMSE Mean':<15} {'Reliability %':<15}")
-    print("-" * 60)
-
-    for quartile in quartile_stats.index:
-        cv_mean = quartile_stats.loc[quartile, ('mean_message_cv', 'mean')]
-        nrmse_mean = quartile_stats.loc[quartile, ('nrmse_mean', 'mean')]
-        reliability = quartile_stats.loc[quartile, ('mean_in_one_sigma_interval', 'mean')] * 100
-
-        print(f"{quartile:<10} {cv_mean:.6f}      {nrmse_mean:.4f}        {reliability:.1f}%")
+        print(f"  Correlation between Message CV and NRMSE Mean: {cv_nrmse_corr:.4f}")
+        print(f"  Correlation between Message CV and Reliability: {cv_reliability_corr:.4f}")
     print()
 
 
@@ -344,74 +338,83 @@ def analyze_best_hyperparameters(df: pd.DataFrame):
 
 
 def analyze_performance_comparison(df: pd.DataFrame):
-    """Analyze performance comparison between detailed and meta-model with substitution."""
+    """Analyze performance comparison between all model types."""
     print("=" * 60)
     print("PERFORMANCE COMPARISON")
     print("=" * 60)
 
-    detailed_df = df[df['model_type'] == 'detailed']
-    metamodel_df = df[df['model_type'] == 'meta_model']
-
-    # Meta-model scenarios with substitution
-    substitution_df = metamodel_df[
-        (metamodel_df['substitution_occurred'] == True) |
-        (metamodel_df['substitution_occurred'] == 'True')
-        ]
+    model_types = df['model_type'].unique()
+    baseline_models = ['detailed', 'ideal']
+    approximation_models = [m for m in model_types if m not in baseline_models]
 
     print("EXECUTION TIMES:")
-    print(f"{'Scenario Type':<30} {'Count':<8} {'Mean Time (s)':<15} {'Std Time (s)':<15}")
+    print(f"{'Model Type':<30} {'Count':<8} {'Mean Time (s)':<15} {'Std Time (s)':<15}")
     print("-" * 70)
 
+    # Show baseline models first
+    for model_type in sorted(baseline_models):
+        if model_type in model_types:
+            model_df = df[df['model_type'] == model_type]
+            if len(model_df) > 0:
+                mean_time = model_df['execution_time_s'].mean()
+                std_time = model_df['execution_time_s'].std()
+                print(f"{model_type:<30} {len(model_df):<8} {mean_time:<15.1f} {std_time:<15.1f}")
+
+    # Show approximation models
+    for model_type in sorted(approximation_models):
+        model_df = df[df['model_type'] == model_type]
+        if len(model_df) > 0:
+            mean_time = model_df['execution_time_s'].mean()
+            std_time = model_df['execution_time_s'].std()
+            print(f"{model_type:<30} {len(model_df):<8} {mean_time:<15.1f} {std_time:<15.1f}")
+
+    # Meta-model with substitution (if exists)
+    if 'meta_model' in model_types:
+        metamodel_df = df[df['model_type'] == 'meta_model']
+        substitution_df = metamodel_df[
+            (metamodel_df['substitution_occurred'] == True) |
+            (metamodel_df['substitution_occurred'] == 'True')
+            ]
+
+        if len(substitution_df) > 0:
+            substitution_mean = substitution_df['execution_time_s'].mean()
+            substitution_std = substitution_df['execution_time_s'].std()
+            print(
+                f"{'meta_model (with substitution)':<30} {len(substitution_df):<8} {substitution_mean:<15.1f} {substitution_std:<15.1f}")
+
+    # Calculate speedups relative to detailed simulations
+    detailed_df = df[df['model_type'] == 'detailed']
     if len(detailed_df) > 0:
-        detailed_mean = detailed_df['execution_time_s'].mean()
-        detailed_std = detailed_df['execution_time_s'].std()
-        print(f"{'Detailed simulations':<30} {len(detailed_df):<8} {detailed_mean:<15.1f} {detailed_std:<15.1f}")
+        detailed_time = detailed_df['execution_time_s'].mean()
 
-    if len(metamodel_df) > 0:
-        metamodel_mean = metamodel_df['execution_time_s'].mean()
-        metamodel_std = metamodel_df['execution_time_s'].std()
-        print(f"{'Meta-model (all)':<30} {len(metamodel_df):<8} {metamodel_mean:<15.1f} {metamodel_std:<15.1f}")
-
-    if len(substitution_df) > 0:
-        substitution_mean = substitution_df['execution_time_s'].mean()
-        substitution_std = substitution_df['execution_time_s'].std()
-        print(
-            f"{'Meta-model (with substitution)':<30} {len(substitution_df):<8} {substitution_mean:<15.1f} {substitution_std:<15.1f}")
-
-    # Calculate speedup
-    if len(detailed_df) > 0 and len(substitution_df) > 0:
-        speedup = detailed_df['execution_time_s'].mean() / substitution_df['execution_time_s'].mean()
-        print(f"\nSPEEDUP ANALYSIS:")
-        print(f"Meta-model with substitution vs. Detailed: {speedup:.2f}x faster")
-
-    if len(detailed_df) > 0 and len(metamodel_df) > 0:
-        overall_speedup = detailed_df['execution_time_s'].mean() / metamodel_df['execution_time_s'].mean()
-        print(f"Meta-model (overall) vs. Detailed: {overall_speedup:.2f}x faster")
+        print(f"\nSPEEDUP ANALYSIS (vs. Detailed):")
+        for model_type in sorted(approximation_models):
+            model_df = df[df['model_type'] == model_type]
+            if len(model_df) > 0:
+                model_time = model_df['execution_time_s'].mean()
+                speedup = detailed_time / model_time
+                print(f"  {model_type}: {speedup:.2f}x faster")
 
     # Performance by traffic configuration
     print(f"\nPERFORMANCE BY TRAFFIC CONFIGURATION:")
-    print(f"{'Traffic Config':<30} {'Detailed (s)':<15} {'Meta-model (s)':<15} {'Speedup':<10}")
-    print("-" * 75)
+    traffic_configs = df['traffic_config_clean'].unique()
 
-    for traffic in df['traffic_config_clean'].unique():
-        detailed_traffic = detailed_df[detailed_df['traffic_config_clean'] == traffic]
-        metamodel_traffic = metamodel_df[metamodel_df['traffic_config_clean'] == traffic]
+    for traffic in sorted(traffic_configs):
+        print(f"\nTraffic: {traffic}")
+        print(f"{'Model Type':<20} {'Exec Time (s)':<15} {'Count':<8}")
+        print("-" * 45)
 
-        if len(detailed_traffic) > 0 and len(metamodel_traffic) > 0:
-            detailed_time = detailed_traffic['execution_time_s'].mean()
-            metamodel_time = metamodel_traffic['execution_time_s'].mean()
-            speedup = detailed_time / metamodel_time
-
-            print(f"{traffic:<30} {detailed_time:<15.1f} {metamodel_time:<15.1f} {speedup:<10.2f}x")
-        elif len(metamodel_traffic) > 0:
-            metamodel_time = metamodel_traffic['execution_time_s'].mean()
-            print(f"{traffic:<30} {'N/A':<15} {metamodel_time:<15.1f} {'N/A':<10}")
+        for model_type in sorted(model_types):
+            model_traffic = df[(df['model_type'] == model_type) & (df['traffic_config_clean'] == traffic)]
+            if len(model_traffic) > 0:
+                mean_time = model_traffic['execution_time_s'].mean()
+                print(f"{model_type:<20} {mean_time:<15.1f} {len(model_traffic):<8}")
     print()
 
 
 def main():
     """Main analysis function."""
-    PHASE = 1
+    PHASE = 2
 
     csv_file = f"analysis_results/aggregated_results{PHASE}.csv"
 
