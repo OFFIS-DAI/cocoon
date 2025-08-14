@@ -40,6 +40,9 @@ class EvaluationResult:
     substitution_occurred: bool
     substitution_message_index: Optional[int] = None
 
+    # score that indicates how well the hyper-parameter performed in this scenario
+    score: Optional[int] = None
+
 
 def parse_filename_to_config(filename: str) -> Optional[ScenarioConfiguration]:
     """
@@ -229,6 +232,68 @@ def calculate_delay_statistics(dataframes: List[pd.DataFrame]) -> Tuple[float, f
     return mean_delay, std_delay, mean_cv
 
 
+def calculate_hyperparameter_scores(evaluation_results: List[EvaluationResult]) -> None:
+    """
+    Calculate scores for hyperparameter configurations based on performance metrics.
+
+    Score = (n-idx(nrmse_mean) + n-idx(nrmse_std) + idx(intv) + n-idx(execution_time)) * (substitution success)
+    """
+    # Filter for meta-model results with valid metrics
+    metamodel_results = [r for r in evaluation_results if r.model_type == ModelType.meta_model]
+    valid_results = [r for r in metamodel_results if
+                     r.nrmse_mean is not None and r.nrmse_std is not None and
+                     r.mean_in_sigma_interval is not None and r.execution_time_s is not None]
+
+    if len(valid_results) == 0:
+        print("No valid meta-model results for scoring")
+        return
+
+    # Create DataFrame for easier ranking
+    df_data = []
+    for result in valid_results:
+        df_data.append({
+            'result_obj': result,
+            'nrmse_mean': result.nrmse_mean,
+            'nrmse_std': result.nrmse_std,
+            'mean_in_sigma_interval': result.mean_in_sigma_interval,
+            'execution_time_s': result.execution_time_s,
+            'substitution_occurred': result.substitution_occurred
+        })
+
+    df = pd.DataFrame(df_data)
+
+    # Rank metrics (0-based indexing, 0 = best)
+    # For nrmse_mean and nrmse_std: lower is better (ascending=True)
+    # For mean_in_sigma_interval: higher is better (ascending=False)
+    # For execution_time_s: lower is better (ascending=True)
+
+    df['rank_nrmse_mean'] = df['nrmse_mean'].rank(method='min', ascending=True) - 1
+    df['rank_nrmse_std'] = df['nrmse_std'].rank(method='min', ascending=True) - 1
+    df['rank_interval'] = df['mean_in_sigma_interval'].rank(method='min', ascending=False) - 1
+    df['rank_execution_time'] = df['execution_time_s'].rank(method='min', ascending=True) - 1
+
+    # Calculate score: (3-idx(nrmse_mean) + 3-idx(nrmse_std) + idx(intv) + 3-idx(execution_time)) * (substitution success)
+    # Note: Using max rank for normalization instead of fixed "3" to handle variable number of configurations
+    max_rank = len(valid_results) - 1
+
+    df['score_component'] = (
+            (max_rank - df['rank_nrmse_mean']) +
+            (max_rank - df['rank_nrmse_std']) +
+            df['rank_interval'] +
+            (max_rank - df['rank_execution_time'])
+    )
+
+    # Apply substitution multiplier (1 if successful, 0 if not)
+    df['substitution_multiplier'] = df['substitution_occurred'].apply(lambda x: 1.0 if x else 0)
+    df['final_score'] = df['score_component'] * df['substitution_multiplier']
+
+    # Assign scores back to result objects, higher score is better
+    for _, row in df.iterrows():
+        row['result_obj'].score = int(round(row['final_score']))
+
+    print(f"Calculated scores for {len(valid_results)} meta-model configurations")
+
+
 def analyze_results(results_folder: str) -> List[EvaluationResult]:
     """
     Analyze all simulation results in the given folder.
@@ -404,6 +469,10 @@ def analyze_results(results_folder: str) -> List[EvaluationResult]:
             print(f"Error processing {base_scenario_id}: {e}")
             continue
 
+    if phase == 1:
+        # Calculate hyperparameter scores
+        calculate_hyperparameter_scores(evaluation_results)
+
     return evaluation_results
 
 
@@ -449,6 +518,7 @@ def save_evaluation_results_to_csv(
             # Meta-model specific metrics
             'substitution_occurred': result.substitution_occurred,
             'substitution_message_index': result.substitution_message_index,
+            'score': result.score,
         }
 
         # Add scenario configuration details if requested
@@ -531,3 +601,19 @@ if __name__ == "__main__":
 
     print(f"- {detailed_count} detailed simulations (baseline)")
     print(f"- {model_count} model simulations")
+
+    if phase == 1:
+        # Print top scoring hyperparameter configurations
+        metamodel_results = [r for r in results if r.model_type == ModelType.meta_model and r.score is not None]
+        if metamodel_results:
+            top_configs = sorted(metamodel_results, key=lambda x: x.score, reverse=True)[:5]
+            print(f"\nTop 5 hyperparameter configurations by score:")
+            for i, config in enumerate(top_configs, 1):
+                print(f"{i}. Score: {config.score}")
+                print(f"   Config: {config.scenario_config.cluster_distance_threshold}-"
+                      f"{config.scenario_config.i_pupa}-"
+                      f"{config.scenario_config.learning_rate_weighting}-"
+                      f"{config.scenario_config.butterfly_threshold_value}-"
+                      f"{config.scenario_config.substitution_priority}")
+                print(f"   NRMSE: {config.nrmse_mean:.4f}, Interval: {config.mean_in_sigma_interval:.3f}, "
+                      f"Time: {config.execution_time_s:.1f}s, Substitution: {config.substitution_occurred}")

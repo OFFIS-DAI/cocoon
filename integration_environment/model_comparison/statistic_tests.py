@@ -61,10 +61,12 @@ def simple_factor_effects_analysis(df, phase=1):
 
     # Key response variables
     responses = {
-        'after_substitution_rmse_ms': 'RMSE (ms)',
-        'after_substitution_mae_ms': 'MAE (ms)',
-        'memory_avg_mb': 'Average Memory (MB)',
-        'substitution_message_index': 'Substitution Message Index'
+        'nrmse_mean': 'NRMSE (mean)',
+        'nrmse_std': 'NRMSE (std)',
+        'mean_in_one_sigma_interval': 'Mean in one-sigma-interval',
+        'substitution_message_index': 'Substitution Message Index',
+        'execution_time_s': 'Execution time (s)',
+        'score': 'Score'
     }
 
     # Factor variables (coded)
@@ -171,11 +173,6 @@ def simple_factor_effects_analysis(df, phase=1):
                         print(
                             f"    {level_desc:12s}: {means.loc[level, 'mean']:8.3f} ± {means.loc[level, 'std']:6.3f} (n={means.loc[level, 'count']})")
 
-                    # Show recommendation
-                    if best_level != worst_level:
-                        best_desc = {-1: "Low (-1)", 0: "Center (0)", 1: "High (+1)"}.get(best_level,
-                                                                                          f"Level {best_level}")
-                        print(f"  → RECOMMENDATION: Use {best_desc} level for best performance")
                     print()
 
             except Exception as e:
@@ -234,44 +231,6 @@ def create_significance_summary(significance_results, effect_directions):
 
     print("\nLegend: *** p<0.001, ** p<0.01, * p<0.05, NS = not significant")
 
-    # Optimization recommendations
-    print("\n" + "=" * 80)
-    print("OPTIMIZATION RECOMMENDATIONS")
-    print("=" * 80)
-
-    # Focus on key performance metrics
-    key_responses = ['RMSE (ms)', 'MAE (ms)', 'Average Memory (MB)']
-
-    factor_recommendations = {}
-
-    for response in key_responses:
-        if response in effect_directions:
-            print(f"\n{response}:")
-            print("-" * 40)
-
-            for factor, info in effect_directions[response].items():
-                if factor in significance_results[response] and significance_results[response][factor]['significant']:
-                    best_level = info['best_level']
-                    best_desc = {-1: "Low (-1)", 0: "Center (0)", 1: "High (+1)"}.get(best_level, f"Level {best_level}")
-                    print(f"  {factor:25s}: Use {best_desc}")
-
-                    # Store for overall recommendation
-                    if factor not in factor_recommendations:
-                        factor_recommendations[factor] = []
-                    factor_recommendations[factor].append(best_level)
-
-    # Overall recommendations (most common recommendation across key metrics)
-    print(f"\n{'=' * 40}")
-    print("OVERALL FACTOR SETTINGS")
-    print(f"{'=' * 40}")
-
-    for factor, recommendations in factor_recommendations.items():
-        if recommendations:
-            from collections import Counter
-            most_common_level = Counter(recommendations).most_common(1)[0][0]
-            level_desc = {-1: "Low (-1)", 0: "Center (0)", 1: "High (+1)"}.get(most_common_level,
-                                                                               f"Level {most_common_level}")
-            print(f"{factor:25s}: {level_desc}")
 
 def main(phase=1):
     """
@@ -283,19 +242,18 @@ def main(phase=1):
     print(f"Loaded {len(df)} total records")
     print(f"Model types: {df['model_type'].value_counts().to_dict()}")
 
-    # Run simple factor effects analysis
-    significance_results, effect_directions = simple_factor_effects_analysis(df, phase)
+    if phase == 1:
+        # Run simple factor effects analysis
+        simple_factor_effects_analysis(df)
+    elif phase == 2:
+        pass
 
     print("\n" + "=" * 80)
     print("ANALYSIS COMPLETE")
     print("=" * 80)
-    print("Summary: This analysis shows which factors significantly affect")
-    print("your key performance metrics using simple one-way ANOVA.")
-    print("Use the recommendations above to set optimal factor levels.")
 
-    return significance_results, effect_directions
 
 
 if __name__ == "__main__":
     # Run analysis for Phase 1
-    results = main(phase=1)
+    main(phase=1)
