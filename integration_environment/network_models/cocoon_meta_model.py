@@ -314,7 +314,7 @@ class CocoonMetaModel:
         self.clustering_distance_threshold = cluster_distance_threshold
         self.cluster_centroids = {}  # {cluster_id: centroid_vector}
 
-        self.use_random_forest = True
+        self.use_random_forest = False
 
         # DataFrame containing training data for the regressors
         self.training_df = None
