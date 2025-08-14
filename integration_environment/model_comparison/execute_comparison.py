@@ -136,11 +136,11 @@ def get_scenario_configurations_for_phase_2():
                                                       scenario_duration=scenario_duration,
                                                       traffic_configuration=traffic_config,
                                                       network_type=network,
-                                                      cluster_distance_threshold=ClusterDistanceThreshold.three,
-                                                      i_pupa=BatchSizeIPupa.hundred,
-                                                      learning_rate_weighting=LearningRateWeighting.center,
-                                                      butterfly_threshold_value=ButterflyThresholdValue.center,
-                                                      substitution_priority=SubstitutionPriority.none))
+                                                      cluster_distance_threshold=ClusterDistanceThreshold.five,
+                                                      i_pupa=BatchSizeIPupa.fifty,
+                                                      learning_rate_weighting=LearningRateWeighting.large,
+                                                      butterfly_threshold_value=ButterflyThresholdValue.small,
+                                                      substitution_priority=SubstitutionPriority.error_level))
                         else:
                             scenario_configurations.append(
                                 ScenarioConfiguration(payload_size=payload_size,
