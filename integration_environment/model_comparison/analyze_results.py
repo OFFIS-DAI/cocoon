@@ -155,6 +155,8 @@ def calculate_metrics_grouped(baseline_dfs: List[pd.DataFrame], model_dfs: List[
     model_delays_by_message = {}
 
     for baseline_df, model_df in zip(baseline_dfs, model_dfs):
+        baseline_df.dropna(subset=['delay_ms'], inplace=True)
+        model_df.dropna(subset=['delay_ms'], inplace=True)
         # Process baseline simulation
         baseline_indexed = baseline_df.set_index(['msg_id', 'sender', 'receiver'])['delay_ms']
         for msg_key, delay in baseline_indexed.items():
@@ -465,12 +467,6 @@ def analyze_results(results_folder: str) -> List[EvaluationResult]:
                 # For other model types, find matching baseline simulations and calculate accuracy metrics
                 # First try to find detailed simulations as baseline
                 baseline_dfs = find_matching_detailed_simulations(config, detailed_results)
-                baseline_type = "detailed"
-
-                # If no detailed simulations found, try ideal simulations
-                if len(baseline_dfs) == 0:
-                    baseline_dfs = find_matching_ideal_simulations(config, ideal_results)
-                    baseline_type = "ideal"
 
                 if len(baseline_dfs) == 0:
                     print(f"Warning: No matching baseline simulation found for {base_scenario_id}")
