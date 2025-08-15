@@ -1,19 +1,19 @@
 {
   "scenario_id": "channel-fifty-large-one_min-cbr_broadcast_1_mps-simbench_5g-none-none-none-none-none-1",
-  "execution_start_time": "2025-08-14 13:54:05.426261",
-  "execution_end_time": "2025-08-14 13:54:07.420834",
-  "execution_run_time_s": 1.994572639465332,
+  "execution_start_time": "2025-08-15 09:44:18.415182",
+  "execution_end_time": "2025-08-15 09:44:20.531203",
+  "execution_run_time_s": 2.116020441055298,
   "initialization_start_time": "1970-01-01 01:00:00",
   "initialization_end_time": "1970-01-01 01:00:00",
   "initialization_runtime_s": 0,
   "memory_statistics": {
-    "initial_memory_mb": 245.671875,
-    "final_memory_mb": 245.671875,
-    "peak_memory_mb": 245.671875,
-    "min_memory_mb": 245.671875,
-    "avg_memory_mb": 245.671875,
-    "memory_change_mb": 0.0,
-    "measurements_count": 2
+    "initial_memory_mb": 188.89453125,
+    "final_memory_mb": 189.41015625,
+    "peak_memory_mb": 189.41015625,
+    "min_memory_mb": 188.89453125,
+    "avg_memory_mb": 189.06640625,
+    "memory_change_mb": 0.515625,
+    "measurements_count": 3
   },
   "meta_model_substitution": {
     "substitution_occurred": false
