@@ -1,5 +1,6 @@
 import json
 import math
+from random import random
 from typing import List, Dict, Any
 
 import networkx as nx
@@ -138,7 +139,11 @@ class ChannelNetworkModel:
             propagation_delay += self.calculate_propagation_delay(
                 current_node, next_node)
 
-        return round(processing_delay + transmission_delay + propagation_delay)
+        # add random jitter
+        delay = processing_delay + transmission_delay + propagation_delay
+        delay += random() * delay * 0.1
+
+        return round(delay)
 
     @classmethod
     def from_dict(cls, topology_data: Dict[str, Any]) -> 'ChannelNetworkModel':
