@@ -510,7 +510,6 @@ class StaticDelayGraphModelScheduler(CommunicationScheduler):
         """
         super().__init__(container_mapping, scenario_duration_ms=scenario_duration_ms)
 
-        # We'll import StaticGraphModel locally to avoid circular imports
         from integration_environment.network_models.static_graph_model import StaticGraphModel
 
         if topology_dict:
