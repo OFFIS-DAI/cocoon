@@ -337,10 +337,109 @@ def analyze_best_hyperparameters(df: pd.DataFrame):
     print()
 
 
+def analyze_scenario_delay_comparison(df: pd.DataFrame):
+    """Compare mean and std delay values across all models for each scenario configuration."""
+    print("=" * 80)
+    print("SCENARIO-WISE DELAY COMPARISON ACROSS ALL MODELS")
+    print("=" * 80)
+
+    # Get all scenario configurations (combination of key parameters)
+    scenario_params = ['payload_size', 'num_devices', 'scenario_duration', 'traffic_configuration', 'network_type']
+
+    # Create scenario identifier
+    df_copy = df.copy()
+    df_copy['scenario_config'] = df_copy[scenario_params].apply(
+        lambda
+            row: f"{row['payload_size']}-{row['num_devices']}-{row['scenario_duration']}-{row['traffic_configuration']}-{row['network_type']}",
+        axis=1
+    )
+
+    # Clean the scenario config names for better readability
+    df_copy['scenario_config'] = df_copy['scenario_config'].str.replace('PayloadSizeConfig.', '').str.replace(
+        'NumDevices.', '').str.replace('ScenarioDuration.', '').str.replace('TrafficConfig.', '').str.replace(
+        'NetworkModelType.', '')
+
+    unique_scenarios = df_copy['scenario_config'].unique()
+
+    print(
+        f"Analyzing {len(unique_scenarios)} unique scenario configurations across {len(df_copy['model_type'].unique())} model types\n")
+
+    for scenario in sorted(unique_scenarios):
+        scenario_data = df_copy[df_copy['scenario_config'] == scenario]
+
+        # Filter out rows with NaN mean values
+        valid_scenario_data = scenario_data[scenario_data['mean'].notna()]
+
+        if len(valid_scenario_data) == 0:
+            continue
+
+        print(f"SCENARIO: {scenario}")
+        print("-" * 80)
+        print(f"{'Model Type':<20} {'Count':<8} {'Mean Delay (ms)':<18} {'Std Delay (ms)':<18} {'CV':<12}")
+        print("-" * 80)
+
+        # Get statistics for each model type in this scenario
+        model_stats = []
+        for model_type in sorted(valid_scenario_data['model_type'].unique()):
+            model_data = valid_scenario_data[valid_scenario_data['model_type'] == model_type]
+
+            if len(model_data) > 0:
+                mean_delays = model_data['mean'].values
+                std_delays = model_data['std'].values
+                cvs = model_data['mean_message_cv'].values
+
+                # Calculate statistics across runs for this model type
+                avg_mean = mean_delays.mean() if len(mean_delays) > 0 else 0
+                std_mean = mean_delays.std() if len(mean_delays) > 1 else 0
+                avg_std = std_delays.mean() if len(std_delays) > 0 else 0
+                std_std = std_delays.std() if len(std_delays) > 1 else 0
+                avg_cv = cvs.mean() if len(cvs[~pd.isna(cvs)]) > 0 else 0
+
+                model_stats.append({
+                    'model_type': model_type,
+                    'count': len(model_data),
+                    'avg_mean': avg_mean,
+                    'std_mean': std_mean,
+                    'avg_std': avg_std,
+                    'std_std': std_std,
+                    'avg_cv': avg_cv
+                })
+
+                print(
+                    f"{model_type:<20} {len(model_data):<8} {avg_mean:8.2f}±{std_mean:6.2f}    {avg_std:8.2f}±{std_std:6.2f}    {avg_cv:<12.6f}")
+
+        # Add relative performance analysis
+        if len(model_stats) > 1:
+            print("\nRelative Performance (vs Detailed baseline):")
+            detailed_baseline = next((stats for stats in model_stats if stats['model_type'] == 'detailed'), None)
+
+            if detailed_baseline and detailed_baseline['avg_mean'] > 0:
+                print(f"{'Model Type':<20} {'Mean Ratio':<12} {'Std Ratio':<12} {'Speed Ratio':<12}")
+                print("-" * 60)
+
+                for stats in model_stats:
+                    if stats['model_type'] != 'detailed':
+                        mean_ratio = stats['avg_mean'] / detailed_baseline['avg_mean']
+                        std_ratio = stats['avg_std'] / detailed_baseline['avg_std'] if detailed_baseline[
+                                                                                           'avg_std'] > 0 else float(
+                            'inf')
+
+                        # Get speed comparison from execution times
+                        model_exec_time = valid_scenario_data[valid_scenario_data['model_type'] == stats['model_type']][
+                            'execution_time_s'].mean()
+                        detailed_exec_time = valid_scenario_data[valid_scenario_data['model_type'] == 'detailed'][
+                            'execution_time_s'].mean()
+                        speed_ratio = detailed_exec_time / model_exec_time if model_exec_time > 0 else float('inf')
+
+                        print(f"{stats['model_type']:<20} {mean_ratio:<12.3f} {std_ratio:<12.3f} {speed_ratio:<12.1f}x")
+
+        print("\n" + "=" * 80 + "\n")
+
+
 def analyze_performance_comparison(df: pd.DataFrame):
     """Analyze performance comparison between all model types."""
     print("=" * 60)
-    print("PERFORMANCE COMPARISON")
+    print("EXECUTION TIME COMPARISON")
     print("=" * 60)
 
     model_types = df['model_type'].unique()
@@ -432,6 +531,7 @@ def main():
     # Run all analyses
     analyze_general_properties(df)
     analyze_delay_by_traffic(df)
+    analyze_scenario_delay_comparison(df)
     analyze_variation_properties(df)
     analyze_metamodel_properties(df)
     analyze_accuracy_comparison(df)
