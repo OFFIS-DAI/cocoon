@@ -460,12 +460,10 @@ class PoissonSenderRole(Role):
 
     def _get_lambda_rate_from_config(self) -> float:
         """Map traffic configuration to Poisson rate parameter."""
-        if self.scenario_configuration.traffic_configuration == TrafficConfig.poisson_broadcast_1_mps:
+        if self.scenario_configuration.traffic_configuration == TrafficConfig.poisson_broadcast_1_mps_1:
             return 1.0  # 1 message per second on average
-        elif self.scenario_configuration.traffic_configuration == TrafficConfig.poisson_broadcast_1_mpm:
+        elif self.scenario_configuration.traffic_configuration == TrafficConfig.poisson_broadcast_1_mpm_1:
             return 1.0 / 60.0  # 1 message per minute on average
-        elif self.scenario_configuration.traffic_configuration == TrafficConfig.poisson_broadcast_4_mph:
-            return 4.0 / 3600.0  # 4 messages per hour on average
         else:
             return 1.0  # Default: 1 message per second
 
