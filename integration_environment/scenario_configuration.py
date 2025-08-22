@@ -47,16 +47,37 @@ class NumDevices(Enum):
 
 class TrafficConfig(Enum):
     none = 0
+
     cbr_broadcast_1_mps = 1  # one message per second
     cbr_broadcast_1_mpm = 2  # one message per minute
     cbr_broadcast_4_mph = 3  # four messages per hour
-    poisson_broadcast_1_mps = 4  # one message per second
-    poisson_broadcast_1_mpm = 5  # one message per minute
-    poisson_broadcast_4_mph = 6  # four messages per hour
-    unicast_1s_delay = 7
-    unicast_5s_delay = 8
-    unicast_10s_delay = 9
-    deer_use_case = 10
+
+    # poisson_broadcast_[frequency]_[seed]
+    poisson_broadcast_1_mps_1 = 4  # one message per second
+    poisson_broadcast_1_mpm_1 = 5  # one message per minute
+
+    poisson_broadcast_1_mps_2 = 6  # one message per second
+    poisson_broadcast_1_mpm_2 = 7  # one message per minute
+
+    unicast_1s_delay = 8
+    unicast_5s_delay = 9
+    unicast_10s_delay = 10
+
+    # central_dsb_[frequency]_[processing_delay]_[response_ratio]
+    central_dsb_1mpm_5s_50p = 11
+    central_dsb_5mpm_30s_75 = 12
+    central_dsb_10mph_60s_25p = 13
+
+    deer_use_case = 14
+
+
+class TestTrainSplit(Enum):
+    none = 0
+    parametrization_split = 1
+    traffic_load_split = 2
+    technology_split = 3
+    scale_split = 4
+    traffic_model_split = 5
 
 
 class ClusterDistanceThreshold(Enum):
@@ -114,6 +135,7 @@ class ScenarioConfiguration:
     network_type: NetworkModelType = NetworkModelType.none
 
     # specific for meta-model
+    test_train_split: TestTrainSplit = TestTrainSplit.none
     i_pupa: BatchSizeIPupa = BatchSizeIPupa.none
     cluster_distance_threshold: ClusterDistanceThreshold = ClusterDistanceThreshold.none
     learning_rate_weighting: LearningRateWeighting = LearningRateWeighting.none
@@ -127,6 +149,7 @@ class ScenarioConfiguration:
         """Create a scenario ID that includes all configuration parameters."""
         return (f"{self.model_type.name}-{self.num_devices.name}-{self.payload_size.name}-{self.scenario_duration.name}"
                 f"-{self.traffic_configuration.name}-{self.network_type.name}-{self.cluster_distance_threshold.name}-"
+                f"{self.test_train_split.name}-"
                 f"{self.i_pupa.name}-{self.learning_rate_weighting.name}-{self.butterfly_threshold_value.name}"
                 f"-{self.substitution_priority.name}-{self.run}")
 
@@ -137,8 +160,8 @@ class ScenarioConfiguration:
     @classmethod
     def from_scenario_id(cls, scenario_id: str) -> 'ScenarioConfiguration':
         try:
-            (model_str, devices_str, payload_str, duration_str, traffic_str, network_str, cl_thr_str, i_pupa,
-             learning_rate, butterfly_threshold_value, substitution_priority, run) = scenario_id.split('-')
+            (model_str, devices_str, payload_str, duration_str, traffic_str, network_str, cl_thr_str, test_train_split_str,
+             i_pupa, learning_rate, butterfly_threshold_value, substitution_priority, run) = scenario_id.split('-')
             return cls(
                 model_type=ModelType[model_str],
                 num_devices=NumDevices[devices_str],
@@ -147,6 +170,7 @@ class ScenarioConfiguration:
                 traffic_configuration=TrafficConfig[traffic_str],
                 network_type=NetworkModelType[network_str],
                 cluster_distance_threshold=ClusterDistanceThreshold[cl_thr_str],
+                test_train_split=TestTrainSplit[test_train_split_str],
                 i_pupa=BatchSizeIPupa[i_pupa],
                 learning_rate_weighting=LearningRateWeighting[learning_rate],
                 butterfly_threshold_value=ButterflyThresholdValue[butterfly_threshold_value],
