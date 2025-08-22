@@ -89,8 +89,8 @@ def get_duration_traffic_list_meta_model_training():
         (ScenarioDuration.one_min, TrafficConfig.cbr_broadcast_1_mps),
         (ScenarioDuration.thirty_min, TrafficConfig.cbr_broadcast_1_mpm),
         (ScenarioDuration.thirty_min, TrafficConfig.cbr_broadcast_4_mph),
-        (ScenarioDuration.one_min, TrafficConfig.poisson_broadcast_1_mps),
-        (ScenarioDuration.thirty_min, TrafficConfig.poisson_broadcast_1_mpm),
+        (ScenarioDuration.one_min, TrafficConfig.poisson_broadcast_1_mps_1),
+        (ScenarioDuration.thirty_min, TrafficConfig.poisson_broadcast_1_mpm_1),
         (ScenarioDuration.one_min, TrafficConfig.unicast_1s_delay),
         (ScenarioDuration.thirty_min, TrafficConfig.unicast_5s_delay),
         (ScenarioDuration.thirty_min, TrafficConfig.unicast_10s_delay),
@@ -101,7 +101,7 @@ def get_duration_traffic_list_meta_model_training():
 def get_duration_traffic_list_for_screening_design():
     return [
         (ScenarioDuration.one_min, TrafficConfig.cbr_broadcast_1_mps),
-        (ScenarioDuration.one_min, TrafficConfig.poisson_broadcast_1_mps),
+        (ScenarioDuration.one_min, TrafficConfig.poisson_broadcast_1_mps_1),
         #(ScenarioDuration.one_day, TrafficConfig.deer_use_case)
     ]
 
@@ -437,9 +437,8 @@ async def run_scenario_config(scenario_configuration: ScenarioConfiguration, pha
             await initialize_constant_bitrate_broadcast_agents(clock=clock,
                                                                results_recorder=results_recorder,
                                                                scenario_configuration=scenario_configuration)
-    elif scenario_configuration.traffic_configuration in [TrafficConfig.poisson_broadcast_1_mps,
-                                                          TrafficConfig.poisson_broadcast_1_mpm,
-                                                          TrafficConfig.poisson_broadcast_4_mph]:
+    elif scenario_configuration.traffic_configuration in [TrafficConfig.poisson_broadcast_1_mps_1,
+                                                          TrafficConfig.poisson_broadcast_1_mpm_1]:
         container_mapping = \
             await initialize_poisson_broadcast_agents(clock=clock,
                                                       results_recorder=results_recorder,
