@@ -450,19 +450,29 @@ class PoissonSenderRole(Role):
         self._message_counter = 0
         self._running = False
         self._scheduled_tasks = []
-        self.simulation_duration_s = scenario_config.scenario_duration.value/1000
+        self.simulation_duration_s = scenario_config.scenario_duration.value / 1000
         self._keepalive_task = None
 
-        random.seed(1)
+        random_seed = self._get_random_seed_from_config()
+        random.seed(random_seed)
 
         # Configure lambda rate based on traffic configuration
         self.lambda_rate = self._get_lambda_rate_from_config()
 
+    def _get_random_seed_from_config(self) -> float:
+        if (self.scenario_configuration.traffic_configuration == TrafficConfig.poisson_broadcast_1_mps_1
+                or self.scenario_configuration.traffic_configuration == TrafficConfig.poisson_broadcast_1_mpm_1):
+            return 1
+        else:
+            return 2
+
     def _get_lambda_rate_from_config(self) -> float:
         """Map traffic configuration to Poisson rate parameter."""
-        if self.scenario_configuration.traffic_configuration == TrafficConfig.poisson_broadcast_1_mps_1:
+        if (self.scenario_configuration.traffic_configuration == TrafficConfig.poisson_broadcast_1_mps_1 or
+                self.scenario_configuration.traffic_configuration == TrafficConfig.poisson_broadcast_1_mps_2):
             return 1.0  # 1 message per second on average
-        elif self.scenario_configuration.traffic_configuration == TrafficConfig.poisson_broadcast_1_mpm_1:
+        elif (self.scenario_configuration.traffic_configuration == TrafficConfig.poisson_broadcast_1_mpm_1 or
+              self.scenario_configuration.traffic_configuration == TrafficConfig.poisson_broadcast_1_mpm_2):
             return 1.0 / 60.0  # 1 message per minute on average
         else:
             return 1.0  # Default: 1 message per second
