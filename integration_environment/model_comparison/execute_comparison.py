@@ -1,10 +1,7 @@
-import asyncio
 import logging
 import os
-import random
 import time
-from typing import Dict, Optional
-
+from typing import Dict
 import pandas as pd
 import psutil
 from mango import agent_composed_of, JSON, activate, ExternalClock
@@ -14,10 +11,7 @@ from pyDOE3 import *
 
 from integration_environment.communication_model_scheduler import IdealCommunicationScheduler, ChannelModelScheduler, \
     StaticDelayGraphModelScheduler, DetailedModelScheduler, MetaModelScheduler, CommunicationScheduler
-from integration_environment.messages import TrafficMessage, deer_message_classes
-from integration_environment.results_recorder import ResultsRecorder
-from integration_environment.roles import ConstantBitrateSenderRole, ReceiverRole, ResultsRecorderRole, \
-    PoissonSenderRole, UnicastSenderRole, FlexAgentRole, AggregatorAgentRole
+from integration_environment.roles import *
 from integration_environment.scenario_configuration import *
 
 my_codec = JSON()
@@ -94,7 +88,7 @@ def get_duration_traffic_list_meta_model_training():
         (ScenarioDuration.one_min, TrafficConfig.unicast_1s_delay),
         (ScenarioDuration.thirty_min, TrafficConfig.unicast_5s_delay),
         (ScenarioDuration.thirty_min, TrafficConfig.unicast_10s_delay),
-        #(ScenarioDuration.thirty_min, TrafficConfig.deer_use_case)
+        # (ScenarioDuration.thirty_min, TrafficConfig.deer_use_case)
     ]
 
 
@@ -102,7 +96,7 @@ def get_duration_traffic_list_for_screening_design():
     return [
         (ScenarioDuration.one_min, TrafficConfig.cbr_broadcast_1_mps),
         (ScenarioDuration.one_min, TrafficConfig.poisson_broadcast_1_mps_1),
-        #(ScenarioDuration.one_day, TrafficConfig.deer_use_case)
+        # (ScenarioDuration.one_day, TrafficConfig.deer_use_case)
     ]
 
 
@@ -368,6 +362,35 @@ async def initialize_unicast_communication_agents(clock: ExternalClock,
     return container_mapping
 
 
+async def initialize_central_dsb_agents(clock: ExternalClock,
+                                        results_recorder: ResultsRecorder,
+                                        scenario_configuration: ScenarioConfiguration):
+    container_mapping = {}
+
+    container1 = create_external_coupling(addr='node0', codec=my_codec, clock=clock)
+    control_role = ControlDSbRole(scenario_config=scenario_configuration)
+
+    control_agent = agent_composed_of(control_role, ResultsRecorderRole(results_recorder))
+    container1.register(control_agent)
+
+    container_mapping['node0'] = container1
+
+    num_local_agents = scenario_configuration.num_devices.value - 1
+
+    for i in range(1, num_local_agents + 1):
+        container = create_external_coupling(addr=f'node{i}', codec=my_codec, clock=clock)
+        local_role = LocalDSbRole(scenario_config=scenario_configuration,
+                                  control_address=control_agent.addr)
+
+        local_agent = agent_composed_of(local_role, ResultsRecorderRole(results_recorder))
+
+        container.current_start_time_of_step = time.time()
+        container.register(local_agent)
+        container_mapping[f'node{i}'] = container
+
+    return container_mapping
+
+
 async def initialize_deer_use_case_agents(clock: ExternalClock,
                                           results_recorder: ResultsRecorder,
                                           scenario_configuration: ScenarioConfiguration):
@@ -457,6 +480,13 @@ async def run_scenario_config(scenario_configuration: ScenarioConfiguration, pha
             await initialize_deer_use_case_agents(clock=clock,
                                                   results_recorder=results_recorder,
                                                   scenario_configuration=scenario_configuration)
+    elif scenario_configuration.traffic_configuration in [TrafficConfig.central_dsb_1mpm_5s_50p,
+                                                          TrafficConfig.central_dsb_5mpm_30s_75,
+                                                          TrafficConfig.central_dsb_10mph_60s_25p]:
+        container_mapping = \
+            await initialize_central_dsb_agents(clock=clock,
+                                                results_recorder=results_recorder,
+                                                scenario_configuration=scenario_configuration)
 
     scheduler = get_scheduler(scenario_configuration=scenario_configuration,
                               container_mapping=container_mapping,
