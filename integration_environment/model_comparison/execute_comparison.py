@@ -85,6 +85,8 @@ def get_duration_traffic_list_meta_model_training():
         (ScenarioDuration.thirty_min, TrafficConfig.cbr_broadcast_4_mph),
         (ScenarioDuration.one_min, TrafficConfig.poisson_broadcast_1_mps_1),
         (ScenarioDuration.thirty_min, TrafficConfig.poisson_broadcast_1_mpm_1),
+        (ScenarioDuration.one_min, TrafficConfig.poisson_broadcast_1_mps_2),
+        (ScenarioDuration.thirty_min, TrafficConfig.poisson_broadcast_1_mpm_2),
         (ScenarioDuration.one_min, TrafficConfig.unicast_1s_delay),
         (ScenarioDuration.thirty_min, TrafficConfig.unicast_5s_delay),
         (ScenarioDuration.thirty_min, TrafficConfig.unicast_10s_delay),
@@ -96,7 +98,8 @@ def get_duration_traffic_list_for_screening_design():
     return [
         (ScenarioDuration.one_min, TrafficConfig.cbr_broadcast_1_mps),
         (ScenarioDuration.one_min, TrafficConfig.poisson_broadcast_1_mps_1),
-        # (ScenarioDuration.one_day, TrafficConfig.deer_use_case)
+        (ScenarioDuration.thirty_min, TrafficConfig.central_dsb_1mpm_5s_50p),
+        (ScenarioDuration.one_min, TrafficConfig.unicast_1s_delay)
     ]
 
 
