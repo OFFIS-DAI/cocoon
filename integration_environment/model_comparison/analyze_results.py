@@ -35,9 +35,10 @@ class EvaluationResult:
 
     # performance metric
     execution_time_s: float
+    timeout_occurred: bool = False
 
     # substitution info (for meta-model)
-    substitution_occurred: bool
+    substitution_occurred: bool = False
     substitution_message_index: Optional[int] = None
 
     # score that indicates how well the hyper-parameter performed in this scenario
@@ -347,6 +348,7 @@ def analyze_results(results_folder: str) -> List[EvaluationResult]:
     detailed_results = {}
     ideal_results = {}
     execution_runtime_data = {}
+    timeout_data = {}
     substitution_occurred_data = {}
     substitution_message_index_data = {}
 
@@ -383,6 +385,7 @@ def analyze_results(results_folder: str) -> List[EvaluationResult]:
         scenario_id = config.scenario_id
         # Load performance metrics
         execution_runtime_data[scenario_id] = data.get('execution_run_time_s', 0.0)
+        timeout_data[scenario_id] = data.get('timeout_occurred', False)
 
         # Load substitution info
         substitution_data = data.get('meta_model_substitution', {})
@@ -417,12 +420,14 @@ def analyze_results(results_folder: str) -> List[EvaluationResult]:
                 'scenario_ids': [],
                 'dataframes': [],
                 'execution_times': [],
+                'timeout_occurred_data': [],
                 'substitution_data': []
             }
 
         scenario_groups[base_scenario_id]['scenario_ids'].append(scenario_id)
         scenario_groups[base_scenario_id]['dataframes'].append(model_df)
         scenario_groups[base_scenario_id]['execution_times'].append(execution_runtime_data.get(scenario_id, 0.0))
+        scenario_groups[base_scenario_id]['timeout_occurred_data'].append(timeout_data.get(scenario_id, False))
         scenario_groups[base_scenario_id]['substitution_data'].append({
             'substitution_occurred': substitution_occurred_data.get(scenario_id, False),
             'substitution_message_index': substitution_message_index_data.get(scenario_id, None)
@@ -436,6 +441,7 @@ def analyze_results(results_folder: str) -> List[EvaluationResult]:
             config = group_data['config']
             dataframes = group_data['dataframes']
             execution_times = group_data['execution_times']
+            timeout_data = group_data['timeout_occurred_data']
             substitution_data = group_data['substitution_data']
 
             # Calculate delay statistics for all scenarios
@@ -449,6 +455,8 @@ def analyze_results(results_folder: str) -> List[EvaluationResult]:
                 substitution_message_index = next((sub['substitution_message_index'] for sub in substitution_data if
                                                    sub['substitution_message_index'] is not None), None)
 
+                timeout_occurred = any(timeout_data)
+
                 result = EvaluationResult(
                     scenario_config=config,
                     model_type=config.model_type,
@@ -459,6 +467,7 @@ def analyze_results(results_folder: str) -> List[EvaluationResult]:
                     nrmse_std=None,  # No MAE for baseline models
                     mean_in_sigma_interval=None,
                     execution_time_s=mean_execution_time,
+                    timeout_occurred=timeout_occurred,
                     substitution_occurred=substitution_occurred,
                     substitution_message_index=substitution_message_index,
                 )
@@ -482,6 +491,8 @@ def analyze_results(results_folder: str) -> List[EvaluationResult]:
                 substitution_message_index = next((sub['substitution_message_index'] for sub in substitution_data if
                                                    sub['substitution_message_index'] is not None), None)
 
+                timeout_occurred = any(timeout_data)
+
                 result = EvaluationResult(
                     scenario_config=config,
                     model_type=config.model_type,
@@ -492,6 +503,7 @@ def analyze_results(results_folder: str) -> List[EvaluationResult]:
                     nrmse_std=nrmse_std,
                     mean_in_sigma_interval=mean_in_one_sigma_interval,
                     execution_time_s=mean_execution_time,
+                    timeout_occurred=timeout_occurred,
                     substitution_occurred=substitution_occurred,
                     substitution_message_index=substitution_message_index,
                 )
@@ -547,6 +559,7 @@ def save_evaluation_results_to_csv(
 
             # Performance metrics
             'execution_time_s': result.execution_time_s,
+            'timeout_occurred': result.timeout_occurred,
 
             # Meta-model specific metrics
             'substitution_occurred': result.substitution_occurred,
