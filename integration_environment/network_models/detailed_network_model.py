@@ -633,6 +633,11 @@ class DetailedNetworkModel:
                     break
 
                 messages = self.omnet_connection.get_all_messages()
+
+                # Track if we received any actual message deliveries in this batch
+                received_message_deliveries = False
+
+                # Process ALL messages first
                 for message in messages:
                     if message.startswith("WAITING_ACK"):
                         waiting_ack_received = True
@@ -647,17 +652,31 @@ class DetailedNetworkModel:
                             if omnet_time >= max_advance_ms:
                                 # OMNeT++ has the same or advanced time, therefore continue with advancing in time
                                 waiting_complete_received = True
-                            elif omnet_time < max_advance_ms:
-                                # send new message
-                                await asyncio.sleep(1)  # Small delay before checking again
-                                self.omnet_connection.send_waiting_message_to_omnet(max_advance_ms=max_advance_ms)
+                            # Note: We'll handle the < max_advance_ms case after processing all messages
                     else:
                         # Process any received messages during waiting
                         time_receive_to_message_new = await self._process_single_message(message)
-                        for delivery_time, msgs in time_receive_to_message_new.items():
-                            if delivery_time not in time_receive_to_message:
-                                time_receive_to_message[delivery_time] = []
-                            time_receive_to_message[delivery_time].extend(msgs)
+
+                        # If we got actual message deliveries, mark the flag
+                        if time_receive_to_message_new:
+                            received_message_deliveries = True
+                            for delivery_time, msgs in time_receive_to_message_new.items():
+                                if delivery_time not in time_receive_to_message:
+                                    time_receive_to_message[delivery_time] = []
+                                time_receive_to_message[delivery_time].extend(msgs)
+
+                # Now handle WAITING logic AFTER processing all messages
+                # Only send additional waiting messages if we haven't received any message deliveries
+                if not received_message_deliveries:
+                    for message in messages:
+                        if message.startswith("WAITING"):
+                            omnet_time = get_time_from_waiting_message(message)
+                            if omnet_time and omnet_time < max_advance_ms:
+                                if len(time_receive_to_message) == 0:
+                                    # send new message
+                                    await asyncio.sleep(1)  # Small delay before checking again
+                                    self.omnet_connection.send_waiting_message_to_omnet(max_advance_ms=max_advance_ms)
+
                 if len(time_receive_to_message) > 0 or not self.omnet_connection.socket_running:
                     self.waiting_for_omnet = False
                     return time_receive_to_message
@@ -685,12 +704,17 @@ class DetailedNetworkModel:
                     break
 
                 messages = self.omnet_connection.get_all_messages()
+
+                # Track if we received any actual message deliveries in this batch
+                received_message_deliveries = False
+
+                # Process ALL messages first
                 for message in messages:
                     if message.startswith("WAITING_COMPLETE"):
                         omnet_time = get_time_from_waiting_message(message)
                         if omnet_time and omnet_time < max_advance_ms:
-                            await asyncio.sleep(1)
-                            self.omnet_connection.send_waiting_message_to_omnet(max_advance_ms=max_advance_ms)
+                            # Will handle this after processing all messages
+                            pass
                         else:
                             waiting_complete_received = True
                             logger.info("Received WAITING_COMPLETE from OMNeT++")
@@ -700,17 +724,33 @@ class DetailedNetworkModel:
                             if omnet_time >= max_advance_ms:
                                 # OMNeT++ has the same or advanced time, therefore continue with advancing in time
                                 waiting_complete_received = True
-                            elif omnet_time < max_advance_ms:
-                                await asyncio.sleep(2)  # Small delay before checking again
-                                # send new message
-                                self.omnet_connection.send_waiting_message_to_omnet(max_advance_ms=max_advance_ms)
+                            # Note: We'll handle the < max_advance_ms case after processing all messages
                     else:
                         # Process any received messages during waiting
                         time_receive_to_message_new = await self._process_single_message(message)
-                        for delivery_time, msgs in time_receive_to_message_new.items():
-                            if delivery_time not in time_receive_to_message:
-                                time_receive_to_message[delivery_time] = []
-                            time_receive_to_message[delivery_time].extend(msgs)
+                        if time_receive_to_message_new:
+                            received_message_deliveries = True
+                            for delivery_time, msgs in time_receive_to_message_new.items():
+                                if delivery_time not in time_receive_to_message:
+                                    time_receive_to_message[delivery_time] = []
+                                time_receive_to_message[delivery_time].extend(msgs)
+
+                # Now handle WAITING logic AFTER processing all messages
+                # Only send additional waiting messages if we haven't received any message deliveries
+                if not received_message_deliveries:
+                    for message in messages:
+                        if message.startswith("WAITING_COMPLETE"):
+                            omnet_time = get_time_from_waiting_message(message)
+                            if omnet_time and omnet_time < max_advance_ms:
+                                await asyncio.sleep(1)
+                                self.omnet_connection.send_waiting_message_to_omnet(max_advance_ms=max_advance_ms)
+                        elif message.startswith("WAITING"):
+                            omnet_time = get_time_from_waiting_message(message)
+                            if omnet_time and omnet_time < max_advance_ms:
+                                await asyncio.sleep(2)  # Small delay before checking again
+                                # send new message
+                                self.omnet_connection.send_waiting_message_to_omnet(max_advance_ms=max_advance_ms)
+
                 if len(time_receive_to_message) > 0 or not self.omnet_connection.socket_running:
                     self.waiting_for_omnet = False
                     return time_receive_to_message
