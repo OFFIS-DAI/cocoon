@@ -35,6 +35,27 @@ def analyze_general_properties(df: pd.DataFrame):
         print(f"  {model_type}: {count}")
     print()
 
+    # Timeout analysis
+    if 'timeout_occurred' in df.columns:
+        timeout_scenarios = df[
+            (df['timeout_occurred'] == True) |
+            (df['timeout_occurred'] == 'True')
+            ]
+        timeout_percentage = len(timeout_scenarios) / len(df) * 100
+        print(f"TIMEOUT ANALYSIS:")
+        print(f"  Overall timeouts: {timeout_percentage:.1f}% ({len(timeout_scenarios)}/{len(df)})")
+
+        # By model type
+        for model_type in sorted(df['model_type'].unique()):
+            model_df = df[df['model_type'] == model_type]
+            model_timeouts = model_df[
+                (model_df['timeout_occurred'] == True) |
+                (model_df['timeout_occurred'] == 'True')
+                ]
+            model_timeout_percentage = len(model_timeouts) / len(model_df) * 100 if len(model_df) > 0 else 0
+            print(f"  {model_type}: {model_timeout_percentage:.1f}% ({len(model_timeouts)}/{len(model_df)})")
+        print()
+
     # Traffic configurations
     traffic_configs = df['traffic_config_clean'].unique()
     print(f"Traffic configurations: {len(traffic_configs)}")
@@ -87,6 +108,54 @@ def analyze_delay_by_traffic(df: pd.DataFrame):
 
             print(
                 f"{traffic:<30} {network_clean:<20} {mean_avg:.1f}±{mean_std:.1f}{'ms':<8} {std_avg:.1f}±{std_std:.1f}ms")
+    print()
+
+
+def analyze_delay_by_num_devices(df: pd.DataFrame):
+    """Analyze mean and std delay values by number of devices."""
+    print("=" * 60)
+    print("MEAN AND STD DELAY VALUES BY NUMBER OF DEVICES")
+    print("=" * 60)
+
+    model_types = df['model_type'].unique()
+
+    for model_type in sorted(model_types):
+        print(f"\n{model_type.upper()} SIMULATIONS:")
+        model_df = df[df['model_type'] == model_type]
+
+        if len(model_df) == 0:
+            print(f"  No {model_type} simulations found")
+            continue
+
+        # Filter out rows where mean is NaN
+        valid_model_df = model_df[model_df['mean'].notna()]
+        if len(valid_model_df) == 0:
+            print(f"  No valid delay data for {model_type} simulations")
+            continue
+
+        # Clean num_devices for display
+        valid_model_df = valid_model_df.copy()
+        valid_model_df['num_devices_clean'] = valid_model_df['num_devices'].str.replace('NumDevices.', '')
+
+        # Group by number of devices
+        devices_stats = valid_model_df.groupby('num_devices_clean').agg({
+            'mean': ['mean', 'std', 'min', 'max', 'count'],
+            'std': ['mean', 'std', 'min', 'max']
+        }).round(2)
+
+        print(f"{'Num Devices':<15} {'Count':<8} {'Mean Delay':<15} {'Std Delay':<15}")
+        print(f"{'':^15} {'':^8} {'Avg±Std':<15} {'Avg±Std':<15}")
+        print("-" * 60)
+
+        for devices, stats in devices_stats.iterrows():
+            mean_avg = stats[('mean', 'mean')]
+            mean_std = stats[('mean', 'std')]
+            std_avg = stats[('std', 'mean')]
+            std_std = stats[('std', 'std')]
+            count = int(stats[('mean', 'count')])
+
+            print(
+                f"{devices:<15} {count:<8} {mean_avg:.1f}±{mean_std:.1f}{'ms':<8} {std_avg:.1f}±{std_std:.1f}ms")
     print()
 
 
@@ -159,6 +228,27 @@ def analyze_metamodel_properties(df: pd.DataFrame):
         traffic_percentage = len(traffic_substitutions) / len(traffic_df) * 100
         print(f"  {traffic}: {traffic_percentage:.1f}% ({len(traffic_substitutions)}/{len(traffic_df)})")
 
+    # Timeout analysis for meta-model
+    if 'timeout_occurred' in metamodel_df.columns:
+        timeout_scenarios = metamodel_df[
+            (metamodel_df['timeout_occurred'] == True) |
+            (metamodel_df['timeout_occurred'] == 'True')
+            ]
+        timeout_percentage = len(timeout_scenarios) / len(metamodel_df) * 100
+        print(f"\nPERCENTAGE OF META-MODEL SCENARIOS WITH TIMEOUTS:")
+        print(f"  Overall: {timeout_percentage:.1f}% ({len(timeout_scenarios)}/{len(metamodel_df)})")
+
+        # By traffic config
+        print(f"\nBy traffic configuration:")
+        for traffic in metamodel_df['traffic_config_clean'].unique():
+            traffic_df = metamodel_df[metamodel_df['traffic_config_clean'] == traffic]
+            traffic_timeouts = traffic_df[
+                (traffic_df['timeout_occurred'] == True) |
+                (traffic_df['timeout_occurred'] == 'True')
+                ]
+            traffic_timeout_percentage = len(traffic_timeouts) / len(traffic_df) * 100
+            print(f"  {traffic}: {traffic_timeout_percentage:.1f}% ({len(traffic_timeouts)}/{len(traffic_df)})")
+
     # Mean substitution message index
     if len(substitution_scenarios) > 0:
         valid_indices = substitution_scenarios['substitution_message_index'].dropna()
@@ -225,6 +315,63 @@ def analyze_accuracy_comparison(df: pd.DataFrame):
             sigma_mean = sigma_stats.loc[traffic, 'mean'] * 100
             sigma_std = sigma_stats.loc[traffic, 'std'] * 100
             print(f"{traffic:<30} {sigma_mean:.1f}±{sigma_std:.1f}%")
+    print()
+
+
+def analyze_accuracy_by_num_devices(df: pd.DataFrame):
+    """Analyze accuracy comparison metrics by number of devices."""
+    print("=" * 60)
+    print("ACCURACY COMPARISON BY NUMBER OF DEVICES")
+    print("=" * 60)
+
+    # Find all models that have accuracy metrics (non-baseline models)
+    approximation_models = df[df['nrmse_mean'].notna()]
+
+    if len(approximation_models) == 0:
+        print("No valid accuracy data found")
+        return
+
+    model_types = approximation_models['model_type'].unique()
+
+    for model_type in sorted(model_types):
+        model_df = approximation_models[approximation_models['model_type'] == model_type]
+
+        # Clean num_devices for display
+        model_df = model_df.copy()
+        model_df['num_devices_clean'] = model_df['num_devices'].str.replace('NumDevices.', '')
+
+        print(f"\n{model_type.upper()} - NRMSE VALUES BY NUMBER OF DEVICES:")
+        print(f"{'Num Devices':<15} {'Count':<8} {'NRMSE Mean':<15} {'NRMSE Std':<15}")
+        print("-" * 60)
+
+        nrmse_stats = model_df.groupby('num_devices_clean').agg({
+            'nrmse_mean': ['mean', 'std', 'min', 'max', 'count'],
+            'nrmse_std': ['mean', 'std', 'min', 'max']
+        }).round(4)
+
+        for devices in nrmse_stats.index:
+            nrmse_mean_avg = nrmse_stats.loc[devices, ('nrmse_mean', 'mean')]
+            nrmse_mean_std = nrmse_stats.loc[devices, ('nrmse_mean', 'std')]
+            nrmse_std_avg = nrmse_stats.loc[devices, ('nrmse_std', 'mean')]
+            nrmse_std_std = nrmse_stats.loc[devices, ('nrmse_std', 'std')]
+            count = int(nrmse_stats.loc[devices, ('nrmse_mean', 'count')])
+
+            print(
+                f"{devices:<15} {count:<8} {nrmse_mean_avg:.4f}±{nrmse_mean_std:.4f}   {nrmse_std_avg:.4f}±{nrmse_std_std:.4f}")
+
+        print(f"\n{model_type.upper()} - MEAN-IN-ONE-SIGMA VALUES BY NUMBER OF DEVICES:")
+        print(f"{'Num Devices':<15} {'Count':<8} {'Reliability %':<15}")
+        print("-" * 45)
+
+        sigma_stats = model_df.groupby('num_devices_clean').agg({
+            'mean_in_one_sigma_interval': ['mean', 'std', 'min', 'max', 'count']
+        }).round(4)
+
+        for devices in sigma_stats.index:
+            sigma_mean = sigma_stats.loc[devices, ('mean_in_one_sigma_interval', 'mean')] * 100
+            sigma_std = sigma_stats.loc[devices, ('mean_in_one_sigma_interval', 'std')] * 100
+            count = int(sigma_stats.loc[devices, ('mean_in_one_sigma_interval', 'count')])
+            print(f"{devices:<15} {count:<8} {sigma_mean:.1f}±{sigma_std:.1f}%")
     print()
 
 
@@ -297,6 +444,7 @@ def analyze_best_hyperparameters(df: pd.DataFrame):
         print(f"    - Reliability: {best_config.get('mean_in_one_sigma_interval', 0) * 100:.1f}%")
         print(f"    - Execution Time: {best_config.get('execution_time_s', 'N/A'):.1f}s")
         print(f"    - Substitution Occurred: {best_config.get('substitution_occurred', 'N/A')}")
+        print(f"    - Timeout Occurred: {best_config.get('timeout_occurred', 'N/A')}")
         print()
 
     # Overall best configuration by mean score across traffic types
@@ -316,7 +464,8 @@ def analyze_best_hyperparameters(df: pd.DataFrame):
         'nrmse_std': 'mean',
         'mean_in_one_sigma_interval': 'mean',
         'execution_time_s': 'mean',
-        'substitution_occurred': lambda x: sum(x == True) / len(x)
+        'substitution_occurred': lambda x: sum(x == True) / len(x),
+        'timeout_occurred': lambda x: sum(x == True) / len(x) if 'timeout_occurred' in scored_df.columns else 0
     }).round(4)
 
     # Find configuration with highest mean score
@@ -334,6 +483,11 @@ def analyze_best_hyperparameters(df: pd.DataFrame):
     print(f"    - Execution Time: {config_mean_scores.loc[best_mean_config_id, ('execution_time_s', 'mean')]:.1f}s")
     print(
         f"    - Substitution Success Rate: {config_mean_scores.loc[best_mean_config_id, ('substitution_occurred', '<lambda>')] * 100:.1f}%")
+
+    # Add timeout rate if available
+    if 'timeout_occurred' in scored_df.columns:
+        timeout_rate = config_mean_scores.loc[best_mean_config_id, ('timeout_occurred', '<lambda>')] * 100
+        print(f"    - Timeout Rate: {timeout_rate:.1f}%")
     print()
 
 
@@ -531,10 +685,12 @@ def main():
     # Run all analyses
     analyze_general_properties(df)
     analyze_delay_by_traffic(df)
-    analyze_scenario_delay_comparison(df)
+    analyze_delay_by_num_devices(df)  # New analysis by number of devices
+    analyze_scenario_delay_comparison(df)  # New comprehensive scenario analysis
     analyze_variation_properties(df)
     analyze_metamodel_properties(df)
     analyze_accuracy_comparison(df)
+    analyze_accuracy_by_num_devices(df)
     analyze_variability_vs_accuracy(df)
     analyze_best_hyperparameters(df)
     analyze_performance_comparison(df)
