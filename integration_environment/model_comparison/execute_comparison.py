@@ -438,7 +438,9 @@ async def run_scenario_config(scenario_configuration: ScenarioConfiguration, pha
                                                                results_recorder=results_recorder,
                                                                scenario_configuration=scenario_configuration)
     elif scenario_configuration.traffic_configuration in [TrafficConfig.poisson_broadcast_1_mps_1,
-                                                          TrafficConfig.poisson_broadcast_1_mpm_1]:
+                                                          TrafficConfig.poisson_broadcast_1_mpm_1,
+                                                          TrafficConfig.poisson_broadcast_1_mps_2,
+                                                          TrafficConfig.poisson_broadcast_1_mpm_2]:
         container_mapping = \
             await initialize_poisson_broadcast_agents(clock=clock,
                                                       results_recorder=results_recorder,
