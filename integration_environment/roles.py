@@ -598,6 +598,150 @@ class PoissonSenderRole(Role):
         return self._message_counter
 
 
+class LocalDSbRole(Role):
+    def __init__(self, control_address: AgentAddress, scenario_config: ScenarioConfiguration):
+        super().__init__()
+        self.control_address = control_address
+        self.scenario_configuration = scenario_config
+        self._message_counter = 0
+        self._periodic_task = None
+
+    def setup(self):
+        self.context.subscribe_message(self, self.handle_traffic_message,
+                                       lambda content, meta: isinstance(content, TrafficMessage))
+
+    def on_start(self):
+        pass
+
+    def on_ready(self):
+        if self.scenario_configuration.traffic_configuration == TrafficConfig.central_dsb_1mpm_5s_50p:
+            frequency = 60
+        elif self.scenario_configuration.traffic_configuration == TrafficConfig.central_dsb_5mpm_30s_75:
+            frequency = 60/5
+        elif self.scenario_configuration.traffic_configuration == TrafficConfig.central_dsb_10mph_60s_25p:
+            frequency = (60*60)/10
+        else:
+            frequency = 60 - 30
+        self._periodic_task = self.context.schedule_periodic_task(self._send_data_to_control_role, frequency)
+
+    def handle_traffic_message(self, content: TrafficMessage, meta):
+        logger.debug(f'Traffic Message received at time {self.context.current_timestamp}.')
+        # initialize event for results recording
+        event = ReceiveMessage(msg_id=content.msg_id,
+                               time_receive_ms=round(self.context.current_timestamp * 1000))
+        self.context.emit_event(event=event, event_source=self)
+
+    async def _send_data_to_control_role(self):
+        if self.context.current_timestamp == 0:
+            return  # skip the first iteration
+        time_send = round(self.context.current_timestamp * 1000)
+        msg_id = f'{self.context.addr.protocol_addr}_{self._message_counter}'
+
+        # Send message
+        payload = generate_payload_with_byte_size(self.scenario_configuration.payload_size.value)
+        await self.context.send_message(
+            TrafficMessage(msg_id=msg_id, payload=payload),
+            receiver_addr=self.control_address,
+        )
+
+        # Record the sending event
+        event = SendMessage(
+            sender=self.context.addr,
+            receiver=self.control_address,
+            msg_id=msg_id,
+            payload_size_B=self.scenario_configuration.payload_size.value,
+            time_send_ms=time_send
+        )
+        self.context.emit_event(event=event, event_source=self)
+
+        self._message_counter += 1
+        logger.debug(f'Sent data to {self.control_address} at time {self.context.current_timestamp}')
+
+    async def on_stop(self):
+        """Clean shutdown - cancel the periodic task."""
+        if self._periodic_task and not self._periodic_task.done():
+            self._periodic_task.cancel()
+            try:
+                await self._periodic_task
+            except asyncio.CancelledError:
+                pass
+
+
+class ControlDSbRole(Role):
+    def __init__(self, scenario_config: ScenarioConfiguration):
+        super().__init__()
+        self.local_agent_addresses = []
+        self.scenario_configuration = scenario_config
+        self._message_counter = 0
+        self._scheduled_tasks = []
+        self._running = False
+
+        # get duration of calculation between receiving message and response and local allocation probability
+        self.calc_duration_s = 0
+        self.alloc_percent = 0
+        if self.scenario_configuration.traffic_configuration == TrafficConfig.central_dsb_1mpm_5s_50p:
+            self.calc_duration_s = 5
+            self.alloc_percent = 50
+        elif self.scenario_configuration.traffic_configuration == TrafficConfig.central_dsb_5mpm_30s_75:
+            self.calc_duration_s = 30
+            self.alloc_percent = 75
+        elif self.scenario_configuration.traffic_configuration == TrafficConfig.central_dsb_10mph_60s_25p:
+            self.calc_duration_s = 60
+            self.alloc_percent = 25
+
+        random.seed(1)
+
+    def setup(self):
+        self.context.subscribe_message(self, self.handle_traffic_message,
+                                       lambda content, meta: isinstance(content, TrafficMessage))
+
+    def handle_traffic_message(self, content: TrafficMessage, meta):
+        logger.debug(f'Traffic Message received at time {self.context.current_timestamp}.')
+        # initialize event for results recording
+        event = ReceiveMessage(msg_id=content.msg_id,
+                               time_receive_ms=round(self.context.current_timestamp * 1000))
+        self.context.emit_event(event=event, event_source=self)
+
+        agent_addr = AgentAddress(meta['sender_addr'], meta['sender_id'])
+
+        if agent_addr not in self.local_agent_addresses:
+            self.local_agent_addresses.append(agent_addr)
+
+        if random.random() < (self.alloc_percent/100):
+            self.context.schedule_timestamp_task(self.send_allocation_messages(agent_addr),
+                                                 (self.context.current_timestamp + self.calc_duration_s))
+
+    async def send_allocation_messages(self, addr: AgentAddress):
+        time_send = round(self.context.current_timestamp * 1000)
+        msg_id = f'{self.context.addr.protocol_addr}_{self._message_counter}'
+
+        # Send message
+        payload = generate_payload_with_byte_size(self.scenario_configuration.payload_size.value)
+        await self.context.send_message(
+            TrafficMessage(msg_id=msg_id, payload=payload),
+            receiver_addr=addr,
+        )
+
+        # Record the sending event
+        event = SendMessage(
+            sender=self.context.addr,
+            receiver=addr,
+            msg_id=msg_id,
+            payload_size_B=self.scenario_configuration.payload_size.value,
+            time_send_ms=time_send
+        )
+        self.context.emit_event(event=event, event_source=self)
+
+        self._message_counter += 1
+        logger.debug(f'Sent data to {addr} at time {self.context.current_timestamp}')
+
+    def on_start(self):
+        pass
+
+    def on_ready(self):
+        pass
+
+
 class UnicastSenderRole(Role):
     def __init__(self, receiver_addresses: list, scenario_config: ScenarioConfiguration, start_at_s: int = 1):
         super().__init__()
