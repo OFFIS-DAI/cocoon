@@ -90,7 +90,9 @@ def get_duration_traffic_list_meta_model_training():
         (ScenarioDuration.one_min, TrafficConfig.unicast_1s_delay),
         (ScenarioDuration.thirty_min, TrafficConfig.unicast_5s_delay),
         (ScenarioDuration.thirty_min, TrafficConfig.unicast_10s_delay),
-        # (ScenarioDuration.thirty_min, TrafficConfig.deer_use_case)
+        (ScenarioDuration.thirty_min, TrafficConfig.central_dsb_1mpm_5s_50p),
+        (ScenarioDuration.thirty_min, TrafficConfig.central_dsb_5mpm_30s_75),
+        (ScenarioDuration.one_day, TrafficConfig.central_dsb_10mph_60s_25p)
     ]
 
 
