@@ -31,20 +31,56 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def get_training_df(scenario_configuration: ScenarioConfiguration, same_technology=True):
+def get_training_df(scenario_configuration: ScenarioConfiguration):
     # Get the directory where this script is located
     current_dir = os.path.dirname(os.path.abspath(__file__))
     training_data_path = os.path.join(current_dir, 'cocoon_training_data')
 
     existing_configurations = [ScenarioConfiguration.from_scenario_id(f.split('.')[0])
                                for f in os.listdir(training_data_path)]
-    different_traffic_configs = [c for c in existing_configurations
-                                 if c.traffic_configuration != scenario_configuration.traffic_configuration]
-    if same_technology:
-        different_traffic_configs = [c for c in different_traffic_configs
-                                     if c.network_type == scenario_configuration.network_type]
+    # get string of traffic model
+    search_str = ''
+    if 'cbr' in scenario_configuration.traffic_configuration.name:
+        search_str = 'cbr'
+    if 'poisson' in scenario_configuration.traffic_configuration.name:
+        search_str = 'poisson'
+    if 'unicast' in scenario_configuration.traffic_configuration.name:
+        search_str = 'unicast'
+    if 'central_dsb' in scenario_configuration.traffic_configuration.name:
+        search_str = 'central_dsb'
+
+    selected_traffic_configs_for_training = []
+    if scenario_configuration.test_train_split == TestTrainSplit.parametrization_split:
+        # use same base traffic model but with different params (+ same technology)
+        selected_traffic_configs_for_training = [c for c in existing_configurations
+                                                 if (search_str in c.traffic_configuration.name and
+                                                     c.network_type == scenario_configuration.network_type and
+                                                     c is not scenario_configuration)]
+    elif scenario_configuration.test_train_split == TestTrainSplit.traffic_load_split:
+        # use same base traffic model but with different message volume (+ same technology)
+        selected_traffic_configs_for_training = [c for c in existing_configurations
+                                                 if (search_str in c.traffic_configuration.name and
+                                                     c.network_type == scenario_configuration.network_type and
+                                                     c.traffic_configuration is not
+                                                     scenario_configuration.traffic_configuration)]
+    elif scenario_configuration.test_train_split == TestTrainSplit.technology_split:
+        # use same base traffic model (with all possible parameters) but with different network technology
+        selected_traffic_configs_for_training = [c for c in existing_configurations
+                                                 if (search_str in c.traffic_configuration.name and
+                                                     c.network_type is not scenario_configuration.network_type)]
+    elif scenario_configuration.test_train_split == TestTrainSplit.scale_split:
+        # use same technology and same base traffic model, but different amount of devices
+        selected_traffic_configs_for_training = [c for c in existing_configurations
+                                                 if (search_str in c.traffic_configuration.name and
+                                                     c.network_type == scenario_configuration.network_type and
+                                                     c.num_devices is not scenario_configuration.num_devices)]
+    elif scenario_configuration.test_train_split == TestTrainSplit.traffic_model_split:
+        # use same technology, but different traffic model
+        selected_traffic_configs_for_training = [c for c in existing_configurations
+                                                 if (search_str not in c.traffic_configuration.name and
+                                                     c.network_type == scenario_configuration.network_type)]
     dataframes = []
-    for c in different_traffic_configs:
+    for c in selected_traffic_configs_for_training:
         try:
             csv_path = os.path.join(training_data_path, f'{c.scenario_id}.csv')
             df = pd.read_csv(csv_path)
