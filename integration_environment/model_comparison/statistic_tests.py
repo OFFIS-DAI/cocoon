@@ -479,6 +479,269 @@ def create_significance_summary(significance_results, effect_directions):
     print("\nLegend: *** p<0.001, ** p<0.01, * p<0.05, NS = not significant")
 
 
+def hyperparameter_traffic_anova_analysis(df):
+    """
+    Two-way ANOVA analysis examining the combined effects of hyperparameters and traffic configuration
+    """
+    print("=" * 80)
+    print("HYPERPARAMETER x TRAFFIC CONFIGURATION ANOVA ANALYSIS")
+    print("=" * 80)
+
+    # Filter to meta-model data only
+    meta_data = df[df['model_type'] == 'meta_model'].copy()
+    print(f"Analyzing {len(meta_data)} meta-model scenarios")
+
+    if len(meta_data) == 0:
+        print("No meta-model data found!")
+        return
+
+    # Create coded variables for hyperparameters
+    factor_mappings = {
+        'cluster_distance_threshold': {1.0: -1, 3.0: 0, 5.0: 1},
+        'batch_size_ipupa': {50: -1, 100: 0, 150: 1},
+        'learning_rate_weighting': {0.1: -1, 0.5: 0, 0.9: 1},
+        'butterfly_threshold_value': {0.1: -1, 0.5: 0, 0.9: 1},
+        'substitution_priority': {'error_level': -1, 'none': 0, 'error_trend': 1}
+    }
+
+    for factor, mapping in factor_mappings.items():
+        if factor in meta_data.columns:
+            coded_col = f"{factor}_coded"
+            meta_data[coded_col] = meta_data[factor].map(mapping)
+
+    # Clean traffic configuration names
+    if 'traffic_configuration' in meta_data.columns:
+        meta_data['traffic_config_clean'] = meta_data['traffic_configuration'].astype(str).str.replace(r'^[^.]*\.', '',
+                                                                                                       regex=True)
+
+    # Key response variables
+    responses = {
+        'nrmse_mean': 'NRMSE (mean)',
+        'nrmse_std': 'NRMSE (std)',
+        'mean_in_one_sigma_interval': 'Mean in one-sigma-interval',
+        'substitution_message_index': 'Substitution Message Index',
+        'execution_time_s': 'Execution Time (s)',
+        'score': 'Score'
+    }
+
+    # Hyperparameter factors (coded)
+    hyperparameters = {
+        'cluster_distance_threshold_coded': 'Cluster Distance Threshold',
+        'batch_size_ipupa_coded': 'Batch Size (I-Pupa)',
+        'learning_rate_weighting_coded': 'Learning Rate Weighting',
+        'butterfly_threshold_value_coded': 'Butterfly Threshold Value',
+        'substitution_priority_coded': 'Substitution Priority'
+    }
+
+    # Results storage
+    anova_results = {}
+
+    print(f"\nAnalyzing {len(responses)} response variables...")
+    print(f"Traffic configurations: {sorted(meta_data['traffic_config_clean'].unique())}")
+    print()
+
+    # Analyze each response variable
+    for response_col, response_name in responses.items():
+        if response_col not in meta_data.columns:
+            print(f"Warning: {response_name} not found in data")
+            continue
+
+        print("=" * 70)
+        print(f"RESPONSE: {response_name}")
+        print("=" * 70)
+
+        # Clean data for this response
+        clean_data = meta_data.dropna(subset=[response_col, 'traffic_config_clean'])
+        if len(clean_data) < 30:
+            print(f"Insufficient data for {response_name} (n={len(clean_data)})")
+            continue
+
+        response_results = {}
+
+        # Test each hyperparameter with traffic configuration
+        for hyperparam_col, hyperparam_name in hyperparameters.items():
+            if hyperparam_col not in clean_data.columns:
+                continue
+
+            factor_data = clean_data.dropna(subset=[hyperparam_col])
+            if len(factor_data) < 30:
+                continue
+
+            try:
+                # Two-way ANOVA: Hyperparameter + Traffic + Interaction
+                formula = f"{response_col} ~ C({hyperparam_col}) + C(traffic_config_clean) + C({hyperparam_col}):C(traffic_config_clean)"
+
+                try:
+                    model = ols(formula, data=factor_data).fit()
+                    anova_result = anova_lm(model, typ=2)
+                except Exception:
+                    # Try simpler model if interaction fails
+                    formula = f"{response_col} ~ C({hyperparam_col}) + C(traffic_config_clean)"
+                    model = ols(formula, data=factor_data).fit()
+                    anova_result = anova_lm(model, typ=2)
+
+                # Extract results
+                results = {}
+                for effect in anova_result.index:
+                    if 'Residual' not in effect:
+                        p_value = anova_result.loc[effect, 'PR(>F)']
+                        f_stat = anova_result.loc[effect, 'F']
+
+                        if pd.isna(p_value) or pd.isna(f_stat):
+                            continue
+
+                        # Determine significance
+                        if p_value < 0.001:
+                            significance = "***"
+                        elif p_value < 0.01:
+                            significance = "**"
+                        elif p_value < 0.05:
+                            significance = "*"
+                        else:
+                            significance = "NS"
+
+                        results[effect] = {
+                            'f_stat': f_stat,
+                            'p_value': p_value,
+                            'significance': significance
+                        }
+
+                response_results[hyperparam_name] = results
+
+                # Print results
+                print(f"\n{hyperparam_name}:")
+                print(f"{'Effect':<50} {'F-stat':<10} {'p-value':<10} {'Sig':<5}")
+                print("-" * 80)
+
+                for effect, stats in results.items():
+                    effect_name = effect.replace('C(', '').replace(')', '').replace('traffic_config_clean',
+                                                                                    'Traffic').replace(hyperparam_col,
+                                                                                                       hyperparam_name[
+                                                                                                       :15]).replace(
+                        ':', ' x ')
+                    print(
+                        f"{effect_name:<50} {stats['f_stat']:<10.2f} {stats['p_value']:<10.4f} {stats['significance']:<5}")
+
+                # Show significant main effects
+                hyperparam_effect_key = f"C({hyperparam_col})"
+                if hyperparam_effect_key in results and results[hyperparam_effect_key]["p_value"] < 0.05:
+                    print(f"\nMarginal means by {hyperparam_name}:")
+                    hyperparam_means = factor_data.groupby(hyperparam_col)[response_col].agg(['mean', 'std', 'count'])
+                    for level in sorted(hyperparam_means.index):
+                        level_desc = {-1: "Low (-1)", 0: "Center (0)", 1: "High (+1)"}.get(level, f"Level {level}")
+                        print(
+                            f"  {level_desc:12s}: {hyperparam_means.loc[level, 'mean']:8.3f} ± {hyperparam_means.loc[level, 'std']:6.3f} (n={hyperparam_means.loc[level, 'count']})")
+
+                traffic_effect_key = "C(traffic_config_clean)"
+                if traffic_effect_key in results and results[traffic_effect_key]["p_value"] < 0.05:
+                    print(f"\nMarginal means by Traffic Configuration:")
+                    traffic_means = factor_data.groupby('traffic_config_clean')[response_col].agg(
+                        ['mean', 'std', 'count'])
+                    for traffic in sorted(traffic_means.index):
+                        traffic_short = traffic[:25] + "..." if len(traffic) > 25 else traffic
+                        print(
+                            f"  {traffic_short:28s}: {traffic_means.loc[traffic, 'mean']:8.3f} ± {traffic_means.loc[traffic, 'std']:6.3f} (n={traffic_means.loc[traffic, 'count']})")
+
+                # Show interaction effects if significant
+                interaction_keys = [key for key in results.keys() if ':' in key]
+                for interaction_key in interaction_keys:
+                    if results[interaction_key]["p_value"] < 0.05:
+                        print(f"\nSignificant Interaction: {hyperparam_name} x Traffic Configuration")
+                        print(
+                            "This suggests hyperparameter effects depend on traffic type - consider traffic-specific tuning")
+
+            except Exception as e:
+                print(f"Error analyzing {hyperparam_name}: {str(e)}")
+
+        anova_results[response_name] = response_results
+        print()
+
+    # Create summary table
+    print("=" * 100)
+    print("SUMMARY TABLE")
+    print("=" * 100)
+
+    all_hyperparams = sorted(set().union(*[results.keys() for results in anova_results.values()]))
+    responses_list = sorted(anova_results.keys())
+
+    # Main effects summary
+    print("\nHYPERPARAMETER MAIN EFFECTS:")
+    print(f"{'Hyperparameter':<30}", end="")
+    for response in responses_list:
+        print(f"{response[:10]:<12}", end="")
+    print()
+    print("-" * (30 + 12 * len(responses_list)))
+
+    for hyperparam in all_hyperparams:
+        print(f"{hyperparam[:29]:<30}", end="")
+        for response in responses_list:
+            if hyperparam in anova_results[response]:
+                results = anova_results[response][hyperparam]
+                # Find hyperparameter main effect
+                hyperparam_key = [k for k in results.keys() if ':' not in k and 'traffic' not in k.lower()]
+                if hyperparam_key:
+                    sig = results[hyperparam_key[0]]['significance']
+                    print(f"{sig:<12}", end="")
+                else:
+                    print(f"{'--':<12}", end="")
+            else:
+                print(f"{'--':<12}", end="")
+        print()
+
+    # Traffic effects summary
+    print(f"\nTRAFFIC CONFIGURATION MAIN EFFECTS:")
+    print(f"{'Hyperparameter Context':<30}", end="")
+    for response in responses_list:
+        print(f"{response[:10]:<12}", end="")
+    print()
+    print("-" * (30 + 12 * len(responses_list)))
+
+    for hyperparam in all_hyperparams:
+        print(f"{hyperparam[:29]:<30}", end="")
+        for response in responses_list:
+            if hyperparam in anova_results[response]:
+                results = anova_results[response][hyperparam]
+                traffic_key = "C(traffic_config_clean)"
+                if traffic_key in results:
+                    sig = results[traffic_key]['significance']
+                    print(f"{sig:<12}", end="")
+                else:
+                    print(f"{'--':<12}", end="")
+            else:
+                print(f"{'--':<12}", end="")
+        print()
+
+    # Interaction effects summary
+    print(f"\nINTERACTION EFFECTS (Hyperparameter x Traffic):")
+    print(f"{'Hyperparameter':<30}", end="")
+    for response in responses_list:
+        print(f"{response[:10]:<12}", end="")
+    print()
+    print("-" * (30 + 12 * len(responses_list)))
+
+    for hyperparam in all_hyperparams:
+        print(f"{hyperparam[:29]:<30}", end="")
+        for response in responses_list:
+            if hyperparam in anova_results[response]:
+                results = anova_results[response][hyperparam]
+                interaction_keys = [k for k in results.keys() if ':' in k]
+                if interaction_keys:
+                    sig = results[interaction_keys[0]]['significance']
+                    print(f"{sig:<12}", end="")
+                else:
+                    print(f"{'--':<12}", end="")
+            else:
+                print(f"{'--':<12}", end="")
+        print()
+
+    print("\nLegend: *** p<0.001, ** p<0.01, * p<0.05, NS = not significant")
+    print("\nInterpretation:")
+    print("• Significant interactions suggest hyperparameter effects depend on traffic type")
+    print("• Non-significant interactions suggest consistent hyperparameter effects across traffic")
+
+    return anova_results
+
+
 def main(phase=1):
     """
     Main function to run the appropriate statistical analysis
@@ -493,6 +756,7 @@ def main(phase=1):
         # Run simple factor effects analysis for hyperparameters
         print("\nRunning hyperparameter effects analysis...")
         simple_factor_effects_analysis(df, phase)
+        hyperparameter_traffic_anova_analysis(df)
     elif phase == 2:
         # Run two-way ANOVA for scenario parameters vs model types
         print("\nRunning two-way ANOVA analysis...")
