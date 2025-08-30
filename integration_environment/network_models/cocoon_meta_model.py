@@ -373,7 +373,7 @@ class CocoonMetaModel:
         # make df smaller for clustering
         reduced_df = training_df.copy()
         reduced_df.drop_duplicates(inplace=True)
-        reduced_df = reduced_df.sample(n=1000, random_state=4)
+        reduced_df = reduced_df.sample(n=1000, random_state=42)
 
         # Identify non-constant features
         feature_vars = reduced_df[self.object_variables].var()
