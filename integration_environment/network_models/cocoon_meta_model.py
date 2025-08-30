@@ -373,10 +373,16 @@ class CocoonMetaModel:
         # make df smaller for clustering
         reduced_df = training_df.copy()
         reduced_df.drop_duplicates(inplace=True)
-        reduced_df = reduced_df.sample(n=1000, random_state=42)
+        reduced_df = reduced_df.sample(n=1000, random_state=4)
+
+        # Identify non-constant features
+        feature_vars = reduced_df[self.object_variables].var()
+        non_constant_features = feature_vars[feature_vars > 0].index.tolist()
+
+        print(f"Removing constant features: {set(self.object_variables) - set(non_constant_features)}")
 
         # calculate pairwise distances with squared Euclidean distance metric
-        dis_matrix = pdist(reduced_df[self.object_variables], metric='seuclidean')
+        dis_matrix = pdist(reduced_df[non_constant_features], metric='seuclidean')
 
         # Calculate linkages with hierarchical clustering (centroid linkage)
         linkage_matrix_centroid = linkage(dis_matrix, method='centroid')  # centroid linkage
