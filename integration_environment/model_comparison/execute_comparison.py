@@ -136,8 +136,7 @@ def get_duration_traffic_list_for_screening_design():
     return [
         (ScenarioDuration.one_min, TrafficConfig.cbr_broadcast_1_mps),
         (ScenarioDuration.one_min, TrafficConfig.poisson_broadcast_1_mps_1),
-        (ScenarioDuration.thirty_min, TrafficConfig.central_dsb_1mpm_5s_50p),
-        (ScenarioDuration.one_min, TrafficConfig.unicast_1s_delay)
+        (ScenarioDuration.thirty_min, TrafficConfig.central_dsb_1mpm_5s_50p)
     ]
 
 
