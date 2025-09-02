@@ -94,6 +94,8 @@ class CommunicationScheduler(ABC):
                 incoming_messages_for_container = await self.get_incoming_messages_for_container(container_name)
                 output = await container.step(incoming_messages=incoming_messages_for_container,
                                               simulation_time=step_time)
+                for m in output.messages:
+                    m.time = self.current_time
                 container_messages_dict[container_name] = output.messages
                 next_activities_in_current_step.append(output.next_activity)
 
