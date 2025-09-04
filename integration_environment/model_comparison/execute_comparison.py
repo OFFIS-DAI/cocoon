@@ -702,11 +702,11 @@ async def run_benchmark_suite_screening(phase: int = None):
           f'Phase 3: {len(requirement_analysis_configs)} scenarios for requirement analysis. '
           f'Worst case execution time: {num_scen * num_repetitions * 10} minutes /'
           f'{num_scen * num_repetitions * 10 / 60} hours.')
+    for scenario_configuration in meta_model_training_configs:
+        await run_scenario_config(scenario_configuration=scenario_configuration, run=0,
+                                  phase=0, timeout_seconds=60 * 20)  # 20 minute timeout
 
     for r in range(num_repetitions):
-        for scenario_configuration in meta_model_training_configs:
-            await run_scenario_config(scenario_configuration=scenario_configuration, run=r,
-                                      phase=0, timeout_seconds=60*20)  # 20 minute timeout
         for scenario_configuration in face_centered_central_composite_design_configs:
             await run_scenario_config(scenario_configuration=scenario_configuration, run=r,
                                       phase=1)
