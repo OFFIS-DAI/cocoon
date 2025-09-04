@@ -409,6 +409,7 @@ def analyze_results(results_folder: str) -> List[EvaluationResult]:
             learning_rate_weighting=config.learning_rate_weighting,
             butterfly_threshold_value=config.butterfly_threshold_value,
             substitution_priority=config.substitution_priority,
+            test_train_split=config.test_train_split,
             run=None  # Exclude run from grouping
         )
 
