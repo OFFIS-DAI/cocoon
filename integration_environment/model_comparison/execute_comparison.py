@@ -556,12 +556,15 @@ async def run_scenario(container_mapping: Dict[str, ExternalSchedulingContainer]
 
 
 async def run_scenario_config(scenario_configuration: ScenarioConfiguration, phase: int = None,
-                              run: int = 0, timeout_seconds: int=600):
+                              run: int = 0, timeout_seconds: int = 600, output_dir: str = None):
     scenario_configuration.run = run
     if phase is not None:
         output_dir = f'results/phase{phase}'
     else:
-        output_dir = 'results'
+        if output_dir:
+            output_dir = f'results/{output_dir}'
+        else:
+            output_dir = 'results'
     results_recorder = ResultsRecorder(scenario_configuration=scenario_configuration, output_dir=output_dir)
     clock = ExternalClock(start_time=0)
 
