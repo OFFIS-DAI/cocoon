@@ -322,7 +322,7 @@ def calculate_hyperparameter_scores(evaluation_results: List[EvaluationResult]) 
     print(f"Calculated scores for {len(valid_results)} meta-model configurations")
 
 
-def analyze_results(results_folder: str) -> List[EvaluationResult]:
+def analyze_results(results_folder: str, phase: int=0) -> List[EvaluationResult]:
     """
     Analyze all simulation results in the given folder.
 
