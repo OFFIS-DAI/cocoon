@@ -1,15 +1,22 @@
+import matplotlib
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 from pathlib import Path
 import matplotlib.patches as mpatches
 
+# Fix PyCharm matplotlib backend issue
+matplotlib.use('Agg')  # Use non-interactive backend
+
 results_dir = 'analysis_results/plots_phase1/'
 Path(results_dir).mkdir(parents=True, exist_ok=True)  # create dir if not exists
 
 
-def load_results(phase: int):
-    results_path = Path(f"analysis_results/aggregated_results{phase}.csv")
+def load_results(phase: int = 1, minimal_evaluation=False):
+    if minimal_evaluation:
+        results_path = Path(f"analysis_results/minimal_analysis.csv")
+    else:
+        results_path = Path(f"analysis_results/aggregated_results{phase}.csv")
     df = pd.read_csv(results_path)
     return df
 
