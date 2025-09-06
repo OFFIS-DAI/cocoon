@@ -163,19 +163,24 @@ def get_scenario_configurations_for_phase_2():
                 ]:
                     for scenario_duration, traffic_config in get_duration_traffic_list_for_screening_design():
                         if model_type == ModelType.meta_model:
-                            scenario_configurations.append(
-                                ScenarioConfiguration(payload_size=payload_size,  # TODO: update
-                                                      num_devices=n_devices,
-                                                      model_type=model_type,
-                                                      scenario_duration=scenario_duration,
-                                                      traffic_configuration=traffic_config,
-                                                      network_type=network,
-                                                      cluster_distance_threshold=ClusterDistanceThreshold.five,
-                                                      i_pupa=BatchSizeIPupa.fifty,
-                                                      learning_rate_weighting=LearningRateWeighting.large,
-                                                      butterfly_threshold_value=ButterflyThresholdValue.small,
-                                                      substitution_priority=SubstitutionPriority.error_level,
-                                                      test_train_split=TestTrainSplit.technology_split))
+                            for tts in [TestTrainSplit.parametrization_split,
+                                        TestTrainSplit.technology_split,
+                                        TestTrainSplit.scale_split,
+                                        TestTrainSplit.traffic_model_split,
+                                        TestTrainSplit.traffic_load_split]:
+                                scenario_configurations.append(
+                                    ScenarioConfiguration(payload_size=payload_size,
+                                                          num_devices=n_devices,
+                                                          model_type=model_type,
+                                                          scenario_duration=scenario_duration,
+                                                          traffic_configuration=traffic_config,
+                                                          network_type=network,
+                                                          cluster_distance_threshold=ClusterDistanceThreshold.five,
+                                                          i_pupa=BatchSizeIPupa.fifty,
+                                                          learning_rate_weighting=LearningRateWeighting.small,
+                                                          butterfly_threshold_value=ButterflyThresholdValue.small,
+                                                          substitution_priority=SubstitutionPriority.error_trend,
+                                                          test_train_split=tts))
                         else:
                             scenario_configurations.append(
                                 ScenarioConfiguration(payload_size=payload_size,
