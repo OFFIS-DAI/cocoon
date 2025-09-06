@@ -1,0 +1,21 @@
+{
+  "scenario_id": "meta_model-five-medium-one_min-cbr_broadcast_1_mps-simbench_5g-five-technology_split-fifty-large-large-error_level-2",
+  "execution_start_time": "2025-09-05 08:36:00.914371",
+  "execution_end_time": "2025-09-05 08:38:33.568104",
+  "execution_run_time_s": 152.6537322998047,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 239.2734375,
+    "final_memory_mb": 239.26953125,
+    "peak_memory_mb": 239.2734375,
+    "min_memory_mb": 239.26953125,
+    "avg_memory_mb": 239.27325878267973,
+    "memory_change_mb": -0.00390625,
+    "measurements_count": 153
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": false
+  }
+}
