@@ -234,7 +234,7 @@ def get_scenario_configurations_for_phase_3():
                                         TestTrainSplit.scale_split,
                                         TestTrainSplit.traffic_model_split]:
                                 scenario_configurations.append(
-                                    ScenarioConfiguration(payload_size=payload_size,  # TODO: update
+                                    ScenarioConfiguration(payload_size=payload_size,
                                                           num_devices=n_devices,
                                                           model_type=model_type,
                                                           scenario_duration=scenario_duration,
@@ -242,9 +242,9 @@ def get_scenario_configurations_for_phase_3():
                                                           network_type=network,
                                                           cluster_distance_threshold=ClusterDistanceThreshold.five,
                                                           i_pupa=BatchSizeIPupa.fifty,
-                                                          learning_rate_weighting=LearningRateWeighting.large,
+                                                          learning_rate_weighting=LearningRateWeighting.small,
                                                           butterfly_threshold_value=ButterflyThresholdValue.small,
-                                                          substitution_priority=SubstitutionPriority.error_level,
+                                                          substitution_priority=SubstitutionPriority.error_trend,
                                                           test_train_split=tts))
                         else:
                             scenario_configurations.append(
