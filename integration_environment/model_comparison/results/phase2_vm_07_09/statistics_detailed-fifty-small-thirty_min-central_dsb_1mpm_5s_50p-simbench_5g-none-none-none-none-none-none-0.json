@@ -1,0 +1,21 @@
+{
+  "scenario_id": "detailed-fifty-small-thirty_min-central_dsb_1mpm_5s_50p-simbench_5g-none-none-none-none-none-none-0",
+  "execution_start_time": "2025-09-06 09:12:14.795946",
+  "execution_end_time": "2025-09-06 09:22:14.801495",
+  "execution_run_time_s": 600.0055491924286,
+  "timeout_occurred": true,
+  "timeout_limit_s": 600,
+  "timeout_error_message": "Scenario execution exceeded 600 second timeout",
+  "messages_sent": 271,
+  "messages_received": 243,
+  "messages_completed": 243,
+  "memory_statistics": {
+    "initial_memory_mb": 182.1875,
+    "final_memory_mb": 182.55859375,
+    "peak_memory_mb": 182.55859375,
+    "min_memory_mb": 182.1875,
+    "avg_memory_mb": 182.36600911458333,
+    "memory_change_mb": 0.37109375,
+    "measurements_count": 600
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "scenario_id": "meta_model-five-small-one_min-cbr_broadcast_1_mps-simbench_ethernet-five-traffic_model_split-fifty-small-small-error_trend-1",
+  "execution_start_time": "2025-09-06 13:13:04.925943",
+  "execution_end_time": "2025-09-06 13:13:20.966909",
+  "execution_run_time_s": 16.040965795516968,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 240.28515625,
+    "final_memory_mb": 240.28515625,
+    "peak_memory_mb": 240.28515625,
+    "min_memory_mb": 240.28515625,
+    "avg_memory_mb": 240.28515625,
+    "memory_change_mb": 0.0,
+    "measurements_count": 15
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": true,
+    "substitution_time_s": 1757157198.6861904,
+    "substitution_message_index": 50,
+    "confidence_score": 0.4137776726534772,
+    "total_messages_processed": 28,
+    "cluster_prediction_errors_count": 7,
+    "online_prediction_errors_count": 0
+  }
+}

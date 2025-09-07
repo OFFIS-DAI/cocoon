@@ -1,0 +1,21 @@
+{
+  "scenario_id": "channel-five-large-thirty_min-central_dsb_1mpm_5s_50p-simbench_ethernet-none-none-none-none-none-none-0",
+  "execution_start_time": "2025-09-06 11:47:57.706182",
+  "execution_end_time": "2025-09-06 11:47:58.781711",
+  "execution_run_time_s": 1.075528860092163,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 240.28515625,
+    "final_memory_mb": 240.28515625,
+    "peak_memory_mb": 240.28515625,
+    "min_memory_mb": 240.28515625,
+    "avg_memory_mb": 240.28515625,
+    "memory_change_mb": 0.0,
+    "measurements_count": 2
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": false
+  }
+}

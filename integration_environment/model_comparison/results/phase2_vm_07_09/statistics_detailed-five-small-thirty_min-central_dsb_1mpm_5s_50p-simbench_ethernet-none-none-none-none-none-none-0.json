@@ -1,0 +1,21 @@
+{
+  "scenario_id": "detailed-five-small-thirty_min-central_dsb_1mpm_5s_50p-simbench_ethernet-none-none-none-none-none-none-0",
+  "execution_start_time": "2025-09-06 08:04:41.048496",
+  "execution_end_time": "2025-09-06 08:07:36.972463",
+  "execution_run_time_s": 175.9239673614502,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 174.88671875,
+    "final_memory_mb": 174.93359375,
+    "peak_memory_mb": 174.93359375,
+    "min_memory_mb": 174.88671875,
+    "avg_memory_mb": 174.91141934880238,
+    "memory_change_mb": 0.046875,
+    "measurements_count": 167
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": false
+  }
+}

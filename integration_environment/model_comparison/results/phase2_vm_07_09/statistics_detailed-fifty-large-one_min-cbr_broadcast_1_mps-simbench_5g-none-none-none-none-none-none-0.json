@@ -1,0 +1,21 @@
+{
+  "scenario_id": "detailed-fifty-large-one_min-cbr_broadcast_1_mps-simbench_5g-none-none-none-none-none-none-0",
+  "execution_start_time": "2025-09-06 10:45:58.416418",
+  "execution_end_time": "2025-09-06 10:55:58.410655",
+  "execution_run_time_s": 599.994236946106,
+  "timeout_occurred": true,
+  "timeout_limit_s": 600,
+  "timeout_error_message": "Scenario execution exceeded 600 second timeout",
+  "messages_sent": 931,
+  "messages_received": 883,
+  "messages_completed": 883,
+  "memory_statistics": {
+    "initial_memory_mb": 238.109375,
+    "final_memory_mb": 238.109375,
+    "peak_memory_mb": 238.109375,
+    "min_memory_mb": 238.109375,
+    "avg_memory_mb": 238.109375,
+    "memory_change_mb": 0.0,
+    "measurements_count": 600
+  }
+}

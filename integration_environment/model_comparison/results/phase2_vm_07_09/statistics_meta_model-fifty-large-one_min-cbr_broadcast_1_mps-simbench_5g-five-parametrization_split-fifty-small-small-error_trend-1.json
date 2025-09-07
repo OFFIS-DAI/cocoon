@@ -1,0 +1,27 @@
+{
+  "scenario_id": "meta_model-fifty-large-one_min-cbr_broadcast_1_mps-simbench_5g-five-parametrization_split-fifty-small-small-error_trend-1",
+  "execution_start_time": "2025-09-06 15:27:44.211502",
+  "execution_end_time": "2025-09-06 15:28:01.874521",
+  "execution_run_time_s": 17.66301941871643,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 234.03125,
+    "final_memory_mb": 222.5234375,
+    "peak_memory_mb": 234.03125,
+    "min_memory_mb": 222.5234375,
+    "avg_memory_mb": 228.27734375,
+    "memory_change_mb": -11.5078125,
+    "measurements_count": 16
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": true,
+    "substitution_time_s": 1757165266.4357085,
+    "substitution_message_index": 97,
+    "confidence_score": 0.4243876479706171,
+    "total_messages_processed": 49,
+    "cluster_prediction_errors_count": 1,
+    "online_prediction_errors_count": 0
+  }
+}

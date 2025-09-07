@@ -1,0 +1,21 @@
+{
+  "scenario_id": "detailed-fifty-small-one_min-poisson_broadcast_1_mps_1-simbench_ethernet-none-none-none-none-none-none-1",
+  "execution_start_time": "2025-09-06 12:07:09.846879",
+  "execution_end_time": "2025-09-06 12:17:09.851916",
+  "execution_run_time_s": 600.0050365924835,
+  "timeout_occurred": true,
+  "timeout_limit_s": 600,
+  "timeout_error_message": "Scenario execution exceeded 600 second timeout",
+  "messages_sent": 1764,
+  "messages_received": 1038,
+  "messages_completed": 1038,
+  "memory_statistics": {
+    "initial_memory_mb": 240.28515625,
+    "final_memory_mb": 240.28515625,
+    "peak_memory_mb": 240.28515625,
+    "min_memory_mb": 240.28515625,
+    "avg_memory_mb": 240.28515625,
+    "memory_change_mb": 0.0,
+    "measurements_count": 600
+  }
+}
