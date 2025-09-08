@@ -225,7 +225,7 @@ def get_scenario_configurations_for_phase_3():
                     for scenario_duration in [
                         ScenarioDuration.one_min,
                         ScenarioDuration.thirty_min,
-                        ScenarioDuration.one_day
+                        ScenarioDuration.one_hour
                     ]:
                         if model_type == ModelType.meta_model:
                             for tts in [TestTrainSplit.parametrization_split,
