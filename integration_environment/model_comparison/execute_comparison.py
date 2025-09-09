@@ -142,58 +142,6 @@ def get_duration_traffic_list_for_screening_design():
 
 def get_scenario_configurations_for_phase_2():
     scenario_configurations = []
-    for payload_size in [PayloadSizeConfig.small,
-                         PayloadSizeConfig.large
-                         ]:
-        for model_type in [ModelType.detailed,
-                           ModelType.ideal,
-                           ModelType.meta_model,
-                           ModelType.channel,
-                           ModelType.static_graph,
-                           ]:
-            if not model_type == ModelType.ideal:
-                networks = [NetworkModelType.simbench_ethernet,
-                            NetworkModelType.simbench_5g]
-            else:
-                networks = [NetworkModelType.none]
-            for network in networks:
-                for n_devices in [
-                    NumDevices.five,
-                    NumDevices.fifty
-                ]:
-                    for scenario_duration, traffic_config in get_duration_traffic_list_for_screening_design():
-                        if model_type == ModelType.meta_model:
-                            for tts in [TestTrainSplit.parametrization_split,
-                                        TestTrainSplit.technology_split,
-                                        TestTrainSplit.scale_split,
-                                        TestTrainSplit.traffic_model_split,
-                                        TestTrainSplit.traffic_load_split]:
-                                scenario_configurations.append(
-                                    ScenarioConfiguration(payload_size=payload_size,
-                                                          num_devices=n_devices,
-                                                          model_type=model_type,
-                                                          scenario_duration=scenario_duration,
-                                                          traffic_configuration=traffic_config,
-                                                          network_type=network,
-                                                          cluster_distance_threshold=ClusterDistanceThreshold.five,
-                                                          i_pupa=BatchSizeIPupa.fifty,
-                                                          learning_rate_weighting=LearningRateWeighting.small,
-                                                          butterfly_threshold_value=ButterflyThresholdValue.small,
-                                                          substitution_priority=SubstitutionPriority.error_trend,
-                                                          test_train_split=tts))
-                        else:
-                            scenario_configurations.append(
-                                ScenarioConfiguration(payload_size=payload_size,
-                                                      num_devices=n_devices,
-                                                      model_type=model_type,
-                                                      scenario_duration=scenario_duration,
-                                                      traffic_configuration=traffic_config,
-                                                      network_type=network))
-    return scenario_configurations
-
-
-def get_scenario_configurations_for_phase_3():
-    scenario_configurations = []
     payload_size = PayloadSizeConfig.medium
     for model_type in [ModelType.detailed,
                        ModelType.ideal,
@@ -209,23 +157,18 @@ def get_scenario_configurations_for_phase_3():
         for network in networks:
             for n_devices in [
                 NumDevices.five,
-                NumDevices.fifty,
-                NumDevices.hundred
+                NumDevices.fifty
             ]:
                 for traffic_config in [TrafficConfig.cbr_broadcast_1_mps,
                                        TrafficConfig.cbr_broadcast_1_mpm,
-                                       TrafficConfig.cbr_broadcast_4_mph,
                                        TrafficConfig.poisson_broadcast_1_mps_1,
                                        TrafficConfig.poisson_broadcast_1_mpm_1,
-                                       TrafficConfig.unicast_5s_delay,
                                        TrafficConfig.central_dsb_1mpm_5s_50p,
-                                       TrafficConfig.central_dsb_5mpm_30s_75,
-                                       TrafficConfig.central_dsb_10mph_60s_25p
+                                       TrafficConfig.central_dsb_5mpm_30s_75
                                        ]:
                     for scenario_duration in [
                         ScenarioDuration.one_min,
-                        ScenarioDuration.thirty_min,
-                        ScenarioDuration.one_day
+                        ScenarioDuration.thirty_min
                     ]:
                         if model_type == ModelType.meta_model:
                             for tts in [TestTrainSplit.parametrization_split,
@@ -692,22 +635,16 @@ async def run_benchmark_suite_screening(phase: int = None):
         face_centered_central_composite_design_configs = []
 
     if phase is None or phase == 2:
-        evaluation_configs = get_scenario_configurations_for_phase_2()
-    else:
-        evaluation_configs = []
-
-    if phase is None or phase == 3:
-        requirement_analysis_configs = get_scenario_configurations_for_phase_3()
+        requirement_analysis_configs = get_scenario_configurations_for_phase_2()
     else:
         requirement_analysis_configs = []
 
-    num_scen = (len(meta_model_training_configs) + len(evaluation_configs) +
+    num_scen = (len(meta_model_training_configs) +
                 len(face_centered_central_composite_design_configs) + len(requirement_analysis_configs))
 
     print(f'Phase 0: {len(meta_model_training_configs)} scenarios for meta-model training.\n'
           f'Phase 1: {len(face_centered_central_composite_design_configs)} scenarios for meta-model optimization. \n'
-          f'Phase 2: {len(evaluation_configs)} scenarios for model comparison. \n'
-          f'Phase 3: {len(requirement_analysis_configs)} scenarios for requirement analysis. '
+          f'Phase 2: {len(requirement_analysis_configs)} scenarios for requirement analysis. '
           f'Worst case execution time: {num_scen * num_repetitions * 10} minutes /'
           f'{num_scen * num_repetitions * 10 / 60} hours.')
     for i, scenario_configuration in enumerate(meta_model_training_configs):
@@ -718,23 +655,20 @@ async def run_benchmark_suite_screening(phase: int = None):
     for r in range(num_repetitions):
         for i, scenario_configuration in enumerate(face_centered_central_composite_design_configs):
             print(f'Run config {i}/{len(face_centered_central_composite_design_configs)} '
-                  f'in repetition {r+1}/{num_repetitions}')
+                  f'in repetition {r + 1}/{num_repetitions}')
             await run_scenario_config(scenario_configuration=scenario_configuration, run=r,
                                       phase=1)
-        for i, scenario_configuration in enumerate(evaluation_configs):
-            print(f'Run config {i}/{len(evaluation_configs)} '
-                  f'in repetition {r + 1}/{num_repetitions}')
             await run_scenario_config(scenario_configuration=scenario_configuration, run=r,
                                       phase=2)
         for i, scenario_configuration in enumerate(requirement_analysis_configs):
             print(f'Run config {i}/{len(requirement_analysis_configs)} '
                   f'in repetition {r + 1}/{num_repetitions}')
             await run_scenario_config(scenario_configuration=scenario_configuration, run=r,
-                                      phase=3, timeout_seconds=5*60)  # 5 minute timeout
+                                      phase=3, timeout_seconds=5 * 60)  # 5 minute timeout
 
 
 if __name__ == "__main__":
     # 0: meta-model training data generation
     # 1: meta-model optimization
-    # 2: base model comparison
+    # 2: base model comparison with requirement analysis
     asyncio.run(run_benchmark_suite_screening(phase=None))
