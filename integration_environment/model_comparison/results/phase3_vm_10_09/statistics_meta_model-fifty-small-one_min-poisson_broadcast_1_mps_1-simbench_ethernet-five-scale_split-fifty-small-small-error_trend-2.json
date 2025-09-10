@@ -1,0 +1,27 @@
+{
+  "scenario_id": "meta_model-fifty-small-one_min-poisson_broadcast_1_mps_1-simbench_ethernet-five-scale_split-fifty-small-small-error_trend-2",
+  "execution_start_time": "2025-09-09 18:41:52.766843",
+  "execution_end_time": "2025-09-09 18:42:09.567116",
+  "execution_run_time_s": 16.800272464752197,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 227.94921875,
+    "final_memory_mb": 227.94921875,
+    "peak_memory_mb": 227.94921875,
+    "min_memory_mb": 227.94921875,
+    "avg_memory_mb": 227.94921875,
+    "memory_change_mb": 0.0,
+    "measurements_count": 15
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": true,
+    "substitution_time_s": 1757436114.9996867,
+    "substitution_message_index": 97,
+    "confidence_score": 0.427032641316373,
+    "total_messages_processed": 49,
+    "cluster_prediction_errors_count": 1,
+    "online_prediction_errors_count": 0
+  }
+}

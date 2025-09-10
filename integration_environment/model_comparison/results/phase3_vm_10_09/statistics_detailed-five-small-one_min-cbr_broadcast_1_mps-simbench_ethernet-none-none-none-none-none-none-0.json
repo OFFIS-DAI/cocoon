@@ -1,0 +1,21 @@
+{
+  "scenario_id": "detailed-five-small-one_min-cbr_broadcast_1_mps-simbench_ethernet-none-none-none-none-none-none-0",
+  "execution_start_time": "2025-09-09 12:11:18.608830",
+  "execution_end_time": "2025-09-09 12:13:26.799338",
+  "execution_run_time_s": 128.1905071735382,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 173.640625,
+    "final_memory_mb": 174.04296875,
+    "peak_memory_mb": 174.04296875,
+    "min_memory_mb": 173.640625,
+    "avg_memory_mb": 173.809814453125,
+    "memory_change_mb": 0.40234375,
+    "measurements_count": 128
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": false
+  }
+}

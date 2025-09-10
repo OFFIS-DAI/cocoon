@@ -1,0 +1,21 @@
+{
+  "scenario_id": "detailed-fifty-large-thirty_min-central_dsb_1mpm_5s_50p-simbench_ethernet-none-none-none-none-none-none-0",
+  "execution_start_time": "2025-09-09 13:51:38.009889",
+  "execution_end_time": "2025-09-09 13:56:38.001449",
+  "execution_run_time_s": 299.9915597438812,
+  "timeout_occurred": true,
+  "timeout_limit_s": 300,
+  "timeout_error_message": "Scenario execution exceeded 300 second timeout",
+  "messages_sent": 688,
+  "messages_received": 466,
+  "messages_completed": 466,
+  "memory_statistics": {
+    "initial_memory_mb": 222.6796875,
+    "final_memory_mb": 222.6796875,
+    "peak_memory_mb": 222.6796875,
+    "min_memory_mb": 222.6796875,
+    "avg_memory_mb": 222.6796875,
+    "memory_change_mb": 0.0,
+    "measurements_count": 300
+  }
+}
