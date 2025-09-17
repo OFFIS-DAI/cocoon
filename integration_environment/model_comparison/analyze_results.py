@@ -322,7 +322,7 @@ def calculate_hyperparameter_scores(evaluation_results: List[EvaluationResult]) 
     print(f"Calculated scores for {len(valid_results)} meta-model configurations")
 
 
-def analyze_results(results_folder: str, phase: int=0) -> List[EvaluationResult]:
+def analyze_results(results_folder: str) -> List[EvaluationResult]:
     """
     Analyze all simulation results in the given folder.
 
@@ -582,13 +582,16 @@ def save_evaluation_results_to_csv(
                 'batch_size_ipupa': result.scenario_config.i_pupa.value if result.scenario_config.i_pupa else None,
                 'learning_rate_weighting': result.scenario_config.learning_rate_weighting.value if result.scenario_config.learning_rate_weighting else None,
                 'butterfly_threshold_value': result.scenario_config.butterfly_threshold_value.value if result.scenario_config.butterfly_threshold_value else None,
-                'substitution_priority': result.scenario_config.substitution_priority.name if result.scenario_config.substitution_priority else None,
+                'substitution_priority': result.scenario_config.substitution_priority.value if result.scenario_config.substitution_priority else None,
+                'test_train': result.scenario_config.test_train_split.value if result.scenario_config.test_train_split else None,
 
                 # Factor names (for analysis)
                 'cluster_distance_threshold_name': result.scenario_config.cluster_distance_threshold.name if result.scenario_config.cluster_distance_threshold else None,
                 'batch_size_ipupa_name': result.scenario_config.i_pupa.name if result.scenario_config.i_pupa else None,
                 'learning_rate_weighting_name': result.scenario_config.learning_rate_weighting.name if result.scenario_config.learning_rate_weighting else None,
                 'butterfly_threshold_value_name': result.scenario_config.butterfly_threshold_value.name if result.scenario_config.butterfly_threshold_value else None,
+                'substitution_priority_name': result.scenario_config.substitution_priority.name if result.scenario_config.substitution_priority else None,
+                'test_train_name': result.scenario_config.test_train_split.name if result.scenario_config.test_train_split else None,
 
             })
 
@@ -629,41 +632,49 @@ def analyze_results_with_csv_export(results_folder: str, output_file: Optional[s
 
 # Example usage (add this to the end of your existing script):
 if __name__ == "__main__":
-    phase = 1
+    phase = 2
 
     # Create output directory
     Path('analysis_results').mkdir(exist_ok=True)
 
-    # Analyze results and save to CSV
-    results = analyze_results_with_csv_export(
-        f'results/phase{phase}',
-        f'analysis_results/aggregated_results{phase}.csv'
-    )
+    if phase is not None:
+        # Analyze results and save to CSV
+        results = analyze_results_with_csv_export(
+            f'results/phase{phase}_vm_10_09',
+            f'analysis_results/aggregated_results{phase}.csv'
+        )
 
-    print(f"Analysis complete. Processed {len(results)} scenarios.")
+        print(f"Analysis complete. Processed {len(results)} scenarios.")
 
-    # Print basic statistics
-    model_counts = {}
-    for r in results:
-        model_type = r.model_type.value
-        model_counts[model_type] = model_counts.get(model_type, 0) + 1
+        # Print basic statistics
+        model_counts = {}
+        for r in results:
+            model_type = r.model_type.value
+            model_counts[model_type] = model_counts.get(model_type, 0) + 1
 
-    print(f"\nModel distribution:")
-    for model_type, count in model_counts.items():
-        print(f"- {count} {model_type} simulations")
+        print(f"\nModel distribution:")
+        for model_type, count in model_counts.items():
+            print(f"- {count} {model_type} simulations")
 
-    if phase == 1:
-        # Print top scoring hyperparameter configurations
-        metamodel_results = [r for r in results if r.model_type == ModelType.meta_model and r.score is not None]
-        if metamodel_results:
-            top_configs = sorted(metamodel_results, key=lambda x: x.score, reverse=True)[:5]
-            print(f"\nTop 5 hyperparameter configurations by score:")
-            for i, config in enumerate(top_configs, 1):
-                print(f"{i}. Score: {config.score}")
-                print(f"   Config: {config.scenario_config.cluster_distance_threshold}-"
-                      f"{config.scenario_config.i_pupa}-"
-                      f"{config.scenario_config.learning_rate_weighting}-"
-                      f"{config.scenario_config.butterfly_threshold_value}-"
-                      f"{config.scenario_config.substitution_priority}")
-                print(f"   NRMSE: {config.nrmse_mean:.4f}, Interval: {config.mean_in_sigma_interval:.3f}, "
-                      f"Time: {config.execution_time_s:.1f}s, Substitution: {config.substitution_occurred}")
+        if phase == 1:
+            # Print top scoring hyperparameter configurations
+            metamodel_results = [r for r in results if r.model_type == ModelType.meta_model and r.score is not None]
+            if metamodel_results:
+                top_configs = sorted(metamodel_results, key=lambda x: x.score, reverse=True)[:5]
+                print(f"\nTop 5 hyperparameter configurations by score:")
+                for i, config in enumerate(top_configs, 1):
+                    print(f"{i}. Score: {config.score}")
+                    print(f"   Config: {config.scenario_config.cluster_distance_threshold}-"
+                          f"{config.scenario_config.i_pupa}-"
+                          f"{config.scenario_config.learning_rate_weighting}-"
+                          f"{config.scenario_config.butterfly_threshold_value}-"
+                          f"{config.scenario_config.substitution_priority}-"
+                          f"{config.scenario_config.test_train_split}")
+                    print(f"   NRMSE: {config.nrmse_mean:.4f}, Interval: {config.mean_in_sigma_interval:.3f}, "
+                          f"Time: {config.execution_time_s:.1f}s, Substitution: {config.substitution_occurred}")
+
+    if phase is None:
+        eval_results = analyze_results('results/minimal', phase=1)
+        save_evaluation_results_to_csv(evaluation_results=eval_results,
+                                       output_file='analysis_results/minimal_analysis.csv',
+                                       include_scenario_details=True)
