@@ -438,6 +438,8 @@ def analyze_best_hyperparameters(df: pd.DataFrame):
         print(f"    - Batch Size I-PUPA: {best_config.get('batch_size_ipupa_name', 'N/A')}")
         print(f"    - Learning Rate Weighting: {best_config.get('learning_rate_weighting_name', 'N/A')}")
         print(f"    - Butterfly Threshold: {best_config.get('butterfly_threshold_value_name', 'N/A')}")
+        print(f"    - Substitution Priority: {best_config.get('substitution_priority_name', 'N/A')}")
+        print(f"    - Test-Train Configuration: {best_config.get('test_train_name', 'N/A')}")
         print(f"  Performance Metrics:")
         print(f"    - NRMSE Mean: {best_config.get('nrmse_mean', 'N/A'):.4f}")
         print(f"    - NRMSE Std: {best_config.get('nrmse_std', 'N/A'):.4f}")
