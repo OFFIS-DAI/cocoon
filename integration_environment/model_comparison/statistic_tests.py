@@ -501,7 +501,8 @@ def hyperparameter_traffic_anova_analysis(df):
         'batch_size_ipupa': {50: -1, 100: 0, 150: 1},
         'learning_rate_weighting': {0.1: -1, 0.5: 0, 0.9: 1},
         'butterfly_threshold_value': {0.1: -1, 0.5: 0, 0.9: 1},
-        'substitution_priority': {'error_level': -1, 'none': 0, 'error_trend': 1}
+        'substitution_priority': {'error_level': -1, 'none': 0, 'error_trend': 1},
+        'test_train_name': {'technology_split': -1, 'scale_split': 0, 'parametrization_split': 1}
     }
 
     for factor, mapping in factor_mappings.items():
@@ -530,7 +531,8 @@ def hyperparameter_traffic_anova_analysis(df):
         'batch_size_ipupa_coded': 'Batch Size (I-Pupa)',
         'learning_rate_weighting_coded': 'Learning Rate Weighting',
         'butterfly_threshold_value_coded': 'Butterfly Threshold Value',
-        'substitution_priority_coded': 'Substitution Priority'
+        'substitution_priority_coded': 'Substitution Priority',
+        'test_train_name_coded': 'Test-Train Configuration'
     }
 
     # Results storage
