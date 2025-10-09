@@ -72,6 +72,11 @@ class TrafficConfig(Enum):
     deer_use_case = 14
 
 
+class Substitution(Enum):
+    disabled = 0
+    enabled = 1
+
+
 class TestTrainSplit(Enum):
     none = 0
     parametrization_split = 1
@@ -79,6 +84,12 @@ class TestTrainSplit(Enum):
     technology_split = 3
     scale_split = 4
     traffic_model_split = 5
+
+
+class AmountOfScenariosTrainingData(Enum):
+    one = 1
+    ten = 10
+    all = 1000000
 
 
 class ClusterDistanceThreshold(Enum):
@@ -136,6 +147,8 @@ class ScenarioConfiguration:
     network_type: NetworkModelType = NetworkModelType.none
 
     # specific for meta-model
+    substitution: Substitution = Substitution.disabled
+    amount_of_scenarios_in_training_data: AmountOfScenariosTrainingData = AmountOfScenariosTrainingData.all
     test_train_split: TestTrainSplit = TestTrainSplit.none
     i_pupa: BatchSizeIPupa = BatchSizeIPupa.none
     cluster_distance_threshold: ClusterDistanceThreshold = ClusterDistanceThreshold.none
@@ -150,7 +163,7 @@ class ScenarioConfiguration:
         """Create a scenario ID that includes all configuration parameters."""
         return (f"{self.model_type.name}-{self.num_devices.name}-{self.payload_size.name}-{self.scenario_duration.name}"
                 f"-{self.traffic_configuration.name}-{self.network_type.name}-{self.cluster_distance_threshold.name}-"
-                f"{self.test_train_split.name}-"
+                f"{self.substitution.name}-{self.amount_of_scenarios_in_training_data.name}-{self.test_train_split.name}-"
                 f"{self.i_pupa.name}-{self.learning_rate_weighting.name}-{self.butterfly_threshold_value.name}"
                 f"-{self.substitution_priority.name}-{self.run}")
 
@@ -161,7 +174,8 @@ class ScenarioConfiguration:
     @classmethod
     def from_scenario_id(cls, scenario_id: str) -> 'ScenarioConfiguration':
         try:
-            (model_str, devices_str, payload_str, duration_str, traffic_str, network_str, cl_thr_str, test_train_split_str,
+            (model_str, devices_str, payload_str, duration_str, traffic_str, network_str, cl_thr_str, substitution_str,
+             amount_of_scen_str, test_train_split_str,
              i_pupa, learning_rate, butterfly_threshold_value, substitution_priority, run) = scenario_id.split('-')
             return cls(
                 model_type=ModelType[model_str],
@@ -171,6 +185,8 @@ class ScenarioConfiguration:
                 traffic_configuration=TrafficConfig[traffic_str],
                 network_type=NetworkModelType[network_str],
                 cluster_distance_threshold=ClusterDistanceThreshold[cl_thr_str],
+                substitution=Substitution[substitution_str],
+                amount_of_scenarios_in_training_data=AmountOfScenariosTrainingData[amount_of_scen_str],
                 test_train_split=TestTrainSplit[test_train_split_str],
                 i_pupa=BatchSizeIPupa[i_pupa],
                 learning_rate_weighting=LearningRateWeighting[learning_rate],

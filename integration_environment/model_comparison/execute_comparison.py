@@ -1,5 +1,6 @@
 import logging
 import os
+import random
 import time
 from typing import Dict
 import pandas as pd
@@ -79,6 +80,9 @@ def get_training_df(scenario_configuration: ScenarioConfiguration):
         selected_traffic_configs_for_training = [c for c in existing_configurations
                                                  if (search_str not in c.traffic_configuration.name and
                                                      c.network_type == scenario_configuration.network_type)]
+    if len(selected_traffic_configs_for_training) > scenario_configuration.amount_of_scenarios_in_training_data.value:
+        selected_traffic_configs_for_training = random.sample(selected_traffic_configs_for_training,
+                                                              scenario_configuration.amount_of_scenarios_in_training_data.value)
     dataframes = []
     for c in selected_traffic_configs_for_training:
         try:
@@ -220,12 +224,13 @@ def get_central_composite_design(substitution: Substitution = Substitution.enabl
                                                  5: 'C-TTS'},
                                         inplace=True)
     else:
-        central_composite_design = pd.DataFrame(ccdesign(n=4,
+        central_composite_design = pd.DataFrame(ccdesign(n=5,
                                                          face='ccf'))
         central_composite_design.rename(columns={0: 'C-DT',
                                                  1: 'C-IP',
                                                  2: 'C-LR',
-                                                 3: 'C-TTS'},
+                                                 3: 'C-TTS',
+                                                 4: 'C-AT'},
                                         inplace=True)
     factor_mappings = {
         'C-DT': {
@@ -260,6 +265,12 @@ def get_central_composite_design(substitution: Substitution = Substitution.enabl
             0: ButterflyThresholdValue.center,  # 0.5 (center point)
             1: ButterflyThresholdValue.large,  # 0.9 (cube point high)
         }
+    else:
+        factor_mappings['C-AT'] = {
+            -1: AmountOfScenariosTrainingData.one,
+            0: AmountOfScenariosTrainingData.ten,
+            1: AmountOfScenariosTrainingData.all
+        }
     for col in central_composite_design.columns:
         # Map to enum values
         central_composite_design[col] = central_composite_design[col].map(factor_mappings[col])
@@ -270,8 +281,7 @@ def get_scenario_configurations_for_phase_1():
     scenario_configurations = []
     payload_size = PayloadSizeConfig.medium
     n_devices = NumDevices.five
-    networks = [NetworkModelType.simbench_5g, NetworkModelType.simbench_ethernet,
-                NetworkModelType.simbench_lte, NetworkModelType.simbench_lte450]
+    networks = [NetworkModelType.simbench_5g, NetworkModelType.simbench_ethernet]
 
     central_composite_design = get_central_composite_design()
     central_composite_design_without_substitution = get_central_composite_design(substitution=Substitution.disabled)
@@ -315,6 +325,7 @@ def get_scenario_configurations_for_phase_1():
                                           learning_rate_weighting=row['C-LR'],
                                           butterfly_threshold_value=ButterflyThresholdValue.none,
                                           substitution_priority=SubstitutionPriority.none,
+                                          amount_of_scenarios_in_training_data=row['C-AT'],
                                           test_train_split=row['C-TTS'],
                                           substitution=Substitution.disabled))
 
