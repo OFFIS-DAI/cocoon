@@ -39,6 +39,7 @@ class ModelType(Enum):
 class NumDevices(Enum):
     five = 5
     ten = 10
+    twenty = 20
     fifty = 50
     hundred = 100
     thousand = 1000
