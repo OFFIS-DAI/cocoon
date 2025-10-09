@@ -99,18 +99,21 @@ def get_scenario_configurations_for_phase_0():
         os.makedirs('cocoon_training_data')
     existing_configuration_ids = [f.split('.')[0] for f in os.listdir('cocoon_training_data')]
     scenario_configurations = []
-    for network in [NetworkModelType.simbench_ethernet, NetworkModelType.simbench_5g]:
-        for payload_size in [PayloadSizeConfig.small, PayloadSizeConfig.medium, PayloadSizeConfig.large]:
-            for n_devices in [NumDevices.five, NumDevices.ten, NumDevices.fifty]:
-                for scenario_duration, traffic_config in get_duration_traffic_list_meta_model_training():
-                    config = ScenarioConfiguration(payload_size=payload_size,
-                                                   num_devices=n_devices,
-                                                   model_type=ModelType.meta_model_training,
-                                                   scenario_duration=scenario_duration,
-                                                   traffic_configuration=traffic_config,
-                                                   network_type=network)
-                    if config.scenario_id not in existing_configuration_ids:
-                        scenario_configurations.append(config)
+    for network in [NetworkModelType.simbench_ethernet,
+                    NetworkModelType.simbench_5g,
+                    NetworkModelType.simbench_lte,
+                    NetworkModelType.simbench_lte450]:
+        payload_size = PayloadSizeConfig.medium
+        for n_devices in [NumDevices.five, NumDevices.ten, NumDevices.fifty]:
+            for scenario_duration, traffic_config in get_duration_traffic_list_meta_model_training():
+                config = ScenarioConfiguration(payload_size=payload_size,
+                                               num_devices=n_devices,
+                                               model_type=ModelType.meta_model_training,
+                                               scenario_duration=scenario_duration,
+                                               traffic_configuration=traffic_config,
+                                               network_type=network)
+                if config.scenario_id not in existing_configuration_ids:
+                    scenario_configurations.append(config)
     return scenario_configurations
 
 
@@ -151,12 +154,16 @@ def get_scenario_configurations_for_phase_2():
                        ]:
         if not model_type == ModelType.ideal:
             networks = [NetworkModelType.simbench_ethernet,
-                        NetworkModelType.simbench_5g]
+                        NetworkModelType.simbench_5g,
+                        NetworkModelType.simbench_lte,
+                        NetworkModelType.simbench_lte450]
         else:
             networks = [NetworkModelType.none]
         for network in networks:
             for n_devices in [
                 NumDevices.five,
+                NumDevices.ten,
+                NumDevices.twenty,
                 NumDevices.fifty
             ]:
                 for traffic_config in [TrafficConfig.cbr_broadcast_1_mps,
@@ -253,34 +260,36 @@ def get_scenario_configurations_for_phase_1():
     scenario_configurations = []
     payload_size = PayloadSizeConfig.medium
     n_devices = NumDevices.five
-    network = NetworkModelType.simbench_5g
+    networks = [NetworkModelType.simbench_5g, NetworkModelType.simbench_ethernet,
+                NetworkModelType.simbench_lte, NetworkModelType.simbench_lte450]
 
     central_composite_design = get_central_composite_design()
 
     for scenario_duration, traffic_config in get_duration_traffic_list_for_screening_design():
-        # detailed model
-        scenario_configurations.append(
-            ScenarioConfiguration(payload_size=payload_size,
-                                  num_devices=n_devices,
-                                  model_type=ModelType.detailed,
-                                  scenario_duration=scenario_duration,
-                                  traffic_configuration=traffic_config,
-                                  network_type=network))
-        # meta-model
-        for i, row in central_composite_design.iterrows():
+        for network in networks:
+            # detailed model
             scenario_configurations.append(
                 ScenarioConfiguration(payload_size=payload_size,
                                       num_devices=n_devices,
-                                      model_type=ModelType.meta_model,
+                                      model_type=ModelType.detailed,
                                       scenario_duration=scenario_duration,
                                       traffic_configuration=traffic_config,
-                                      network_type=network,
-                                      cluster_distance_threshold=row['C-DT'],
-                                      i_pupa=row['C-IP'],
-                                      learning_rate_weighting=row['C-LR'],
-                                      butterfly_threshold_value=row['C-BT'],
-                                      substitution_priority=row['C-SP'],
-                                      test_train_split=row['C-TTS']))
+                                      network_type=network))
+            # meta-model
+            for i, row in central_composite_design.iterrows():
+                scenario_configurations.append(
+                    ScenarioConfiguration(payload_size=payload_size,
+                                          num_devices=n_devices,
+                                          model_type=ModelType.meta_model,
+                                          scenario_duration=scenario_duration,
+                                          traffic_configuration=traffic_config,
+                                          network_type=network,
+                                          cluster_distance_threshold=row['C-DT'],
+                                          i_pupa=row['C-IP'],
+                                          learning_rate_weighting=row['C-LR'],
+                                          butterfly_threshold_value=row['C-BT'],
+                                          substitution_priority=row['C-SP'],
+                                          test_train_split=row['C-TTS']))
 
     return scenario_configurations
 
