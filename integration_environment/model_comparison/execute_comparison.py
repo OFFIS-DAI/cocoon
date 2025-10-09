@@ -207,17 +207,26 @@ def get_scenario_configurations_for_phase_2():
     return scenario_configurations
 
 
-def get_central_composite_design():
+def get_central_composite_design(substitution: Substitution = Substitution.enabled):
     # using a face-centered central composite design
-    central_composite_design = pd.DataFrame(ccdesign(n=6,
-                                                     face='ccf'))
-    central_composite_design.rename(columns={0: 'C-DT',
-                                             1: 'C-IP',
-                                             2: 'C-LR',
-                                             3: 'C-BT',
-                                             4: 'C-SP',
-                                             5: 'C-TTS'},
-                                    inplace=True)
+    if substitution == Substitution.enabled:
+        central_composite_design = pd.DataFrame(ccdesign(n=6,
+                                                         face='ccf'))
+        central_composite_design.rename(columns={0: 'C-DT',
+                                                 1: 'C-IP',
+                                                 2: 'C-LR',
+                                                 3: 'C-BT',
+                                                 4: 'C-SP',
+                                                 5: 'C-TTS'},
+                                        inplace=True)
+    else:
+        central_composite_design = pd.DataFrame(ccdesign(n=4,
+                                                         face='ccf'))
+        central_composite_design.rename(columns={0: 'C-DT',
+                                                 1: 'C-IP',
+                                                 2: 'C-LR',
+                                                 3: 'C-TTS'},
+                                        inplace=True)
     factor_mappings = {
         'C-DT': {
             -1: ClusterDistanceThreshold.one,  # 1 (cube point low)
@@ -234,22 +243,23 @@ def get_central_composite_design():
             0: LearningRateWeighting.center,  # 0.5 (center point)
             1: LearningRateWeighting.large,  # 0.9 (cube point high)
         },
-        'C-BT': {
-            -1: ButterflyThresholdValue.small,  # 0.1 (cube point low)
-            0: ButterflyThresholdValue.center,  # 0.5 (center point)
-            1: ButterflyThresholdValue.large,  # 0.9 (cube point high)
-        },
-        'C-SP': {
-            -1: SubstitutionPriority.error_level,  # error_level (cube point low)
-            0: SubstitutionPriority.none,  # none (center point)
-            1: SubstitutionPriority.error_trend,  # error_trend (cube point high)
-        },
         'C-TTS': {
             -1: TestTrainSplit.scale_split,
             0: TestTrainSplit.parametrization_split,
             1: TestTrainSplit.technology_split,
         }
     }
+    if substitution == Substitution.enabled:
+        factor_mappings['C-SP'] = {
+            -1: SubstitutionPriority.error_level,  # error_level (cube point low)
+            0: SubstitutionPriority.none,  # none (center point)
+            1: SubstitutionPriority.error_trend,  # error_trend (cube point high)
+        }
+        factor_mappings['C-BT'] = {
+            -1: ButterflyThresholdValue.small,  # 0.1 (cube point low)
+            0: ButterflyThresholdValue.center,  # 0.5 (center point)
+            1: ButterflyThresholdValue.large,  # 0.9 (cube point high)
+        }
     for col in central_composite_design.columns:
         # Map to enum values
         central_composite_design[col] = central_composite_design[col].map(factor_mappings[col])
@@ -264,6 +274,7 @@ def get_scenario_configurations_for_phase_1():
                 NetworkModelType.simbench_lte, NetworkModelType.simbench_lte450]
 
     central_composite_design = get_central_composite_design()
+    central_composite_design_without_substitution = get_central_composite_design(substitution=Substitution.disabled)
 
     for scenario_duration, traffic_config in get_duration_traffic_list_for_screening_design():
         for network in networks:
@@ -289,7 +300,23 @@ def get_scenario_configurations_for_phase_1():
                                           learning_rate_weighting=row['C-LR'],
                                           butterfly_threshold_value=row['C-BT'],
                                           substitution_priority=row['C-SP'],
-                                          test_train_split=row['C-TTS']))
+                                          test_train_split=row['C-TTS'],
+                                          substitution=Substitution.enabled))
+            for i, row in central_composite_design_without_substitution.iterrows():
+                scenario_configurations.append(
+                    ScenarioConfiguration(payload_size=payload_size,
+                                          num_devices=n_devices,
+                                          model_type=ModelType.meta_model,
+                                          scenario_duration=scenario_duration,
+                                          traffic_configuration=traffic_config,
+                                          network_type=network,
+                                          cluster_distance_threshold=row['C-DT'],
+                                          i_pupa=row['C-IP'],
+                                          learning_rate_weighting=row['C-LR'],
+                                          butterfly_threshold_value=ButterflyThresholdValue.none,
+                                          substitution_priority=SubstitutionPriority.none,
+                                          test_train_split=row['C-TTS'],
+                                          substitution=Substitution.disabled))
 
     return scenario_configurations
 
@@ -332,7 +359,9 @@ def get_scheduler(scenario_configuration: ScenarioConfiguration,
                                   i_pupa=scenario_configuration.i_pupa.value,
                                   butterfly_threshold_value=scenario_configuration.butterfly_threshold_value.value,
                                   learning_rate_weighting=scenario_configuration.learning_rate_weighting.value,
-                                  substitution_priority=scenario_configuration.substitution_priority.value
+                                  substitution_priority=scenario_configuration.substitution_priority.value,
+                                  substitution_enabled=True
+                                  if scenario_configuration.substitution == Substitution.enabled else False
                                   )
     elif scenario_configuration.model_type == ModelType.meta_model_training:
         return MetaModelScheduler(container_mapping=container_mapping,

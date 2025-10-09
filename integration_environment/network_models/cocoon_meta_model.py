@@ -289,7 +289,8 @@ class CocoonMetaModel:
                  i_pupa: int = 10,
                  alpha: float = 0.3,
                  butterfly_threshold_value: float = 0.8,
-                 substitution_priority: str = 'none'):
+                 substitution_priority: str = 'none',
+                 substitution_enabled: bool = True):
         """
         Initialize cocoon model.
         """
@@ -301,6 +302,7 @@ class CocoonMetaModel:
         self.mode = mode
         self.substitution_info = SubstitutionInfo()
         self.message_index = 0
+        self.substitution_enabled = substitution_enabled
 
         """
         Internal graph model 
@@ -843,7 +845,7 @@ class CocoonMetaModel:
                                                                            online_predicted_delay_ms=d_on_pred,
                                                                            weighted_predicted_delay_ms=d_w_pred)
 
-        if self.mode == self.Mode.PRODUCTION and self.message_index >= self.i_pupa:
+        if self.mode == self.Mode.PRODUCTION and self.message_index >= self.i_pupa and self.substitution_enabled:
             if self.substitution_threshold_reached:
                 # threshold has already been reached -> return True
                 return True
