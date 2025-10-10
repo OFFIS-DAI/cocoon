@@ -62,13 +62,13 @@ def to_xy(row):
     return (x, y)
 
 
-def delete_old_config_section(num_nodes: int):
+def delete_old_config_section(technology: str, num_nodes: int):
     # Open the file and read its contents
     with open('cocoon_omnet_project/omnetpp.ini', 'r') as file:
         content = file.read()
 
     # Create the pattern string to search for
-    pattern = f'[EvaluationNetworkEthernet_{num_nodes}]'
+    pattern = f'[EvaluationNetwork{technology}_{num_nodes}]'
 
     # Check if the pattern exists in the file
     start_index = content.find(pattern)
@@ -91,7 +91,7 @@ def delete_old_config_section(num_nodes: int):
 
 
 class NetworkExtractor(ABC):
-    def __init__(self, num_nodes: int = 100):
+    def __init__(self, num_nodes: int = 100, technology: str = 'Ethernet'):
         self.pp_network = None
 
         self.port = 1000
@@ -108,19 +108,24 @@ class NetworkExtractor(ABC):
         self.control_entity = None
 
         self.num_nodes = num_nodes
+        self.technology = technology
 
     def initialize_network(self):
         self.pp_network = mv_oberrhein("generation", include_substations=True)
 
         self.get_nodes_from_pp_network()
 
-        self.end_point_nodes = random.sample(self.end_point_nodes, self.num_nodes-1)
+        self.end_point_nodes = random.sample([n for n in self.end_point_nodes
+                                              if 3410000 < n.coordinates[0] < 3418000
+                                              and 5360000 < n.coordinates[1] < 5380000], self.num_nodes - 1)
+
+        for i, node in enumerate(self.end_point_nodes):
+            node.omnet_name = f'node{i + 1}'
+
+        self.rescale_network()
 
         cx = np.mean([n.coordinates[0] for n in self.end_point_nodes])
         cy = np.mean([n.coordinates[1] for n in self.end_point_nodes])
-
-        for i, node in enumerate(self.end_point_nodes):
-            node.omnet_name = f'node{i+1}'
 
         self.control_entity = CommunicationNode(
             omnet_name='node0',
@@ -128,18 +133,16 @@ class NetworkExtractor(ABC):
             coordinates=(cx, cy)
         )
 
-        self.rescale_network()
-
         self.place_communication_infrastructure()
 
         os.chdir(ROOT)
 
-        delete_old_config_section(self.num_nodes)
+        delete_old_config_section(num_nodes=self.num_nodes, technology=self.technology)
 
         network_description = self.get_omnet_network_description()
         ini_config = self.get_omnet_ini_config()
 
-        with open(f'cocoon_omnet_project/networks/EvaluationNetworkEthernet_{self.num_nodes}.ned', 'w') as f:
+        with open(f'cocoon_omnet_project/networks/EvaluationNetwork{self.technology}_{self.num_nodes}.ned', 'w') as f:
             f.write(network_description)
             f.close()
 
@@ -297,6 +300,7 @@ class EthernetNetworkExtractor(NetworkExtractor):
         # -------- link tier presets --------
         HAN_MAX = 100  # 1–100 m  -> HAN/BAN/IAN
         NAN_MAX = 10_000  # 10 m–10 km -> NAN/FAN
+
         # >= 10 km -> WAN
 
         def dist(a_xy, b_xy):
