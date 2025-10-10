@@ -7,6 +7,10 @@ class NetworkModelType(Enum):
     simbench_lte = 'LTE'
     simbench_lte450 = 'LTE450'
     simbench_5g = 'Net5G'
+    evaluation_ethernet = 'EvaluationNetworkEthernet'
+    evaluation_lte = 'EvaluationNetworkLTE'
+    evaluation_lte450 = 'EvaluationNetworkLTE450'
+    evaluation_5g = 'EvaluationNetwork5G'
     none = ''
 
 
