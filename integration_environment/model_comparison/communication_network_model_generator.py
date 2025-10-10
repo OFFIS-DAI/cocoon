@@ -115,9 +115,15 @@ class NetworkExtractor(ABC):
 
         self.get_nodes_from_pp_network()
 
+        x_min = 3410000
+        x_max = 3415000
+
+        y_min = 5360000
+        y_max = 5365000
+
         self.end_point_nodes = random.sample([n for n in self.end_point_nodes
-                                              if 3410000 < n.coordinates[0] < 3418000
-                                              and 5360000 < n.coordinates[1] < 5380000], self.num_nodes - 1)
+                                              if x_min < n.coordinates[0] < x_max
+                                              and y_min < n.coordinates[1] < y_max], self.num_nodes - 1)
 
         for i, node in enumerate(self.end_point_nodes):
             node.omnet_name = f'node{i + 1}'
