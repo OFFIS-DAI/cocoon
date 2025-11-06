@@ -394,7 +394,7 @@ async def initialize_constant_bitrate_broadcast_agents(clock: ExternalClock,
                                                        scenario_configuration: ScenarioConfiguration):
     container_mapping = {}
     receiver_addresses = []
-    for n_agents in range(scenario_configuration.num_devices.value - 1):
+    for n_agents in range(1, scenario_configuration.num_devices.value):
         index = n_agents
         container = create_external_coupling(addr=f'node{index}', codec=my_codec, clock=clock)
         cbr_receiver_role = ReceiverRole()
@@ -403,14 +403,14 @@ async def initialize_constant_bitrate_broadcast_agents(clock: ExternalClock,
         receiver_addresses.append(cbr_receiver_role_agent.addr)
         container_mapping[f'node{index}'] = container
 
-    container2 = create_external_coupling(addr=f'node{scenario_configuration.num_devices.value - 1}',
+    container2 = create_external_coupling(addr=f'node0',
                                           codec=my_codec, clock=clock)
     cbr_sender_role_agent = agent_composed_of(
         ConstantBitrateSenderRole(receiver_addresses=receiver_addresses, scenario_config=scenario_configuration),
         ResultsRecorderRole(results_recorder))
     container2.register(cbr_sender_role_agent)
 
-    container_mapping[f'node{scenario_configuration.num_devices.value - 1}'] = container2
+    container_mapping[f'node0'] = container2
 
     return container_mapping
 
@@ -420,7 +420,7 @@ async def initialize_poisson_broadcast_agents(clock: ExternalClock,
                                               scenario_configuration: ScenarioConfiguration):
     container_mapping = {}
     receiver_addresses = []
-    for n_agents in range(scenario_configuration.num_devices.value - 1):
+    for n_agents in range(1, scenario_configuration.num_devices.value):
         index = n_agents
         container = create_external_coupling(addr=f'node{index}', codec=my_codec, clock=clock)
         receiver_role = ReceiverRole()
@@ -429,14 +429,14 @@ async def initialize_poisson_broadcast_agents(clock: ExternalClock,
         receiver_addresses.append(receiver_role_agent.addr)
         container_mapping[f'node{index}'] = container
 
-    container2 = create_external_coupling(addr=f'node{scenario_configuration.num_devices.value - 1}',
+    container2 = create_external_coupling(addr=f'node0',
                                           codec=my_codec, clock=clock)
     poisson_sender_role_agent = agent_composed_of(
         PoissonSenderRole(receiver_addresses=receiver_addresses, scenario_config=scenario_configuration),
         ResultsRecorderRole(results_recorder))
     container2.register(poisson_sender_role_agent)
 
-    container_mapping[f'node{scenario_configuration.num_devices.value - 1}'] = container2
+    container_mapping[f'node0'] = container2
 
     return container_mapping
 
