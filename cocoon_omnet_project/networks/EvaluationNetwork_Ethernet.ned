@@ -249,8 +249,7 @@ network EvaluationNetworkEthernet_50
     connections:
         router_0.pppg++ <--> Eth10G <--> router_central.pppg++;
         router_1.pppg++ <--> Eth10G <--> router_central.pppg++;
-        node0.pppg ++ <--> Eth10G <--> router_central.pppg++;
-        
+        node0.pppg++ <--> Eth10G <--> router_central.pppg++;
         router_0.pppg++ <--> C100kbps <--> node1.pppg++;
         router_0.pppg++ <--> C100kbps <--> node2.pppg++;
         router_0.pppg++ <--> C100kbps <--> node3.pppg++;
@@ -288,7 +287,6 @@ network EvaluationNetworkEthernet_50
         router_0.pppg++ <--> C100kbps <--> node35.pppg++;
         router_0.pppg++ <--> C100kbps <--> node36.pppg++;
         router_0.pppg++ <--> C100kbps <--> node37.pppg++;
-        
         router_1.pppg++ <--> C1Mbps <--> node38.pppg++;
         router_1.pppg++ <--> C1Mbps <--> node39.pppg++;
         router_1.pppg++ <--> C1Mbps <--> node40.pppg++;

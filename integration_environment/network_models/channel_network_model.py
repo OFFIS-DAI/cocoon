@@ -1,6 +1,6 @@
 import json
 import math
-from random import random
+from random import uniform
 from typing import List, Dict, Any
 
 import networkx as nx
@@ -29,24 +29,17 @@ class ChannelNetworkModel:
         self.graph.add_node(node_id, **attributes)
 
     def add_link(self, source_id: str, target_id: str, **attributes):
-        """
-        Add a link (edge) between two nodes in the network.
-
-        :param source_id: ID of the source node.
-        :param target_id: ID of the target node.
-        :param attributes: Link attributes such as transmission_rate_bps, propagation_speed_mps, etc.
-        """
-        # Calculate distance between nodes if positions are available
         if ('position' in self.graph.nodes[source_id] and
                 'position' in self.graph.nodes[target_id]):
             pos_a = self.graph.nodes[source_id]['position']
             pos_b = self.graph.nodes[target_id]['position']
-            # Calculate Euclidean distance
             dimensions = min(len(pos_a), len(pos_b))
             distance = math.sqrt(sum((pos_a[i] - pos_b[i]) ** 2 for i in range(dimensions)))
             attributes['distance'] = distance
 
-        # Add edge to the graph with all attributes
+        if 'distance' in attributes and 'propagation_speed_mps' in attributes:
+            attributes['weight'] = (attributes['distance'] / attributes['propagation_speed_mps']) * 1000.0
+
         self.graph.add_edge(source_id, target_id, **attributes)
 
     def calculate_propagation_delay(self, source_id: str, target_id: str) -> float:
@@ -100,7 +93,7 @@ class ChannelNetworkModel:
         :param target_id: ID of the target node.
         :return: Ordered list of node IDs that form the shortest path.
         """
-        return nx.shortest_path(self.graph, source=source_id, target=target_id, weight='delay')
+        return nx.shortest_path(self.graph, source=source_id, target=target_id, weight='weight')
 
     def calculate_end_to_end_delay(self, sender_id: str, receiver_id: str, message_size_bits: int) -> float:
         """
@@ -141,29 +134,46 @@ class ChannelNetworkModel:
 
         # add random jitter
         delay = processing_delay + transmission_delay + propagation_delay
-        delay += random() * delay * 0.1
+        delay += uniform(0, 0.15) * delay
 
         return round(delay)
 
     @classmethod
     def from_dict(cls, topology_data: Dict[str, Any]) -> 'ChannelNetworkModel':
-        """
-        Create a NetworkXTopologyModel from a dictionary representation.
-        :param topology_data: Dictionary containing nodes and links data.
-        :return: A new topology model instance.
-        """
         model = cls()
 
-        # Add nodes
         for node_data in topology_data.get("nodes", []):
             node_id = node_data.pop("node_id")
             model.add_node(node_id, **node_data)
 
-        # Add links
-        for link_data in topology_data.get("links", []):
-            source_id = link_data.pop("source")
-            target_id = link_data.pop("target")
-            model.add_link(source_id, target_id, **link_data)
+        if "links" in topology_data and topology_data["links"]:
+            for link_data in topology_data.get("links", []):
+                source_id = link_data.pop("source")
+                target_id = link_data.pop("target")
+                model.add_link(source_id, target_id, **link_data)
+            return model
+
+        networks = {net["network_id"]: {k: v for k, v in net.items() if k != "network_id"}
+                    for net in topology_data.get("networks", [])}
+
+        if networks:
+            node2nets: Dict[str, list[str]] = {}
+            for node_id, attrs in model.graph.nodes(data=True):
+                nets = []
+                if "network" in attrs and attrs["network"] is not None:
+                    nets = [attrs["network"]] if isinstance(attrs["network"], str) else list(attrs["network"])
+                if "networks" in attrs and attrs["networks"] is not None:
+                    extra = attrs["networks"] if isinstance(attrs["networks"], list) else [attrs["networks"]]
+                    nets += extra
+                node2nets[node_id] = [n for n in nets if n in networks]
+
+            for net_id, net_attrs in networks.items():
+                members = [n for n, nets in node2nets.items() if net_id in nets]
+                for i in range(len(members)):
+                    for j in range(i + 1, len(members)):
+                        u, v = members[i], members[j]
+                        if not model.graph.has_edge(u, v):
+                            model.add_link(u, v, **net_attrs)
 
         return model
 

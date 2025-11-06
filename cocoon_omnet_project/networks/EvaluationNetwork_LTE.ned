@@ -66,7 +66,7 @@ network EvaluationNetworkLTE_50
             @display("p=254.4379,291.716;is=l");
         }
         eNB: eNodeB {
-            @display("p=200,250;is=vl");
+            @display("p=200,250");
         }
         node0: StandardHost {
             // central entity 
@@ -431,7 +431,7 @@ network EvaluationNetworkLTE_10
             @display("p=254.4379,291.716;is=l");
         }
         eNB: eNodeB {
-            @display("p=200,250;is=vl");
+            @display("p=200,250");
         }
         node0: StandardHost {
             // central entity 
@@ -514,7 +514,7 @@ network EvaluationNetworkLTE_5
             @display("p=254.4379,291.716;is=l");
         }
         eNB: eNodeB {
-            @display("p=200,250;is=vl");
+            @display("p=200,250");
         }
         node0: StandardHost {
             // central entity 

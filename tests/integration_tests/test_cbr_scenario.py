@@ -52,14 +52,11 @@ async def run_scenario_with_ideal_communication():
     assert len(cbr_receiver_role.received_messages) > 0
 
 
-async def run_scenario_with_simple_channel_model():
+@pytest.mark.asyncio
+async def test_run_scenario_with_simple_channel_model():
     scenario_configuration = ScenarioConfiguration(model_type=ModelType.channel)
     results_recorder = ResultsRecorder(scenario_configuration=scenario_configuration)
 
-    top_file = '../../integration_environment/model_comparison/network_definitions/channel_simbench_lte.json'
-    with open(top_file, 'r') as file:
-        data = json.load(file)
-        top_dict = data['topology']
     clock = ExternalClock(start_time=0)
 
     container1 = create_external_coupling(addr='node1', codec=my_codec, clock=clock)
@@ -74,9 +71,35 @@ async def run_scenario_with_simple_channel_model():
         ResultsRecorderRole(results_recorder))
     container2.register(cbr_sender_role_agent)
 
+    node_top_dict = {
+        'nodes':
+            [
+                {
+                    'node_id': 'node1',
+                    'position': [100, 100],
+                    'processing_delay_ms': 1.0,
+                    'network': 'NAN1'
+                },
+                {
+                    'node_id': 'node2',
+                    'position': [50, 50],
+                    'processing_delay_ms': 1.0,
+                    'network': 'NAN1'
+                }
+            ],
+        'networks':
+            [
+                {
+                    'network_id': 'NAN1',
+                    'transmission_rate_bps': 100000000,
+                    'propagation_speed_mps': 300000000
+                }
+            ]
+    }
+
     communication_network_entity = ChannelModelScheduler(container_mapping={'node1': container1,
                                                                             'node2': container2},
-                                                         topology_dict=top_dict)
+                                                         topology_dict=node_top_dict)
 
     async with activate(container1, container2) as _:
         results_recorder.start_scenario_recording()

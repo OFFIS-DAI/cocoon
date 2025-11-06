@@ -2,6 +2,7 @@ import logging
 import os
 import random
 import time
+from pathlib import Path
 from typing import Dict
 import pandas as pd
 import psutil
@@ -12,6 +13,8 @@ from pyDOE3 import *
 
 from integration_environment.communication_model_scheduler import IdealCommunicationScheduler, ChannelModelScheduler, \
     StaticDelayGraphModelScheduler, DetailedModelScheduler, MetaModelScheduler, CommunicationScheduler
+from integration_environment.model_comparison.network_definitions.channel_model_network_generator import \
+    parse_ned_to_channel_topology
 from integration_environment.roles import *
 from integration_environment.scenario_configuration import *
 
@@ -339,10 +342,27 @@ def get_scheduler(scenario_configuration: ScenarioConfiguration,
         return IdealCommunicationScheduler(container_mapping=container_mapping,
                                            scenario_duration_ms=scenario_configuration.scenario_duration.value)
     elif scenario_configuration.model_type == ModelType.channel:
+        if 'Ethernet' in scenario_configuration.omnet_config:
+            ned_name = 'EvaluationNetwork_Ethernet.ned'
+            propagation_speed_mps = 2e8
+            processing_delay_ms = random.uniform(0.02, 0.12)
+        elif '5G' in scenario_configuration.omnet_config:
+            ned_name = 'EvaluationNetwork_5G.ned'
+            propagation_speed_mps = 3e8
+            processing_delay_ms = 2
+        elif 'LTE' in scenario_configuration.omnet_config:
+            ned_name = 'EvaluationNetwork_LTE.ned'
+            propagation_speed_mps = 3e8
+            processing_delay_ms = 5
+        else:
+            raise ValueError(f'Unknown network for configuration {scenario_configuration.omnet_config}. ')
+        ned_file = Path(f'../../cocoon_omnet_project/networks/{ned_name}').read_text(encoding="utf-8")
+        topology_dict = parse_ned_to_channel_topology(ned_file,
+                                                      default_propagation_speed_mps=int(propagation_speed_mps),
+                                                      default_processing_delay_ms=processing_delay_ms)
         return ChannelModelScheduler(container_mapping=container_mapping,
                                      scenario_duration_ms=scenario_configuration.scenario_duration.value,
-                                     topology_file_name=f'network_definitions/channel_'
-                                                        f'{scenario_configuration.network_type.name}.json')
+                                     topology_dict=topology_dict)
     elif scenario_configuration.model_type == ModelType.static_graph:
         return StaticDelayGraphModelScheduler(container_mapping=container_mapping,
                                               scenario_duration_ms=scenario_configuration.scenario_duration.value,

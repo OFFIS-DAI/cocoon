@@ -46,7 +46,7 @@ network EvaluationNetwork5G_50
             @display("p=214,347");
         }
         gNB0: gNodeB {
-            @display("p=200,250;is=vl");
+            @display("p=200,250");
         }
         node0: StandardHost {
             // central entity 
@@ -409,7 +409,7 @@ network EvaluationNetwork5G_10
             @display("p=214,347");
         }
         gNB0: gNodeB {
-            @display("p=200,250;is=vl");
+            @display("p=200,250");
         }
         node0: StandardHost {
             // central entity 
@@ -491,7 +491,7 @@ network EvaluationNetwork5G_5
             @display("p=214,347");
         }
         gNB0: gNodeB {
-            @display("p=200,250;is=vl");
+            @display("p=200,250");
         }
         node0: StandardHost {
             // central entity 
