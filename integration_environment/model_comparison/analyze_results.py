@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
 
+from scipy.stats import wasserstein_distance
+
 from integration_environment.scenario_configuration import *
 
 
@@ -32,6 +34,7 @@ class EvaluationResult:
     nrmse_mean: Optional[float]
     nrmse_std: Optional[float]
     mean_in_sigma_interval: Optional[float]
+    wasserstein_dist: Optional[float]
 
     # performance metric
     execution_time_s: float
@@ -186,6 +189,7 @@ def calculate_metrics_grouped(baseline_dfs: List[pd.DataFrame], model_dfs: List[
     model_std_delays = []
 
     means_in_sigma_interval = []
+    wasserstein_distances = []
 
     for msg_key in common_messages:
         # calculate mean value of same messages
@@ -207,6 +211,9 @@ def calculate_metrics_grouped(baseline_dfs: List[pd.DataFrame], model_dfs: List[
         mean_in_interval = np.mean(messages_in_interval)
         means_in_sigma_interval.append(mean_in_interval)
 
+        wasserstein_dist = wasserstein_distance(baseline_delays_by_message[msg_key], model_delays_by_message[msg_key])
+        wasserstein_distances.append(wasserstein_dist)
+
     # Convert to numpy arrays for calculations
     baseline_mean_delays = np.array(baseline_mean_delays)
     model_mean_delays = np.array(model_mean_delays)
@@ -223,7 +230,7 @@ def calculate_metrics_grouped(baseline_dfs: List[pd.DataFrame], model_dfs: List[
     rmse_std = np.sqrt(np.mean(differences_std ** 2))
     nrmse_std = rmse_std / np.mean(baseline_std_delays) if np.mean(baseline_std_delays) > 0 else float('inf')
 
-    return nrmse_means, nrmse_std, np.mean(means_in_sigma_interval)
+    return nrmse_means, nrmse_std, np.mean(means_in_sigma_interval), np.mean(wasserstein_distances)
 
 
 def calculate_delay_statistics(dataframes: List[pd.DataFrame]) -> Tuple[float, float, float]:
@@ -467,6 +474,7 @@ def analyze_results(results_folder: str) -> List[EvaluationResult]:
                     nrmse_mean=None,  # No RMSE for baseline models
                     nrmse_std=None,  # No MAE for baseline models
                     mean_in_sigma_interval=None,
+                    wasserstein_dist=None,
                     execution_time_s=mean_execution_time,
                     timeout_occurred=timeout_occurred,
                     substitution_occurred=substitution_occurred,
@@ -483,7 +491,7 @@ def analyze_results(results_folder: str) -> List[EvaluationResult]:
                     continue
 
                 # Calculate overall metrics across all runs
-                nrmse_means, nrmse_std, mean_in_one_sigma_interval = calculate_metrics_grouped(baseline_dfs, dataframes)
+                nrmse_means, nrmse_std, mean_in_one_sigma_interval, wasserstein_dist = calculate_metrics_grouped(baseline_dfs, dataframes)
 
                 mean_execution_time = float(np.mean(execution_times))
 
@@ -503,6 +511,7 @@ def analyze_results(results_folder: str) -> List[EvaluationResult]:
                     nrmse_mean=nrmse_means,
                     nrmse_std=nrmse_std,
                     mean_in_sigma_interval=mean_in_one_sigma_interval,
+                    wasserstein_dist=wasserstein_dist,
                     execution_time_s=mean_execution_time,
                     timeout_occurred=timeout_occurred,
                     substitution_occurred=substitution_occurred,
@@ -557,6 +566,7 @@ def save_evaluation_results_to_csv(
             'nrmse_mean': result.nrmse_mean,
             'nrmse_std': result.nrmse_std,
             'mean_in_one_sigma_interval': result.mean_in_sigma_interval,
+            'wasserstein_distance': result.wasserstein_dist,
 
             # Performance metrics
             'execution_time_s': result.execution_time_s,
@@ -632,7 +642,7 @@ def analyze_results_with_csv_export(results_folder: str, output_file: Optional[s
 
 # Example usage (add this to the end of your existing script):
 if __name__ == "__main__":
-    phase = 2
+    phase = 1
 
     # Create output directory
     Path('analysis_results').mkdir(exist_ok=True)
@@ -640,7 +650,7 @@ if __name__ == "__main__":
     if phase is not None:
         # Analyze results and save to CSV
         results = analyze_results_with_csv_export(
-            f'results/phase{phase}_vm_10_09',
+            f'results/phase{phase}',
             f'analysis_results/aggregated_results{phase}.csv'
         )
 
