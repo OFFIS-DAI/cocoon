@@ -1,4 +1,6 @@
 import asyncio
+import time
+
 import pandas as pd
 import logging
 
@@ -60,7 +62,7 @@ async def process_fes(fes_df: pd.DataFrame, meta_model: CocoonMetaModel):
     await meta_model.save_observations()
 
 
-async def main(test: bool = True):
+async def main(include_training_data_generation: bool = True):
     """
     Load message data.
     """
@@ -76,7 +78,7 @@ async def main(test: bool = True):
     """
     First, generate training data with messages from the first day.
     """
-    if test:
+    if include_training_data_generation:
         meta_model_training = CocoonMetaModel(output_file_name='cocoon_training_data.csv',
                                               mode=CocoonMetaModel.Mode.TRAINING,
                                               cluster_distance_threshold=5,
@@ -91,18 +93,67 @@ async def main(test: bool = True):
     """
     Second, test with the rest of the data. 
     """
-    meta_model_test = CocoonMetaModel(output_file_name='cocoon_test_data.csv',
-                                      mode=CocoonMetaModel.Mode.PRODUCTION,
-                                      cluster_distance_threshold=3,
-                                      i_pupa=150,
-                                      alpha=0.5,
-                                      butterfly_threshold_value=0.9,
-                                      substitution_priority='none',
-                                      substitution_enabled=True)
-    meta_model_test.execute_egg_phase(pd.read_csv('cocoon_training_data.csv'))
-    await process_fes(fes_df=test_message_df,
-                      meta_model=meta_model_test)
+    combined_df = None
+    statistic_list = []
+    for c_dt in [1, 3, 5]:
+        for c_ip in [50, 100, 150]:
+            for c_lr in [0.1, 0.5, 0.9]:
+                for c_bt in [0.1, 0.5, 0.9]:
+                    for c_sp in ['error_level', 'error_trend', 'none']:
+                        start_time = time.time()
+                        meta_model_test = CocoonMetaModel(output_file_name=f'results/cocoon_test_data.csv',
+                                                          mode=CocoonMetaModel.Mode.PRODUCTION,
+                                                          cluster_distance_threshold=c_dt,
+                                                          i_pupa=c_ip,
+                                                          alpha=c_lr,
+                                                          butterfly_threshold_value=c_bt,
+                                                          substitution_priority=c_sp,
+                                                          substitution_enabled=True)
+                        meta_model_test.execute_egg_phase(pd.read_csv('cocoon_training_data.csv'))
+                        print('Number of clusters: ', len(meta_model_test.model_for_cluster_id))
+                        print('Length of DF: ', len(test_message_df))
+                        await process_fes(fes_df=test_message_df[:1000],
+                                          meta_model=meta_model_test)
+
+                        duration = time.time() - start_time
+
+                        statistic_list.append({
+                            'config': f'cdt{c_dt}_cip{c_ip}_clr{c_lr}_cbt{c_bt}_csp{c_sp}',
+                            'execution_time_s': duration,
+                            'substitution': meta_model_test.substitution_info
+                        })
+
+                        msg_ids = []
+                        d_real = []
+                        d_cl = []
+                        d_on = []
+                        d_w = []
+                        for m_id, m in meta_model_test.message_observations.items():
+                            msg_ids.append(m_id)
+                            d_real.append(test_message_df[test_message_df['msg_id'] == m_id]['delay_ms'].values[0])
+                            d_cl.append(m.cluster_predicted_delay_ms)
+                            d_on.append(m.online_predicted_delay_ms)
+                            d_w.append(m.weighted_predicted_delay_ms)
+                        # Initialize base only once: msg_id + real_delay_ms (same across c_dt)
+                        if combined_df is None:
+                            combined_df = pd.DataFrame({
+                                "msg_id": msg_ids,
+                                "real_delay_ms": d_real
+                            })
+                        # Only prediction columns for this c_dt
+                        preds_df = pd.DataFrame({
+                            "msg_id": msg_ids,
+                            f"cluster_predicted_delay_ms_cdt{c_dt}_cip{c_ip}_clr{c_lr}_cbt{c_bt}_csp{c_sp}": d_cl,
+                            f"online_predicted_delay_ms_cdt{c_dt}_cip{c_ip}_clr{c_lr}_cbt{c_bt}_csp{c_sp}": d_on,
+                            f"weighted_predicted_delay_ms_cdt{c_dt}_cip{c_ip}_clr{c_lr}_cbt{c_bt}_csp{c_sp}": d_w
+                        })
+                        # Merge by msg_id; keeps single real_delay_ms
+                        combined_df = combined_df.merge(preds_df, on="msg_id", how="left")
+
+    combined_df.to_csv("results/delay_comparison.csv", index=False)
+    with open('results/statistics.txt') as f:
+        f.write(str(statistic_list))
 
 
 if __name__ == "__main__":
-    asyncio.run(main(test=False))
+    asyncio.run(main(include_training_data_generation=False))
