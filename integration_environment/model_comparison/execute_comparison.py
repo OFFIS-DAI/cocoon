@@ -103,10 +103,10 @@ def get_scenario_configurations_for_phase_0():
         os.makedirs('cocoon_training_data')
     existing_configuration_ids = [f.split('.')[0] for f in os.listdir('cocoon_training_data')]
     scenario_configurations = []
-    for network in [NetworkModelType.simbench_ethernet,
-                    NetworkModelType.simbench_5g,
-                    NetworkModelType.simbench_lte,
-                    NetworkModelType.simbench_lte450]:
+    for network in [NetworkModelType.evaluation_ethernet,
+                    NetworkModelType.evaluation_5g,
+                    NetworkModelType.evaluation_lte,
+                    NetworkModelType.evaluation_lte450]:
         payload_size = PayloadSizeConfig.medium
         for n_devices in [NumDevices.five, NumDevices.ten, NumDevices.fifty]:
             for scenario_duration, traffic_config in get_duration_traffic_list_meta_model_training():
@@ -157,10 +157,10 @@ def get_scenario_configurations_for_phase_2():
                        ModelType.static_graph,
                        ]:
         if not model_type == ModelType.ideal:
-            networks = [NetworkModelType.simbench_ethernet,
-                        NetworkModelType.simbench_5g,
-                        NetworkModelType.simbench_lte,
-                        NetworkModelType.simbench_lte450]
+            networks = [NetworkModelType.evaluation_ethernet,
+                        NetworkModelType.evaluation_5g,
+                        NetworkModelType.evaluation_lte,
+                        NetworkModelType.evaluation_lte450]
         else:
             networks = [NetworkModelType.none]
         for network in networks:
@@ -281,7 +281,7 @@ def get_scenario_configurations_for_phase_1():
     scenario_configurations = []
     payload_size = PayloadSizeConfig.medium
     n_devices = NumDevices.five
-    networks = [NetworkModelType.simbench_5g, NetworkModelType.simbench_ethernet]
+    networks = [NetworkModelType.evaluation_5g, NetworkModelType.evaluation_ethernet]
 
     central_composite_design = get_central_composite_design()
     central_composite_design_without_substitution = get_central_composite_design(substitution=Substitution.disabled)
@@ -646,8 +646,7 @@ async def kill_omnet_processes():
 
                 # Kill processes related to your simulation
                 if any(keyword in cmdline.lower() for keyword in [
-                    'omnetpp', 'opp_run', 'inet', 'simu5g',
-                    'simbenchnetwork', 'mango', 'ned'
+                    'omnetpp', 'opp_run', 'inet', 'simu5g', 'mango', 'ned'
                 ]):
                     logger.debug(f"Killing simulation process {process_info['pid']}: {process_info['name']}")
                     proc.kill()
