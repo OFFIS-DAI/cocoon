@@ -1,0 +1,21 @@
+{
+  "scenario_id": "meta_model-five-medium-one_min-poisson_broadcast_1_mps_1-evaluation_ethernet-one-disabled-one-technology_split-fifty-large-none-none-0",
+  "execution_start_time": "2025-11-08 05:57:28.612804",
+  "execution_end_time": "2025-11-08 05:59:31.300051",
+  "execution_run_time_s": 122.68724632263184,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 248.36328125,
+    "final_memory_mb": 248.36328125,
+    "peak_memory_mb": 248.36328125,
+    "min_memory_mb": 248.36328125,
+    "avg_memory_mb": 248.36328125,
+    "memory_change_mb": 0.0,
+    "measurements_count": 123
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": false
+  }
+}

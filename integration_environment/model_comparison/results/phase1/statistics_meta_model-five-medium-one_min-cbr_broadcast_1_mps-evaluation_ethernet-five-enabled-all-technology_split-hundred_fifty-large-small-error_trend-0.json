@@ -1,0 +1,27 @@
+{
+  "scenario_id": "meta_model-five-medium-one_min-cbr_broadcast_1_mps-evaluation_ethernet-five-enabled-all-technology_split-hundred_fifty-large-small-error_trend-0",
+  "execution_start_time": "2025-11-07 15:22:05.972493",
+  "execution_end_time": "2025-11-07 15:22:56.276378",
+  "execution_run_time_s": 50.303884506225586,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 231.6484375,
+    "final_memory_mb": 231.6484375,
+    "peak_memory_mb": 231.6484375,
+    "min_memory_mb": 231.6484375,
+    "avg_memory_mb": 231.6484375,
+    "memory_change_mb": 0.0,
+    "measurements_count": 50
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": true,
+    "substitution_time_s": 1762525374.2290182,
+    "substitution_message_index": 153,
+    "confidence_score": 0.4773080675789645,
+    "total_messages_processed": 88,
+    "cluster_prediction_errors_count": 88,
+    "online_prediction_errors_count": 0
+  }
+}

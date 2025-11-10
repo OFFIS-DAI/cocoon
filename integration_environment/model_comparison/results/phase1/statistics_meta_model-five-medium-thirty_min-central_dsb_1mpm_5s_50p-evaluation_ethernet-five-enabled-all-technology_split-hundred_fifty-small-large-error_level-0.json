@@ -1,0 +1,21 @@
+{
+  "scenario_id": "meta_model-five-medium-thirty_min-central_dsb_1mpm_5s_50p-evaluation_ethernet-five-enabled-all-technology_split-hundred_fifty-small-large-error_level-0",
+  "execution_start_time": "2025-11-09 20:37:03.476847",
+  "execution_end_time": "2025-11-09 20:39:18.772706",
+  "execution_run_time_s": 135.29585909843445,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 248.5546875,
+    "final_memory_mb": 248.5546875,
+    "peak_memory_mb": 248.5546875,
+    "min_memory_mb": 248.5546875,
+    "avg_memory_mb": 248.5546875,
+    "memory_change_mb": 0.0,
+    "measurements_count": 136
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": false
+  }
+}
