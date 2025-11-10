@@ -149,8 +149,7 @@ def find_matching_ideal_simulations(config: ScenarioConfiguration, ideal_results
             return matching_results
 
 
-def calculate_metrics_grouped(baseline_dfs: List[pd.DataFrame], model_dfs: List[pd.DataFrame]) -> Tuple[
-    float, float, float]:
+def calculate_metrics_grouped(baseline_dfs: List[pd.DataFrame], model_dfs: List[pd.DataFrame]) -> Tuple[float, float, float, float]:
     if len(baseline_dfs) != len(model_dfs):
         raise ValueError(f"Mismatch in number of runs: {len(baseline_dfs)} baseline vs {len(model_dfs)} model")
 
@@ -417,6 +416,8 @@ def analyze_results(results_folder: str) -> List[EvaluationResult]:
             butterfly_threshold_value=config.butterfly_threshold_value,
             substitution_priority=config.substitution_priority,
             test_train_split=config.test_train_split,
+            amount_of_scenarios_in_training_data=config.amount_of_scenarios_in_training_data,
+            substitution=config.substitution,
             run=None  # Exclude run from grouping
         )
 
@@ -603,6 +604,11 @@ def save_evaluation_results_to_csv(
                 'substitution_priority_name': result.scenario_config.substitution_priority.name if result.scenario_config.substitution_priority else None,
                 'test_train_name': result.scenario_config.test_train_split.name if result.scenario_config.test_train_split else None,
 
+                # Additional meta-model flags
+                'substitution': result.scenario_config.substitution.value if result.scenario_config.substitution else None,
+                'substitution_name': result.scenario_config.substitution.name if result.scenario_config.substitution else None,
+                'amount_of_scenarios_in_training_data': result.scenario_config.amount_of_scenarios_in_training_data.value if result.scenario_config.amount_of_scenarios_in_training_data else None,
+                'amount_of_scenarios_in_training_data_name': result.scenario_config.amount_of_scenarios_in_training_data.name if result.scenario_config.amount_of_scenarios_in_training_data else None,
             })
 
         rows.append(row)
