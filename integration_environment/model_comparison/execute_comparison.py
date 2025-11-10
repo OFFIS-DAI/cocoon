@@ -282,6 +282,8 @@ def get_central_composite_design(substitution: Substitution = Substitution.enabl
 
 def get_scenario_configurations_for_phase_1():
     scenario_configurations = []
+    existing_configuration_ids = [f.split('messages_')[1].split('.')[0] for f in os.listdir('results/phase1') if
+                                  'messages_' in f]
     payload_size = PayloadSizeConfig.medium
     n_devices = NumDevices.five
     networks = [NetworkModelType.evaluation_5g, NetworkModelType.evaluation_ethernet]
@@ -292,45 +294,48 @@ def get_scenario_configurations_for_phase_1():
     for scenario_duration, traffic_config in get_duration_traffic_list_for_screening_design():
         for network in networks:
             # detailed model
-            scenario_configurations.append(
-                ScenarioConfiguration(payload_size=payload_size,
-                                      num_devices=n_devices,
-                                      model_type=ModelType.detailed,
-                                      scenario_duration=scenario_duration,
-                                      traffic_configuration=traffic_config,
-                                      network_type=network))
+            config = ScenarioConfiguration(payload_size=payload_size,
+                                           num_devices=n_devices,
+                                           model_type=ModelType.detailed,
+                                           scenario_duration=scenario_duration,
+                                           traffic_configuration=traffic_config,
+                                           network_type=network)
+            if config.scenario_id not in existing_configuration_ids:
+                scenario_configurations.append(config)
             # meta-model
             for i, row in central_composite_design.iterrows():
-                scenario_configurations.append(
-                    ScenarioConfiguration(payload_size=payload_size,
-                                          num_devices=n_devices,
-                                          model_type=ModelType.meta_model,
-                                          scenario_duration=scenario_duration,
-                                          traffic_configuration=traffic_config,
-                                          network_type=network,
-                                          cluster_distance_threshold=row['C-DT'],
-                                          i_pupa=row['C-IP'],
-                                          learning_rate_weighting=row['C-LR'],
-                                          butterfly_threshold_value=row['C-BT'],
-                                          substitution_priority=row['C-SP'],
-                                          test_train_split=row['C-TTS'],
-                                          substitution=Substitution.enabled))
+                config = ScenarioConfiguration(payload_size=payload_size,
+                                               num_devices=n_devices,
+                                               model_type=ModelType.meta_model,
+                                               scenario_duration=scenario_duration,
+                                               traffic_configuration=traffic_config,
+                                               network_type=network,
+                                               cluster_distance_threshold=row['C-DT'],
+                                               i_pupa=row['C-IP'],
+                                               learning_rate_weighting=row['C-LR'],
+                                               butterfly_threshold_value=row['C-BT'],
+                                               substitution_priority=row['C-SP'],
+                                               test_train_split=row['C-TTS'],
+                                               substitution=Substitution.enabled)
+                if config.scenario_id not in existing_configuration_ids:
+                    scenario_configurations.append(config)
             for i, row in central_composite_design_without_substitution.iterrows():
-                scenario_configurations.append(
-                    ScenarioConfiguration(payload_size=payload_size,
-                                          num_devices=n_devices,
-                                          model_type=ModelType.meta_model,
-                                          scenario_duration=scenario_duration,
-                                          traffic_configuration=traffic_config,
-                                          network_type=network,
-                                          cluster_distance_threshold=row['C-DT'],
-                                          i_pupa=row['C-IP'],
-                                          learning_rate_weighting=row['C-LR'],
-                                          butterfly_threshold_value=ButterflyThresholdValue.none,
-                                          substitution_priority=SubstitutionPriority.none,
-                                          amount_of_scenarios_in_training_data=row['C-AT'],
-                                          test_train_split=row['C-TTS'],
-                                          substitution=Substitution.disabled))
+                config = ScenarioConfiguration(payload_size=payload_size,
+                                               num_devices=n_devices,
+                                               model_type=ModelType.meta_model,
+                                               scenario_duration=scenario_duration,
+                                               traffic_configuration=traffic_config,
+                                               network_type=network,
+                                               cluster_distance_threshold=row['C-DT'],
+                                               i_pupa=row['C-IP'],
+                                               learning_rate_weighting=row['C-LR'],
+                                               butterfly_threshold_value=ButterflyThresholdValue.none,
+                                               substitution_priority=SubstitutionPriority.none,
+                                               amount_of_scenarios_in_training_data=row['C-AT'],
+                                               test_train_split=row['C-TTS'],
+                                               substitution=Substitution.disabled)
+                if config.scenario_id not in existing_configuration_ids:
+                    scenario_configurations.append(config)
 
     return scenario_configurations
 
@@ -685,12 +690,6 @@ async def run_benchmark_suite_screening(phase: int = None):
         # Check if 'results' folder exists, create if it doesn't
         if not os.path.exists(f'results/phase{phase}'):
             os.makedirs(f'results/phase{phase}')
-        else:
-            # If folder exists, remove all files in it
-            for f in os.listdir(f'results/phase{phase}'):
-                file_path = os.path.join(f'results/phase{phase}', f)
-                if os.path.isfile(file_path):  # Only remove files, not subdirectories
-                    os.remove(file_path)
 
     if phase is None or phase == 0:
         meta_model_training_configs = get_scenario_configurations_for_phase_0()
