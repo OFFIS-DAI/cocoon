@@ -726,13 +726,11 @@ async def run_benchmark_suite_screening(phase: int = None):
                   f'in repetition {r + 1}/{num_repetitions}')
             await run_scenario_config(scenario_configuration=scenario_configuration, run=r,
                                       phase=1)
-            await run_scenario_config(scenario_configuration=scenario_configuration, run=r,
-                                      phase=2)
         for i, scenario_configuration in enumerate(requirement_analysis_configs):
             print(f'Run config {i}/{len(requirement_analysis_configs)} '
                   f'in repetition {r + 1}/{num_repetitions}')
             await run_scenario_config(scenario_configuration=scenario_configuration, run=r,
-                                      phase=3, timeout_seconds=5 * 60)  # 5 minute timeout
+                                      phase=2, timeout_seconds=5 * 60)  # 5 minute timeout
 
 
 if __name__ == "__main__":
