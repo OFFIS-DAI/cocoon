@@ -1,9 +1,0 @@
-msg_id,sender,receiver,payload_size_B,time_send_ms,time_receive_ms,actual_delay_ms,online_predicted_delay_ms,cluster_predicted_delay_ms,weighted_predicted_delay_ms,sender_average_outgoing_delay_ms,sender_average_incoming_delay_ms,sender_num_messages_sent_simultaneously,receiver_average_outgoing_delay_ms,receiver_average_incoming_delay_ms,receiver_num_messages_sent_simultaneously,network_average_delay_ms,network_num_messages_in_transit,network_num_busy_links,network_num_network_nodes,network_num_messages_sent_simultaneously
-msg_0,node4,node0,415,900000,900054.0,54.0,,,,,,4,,,0,,4,4,5,4
-msg_1,node4,node1,415,900000,900060.0,60.0,,,,54.0,,4,,,0,54.0,3,3,5,4
-msg_2,node4,node2,415,900000,900071.0,71.0,,,,54.0,,4,,,0,54.0,3,3,5,4
-msg_3,node4,node3,415,900000,900082.0,82.0,,,,61.666666666666664,,4,,,0,61.666666666666664,1,1,5,4
-msg_4,node4,node0,415,1800000,,,,,,66.75,,4,,54.0,0,66.75,4,4,5,4
-msg_5,node4,node1,415,1800000,,,,,,66.75,,4,,60.0,0,66.75,4,4,5,4
-msg_6,node4,node2,415,1800000,,,,,,66.75,,4,,71.0,0,66.75,4,4,5,4
-msg_7,node4,node3,415,1800000,,,,,,66.75,,4,,82.0,0,66.75,4,4,5,4
