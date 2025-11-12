@@ -151,6 +151,8 @@ def get_duration_traffic_list_for_screening_design():
 
 
 def get_scenario_configurations_for_phase_2():
+    existing_configuration_ids = [f.split('messages_')[1].split('.')[0] for f in os.listdir('results/phase2') if
+                                  'messages_' in f]
     scenario_configurations = []
     payload_size = PayloadSizeConfig.medium
     for model_type in [ModelType.detailed,
@@ -190,27 +192,29 @@ def get_scenario_configurations_for_phase_2():
                                         TestTrainSplit.technology_split,
                                         TestTrainSplit.scale_split,
                                         TestTrainSplit.traffic_model_split]:
-                                scenario_configurations.append(
-                                    ScenarioConfiguration(payload_size=payload_size,
-                                                          num_devices=n_devices,
-                                                          model_type=model_type,
-                                                          scenario_duration=scenario_duration,
-                                                          traffic_configuration=traffic_config,
-                                                          network_type=network,
-                                                          cluster_distance_threshold=ClusterDistanceThreshold.three,
-                                                          i_pupa=BatchSizeIPupa.hundred,
-                                                          learning_rate_weighting=LearningRateWeighting.center,
-                                                          butterfly_threshold_value=ButterflyThresholdValue.center,
-                                                          substitution_priority=SubstitutionPriority.none,
-                                                          test_train_split=tts))
+                                config = ScenarioConfiguration(payload_size=payload_size,
+                                                               num_devices=n_devices,
+                                                               model_type=model_type,
+                                                               scenario_duration=scenario_duration,
+                                                               traffic_configuration=traffic_config,
+                                                               network_type=network,
+                                                               cluster_distance_threshold=ClusterDistanceThreshold.three,
+                                                               i_pupa=BatchSizeIPupa.hundred,
+                                                               learning_rate_weighting=LearningRateWeighting.center,
+                                                               butterfly_threshold_value=ButterflyThresholdValue.center,
+                                                               substitution_priority=SubstitutionPriority.none,
+                                                               test_train_split=tts)
+                                if config.scenario_id not in existing_configuration_ids:
+                                    scenario_configurations.append(config)
                         else:
-                            scenario_configurations.append(
-                                ScenarioConfiguration(payload_size=payload_size,
-                                                      num_devices=n_devices,
-                                                      model_type=model_type,
-                                                      scenario_duration=scenario_duration,
-                                                      traffic_configuration=traffic_config,
-                                                      network_type=network))
+                            config = ScenarioConfiguration(payload_size=payload_size,
+                                                           num_devices=n_devices,
+                                                           model_type=model_type,
+                                                           scenario_duration=scenario_duration,
+                                                           traffic_configuration=traffic_config,
+                                                           network_type=network)
+                            if config.scenario_id not in existing_configuration_ids:
+                                scenario_configurations.append(config)
     return scenario_configurations
 
 
