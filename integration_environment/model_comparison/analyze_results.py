@@ -288,7 +288,7 @@ def calculate_hyperparameter_scores(evaluation_results: List[EvaluationResult]) 
         df_data.append({
             'result_obj': result,
             'nrmse_mean': result.nrmse_mean,
-            'nrmse_std': result.nrmse_std,
+            'wasserstein_dist': result.wasserstein_dist,
             'mean_in_sigma_interval': result.mean_in_sigma_interval,
             'execution_time_s': result.execution_time_s,
             'substitution_occurred': result.substitution_occurred
@@ -302,18 +302,16 @@ def calculate_hyperparameter_scores(evaluation_results: List[EvaluationResult]) 
     # For execution_time_s: lower is better (ascending=True)
 
     df['rank_nrmse_mean'] = df['nrmse_mean'].rank(method='min', ascending=True) - 1
-    df['rank_nrmse_std'] = df['nrmse_std'].rank(method='min', ascending=True) - 1
     df['rank_interval'] = df['mean_in_sigma_interval'].rank(method='min', ascending=False) - 1
     df['rank_execution_time'] = df['execution_time_s'].rank(method='min', ascending=True) - 1
+    df['rank_wasserstein_dist'] = df['wasserstein_dist'].rank(method='min', ascending=True) - 1
 
-    # Calculate score: (3-idx(nrmse_mean) + 3-idx(nrmse_std) + idx(intv) + 3-idx(execution_time)) * (substitution success)
-    # Note: Using max rank for normalization instead of fixed "3" to handle variable number of configurations
     max_rank = len(valid_results) - 1
 
     df['score_component'] = (
             (max_rank - df['rank_nrmse_mean']) +
-            (max_rank - df['rank_nrmse_std']) +
             df['rank_interval'] +
+            (max_rank - df['rank_wasserstein_dist']) +
             (max_rank - df['rank_execution_time'])
     )
 
@@ -346,6 +344,7 @@ def analyze_results(results_folder: str) -> List[EvaluationResult]:
     csv_files = list(results_path.glob("messages_*.csv"))
     json_files = list(results_path.glob("statistics_*.json"))
 
+
     print(
         f"Found {len(csv_files)} standard CSV files, and {len(json_files)} JSON files in {results_folder}")
 
@@ -374,6 +373,9 @@ def analyze_results(results_folder: str) -> List[EvaluationResult]:
         # Store detailed simulations separately
         if config.model_type == ModelType.detailed:
             detailed_results[scenario_id] = df
+
+        if config.model_type == ModelType.meta_model and config.substitution == Substitution.disabled:
+            continue
 
         # Store ideal simulations separately
         elif config.model_type == ModelType.ideal:
