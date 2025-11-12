@@ -326,7 +326,7 @@ def summarize_step1(file_path: str) -> None:
                 return sorted(series.dropna().unique())
 
             n_h = len(hparams)
-            width_per_ax, height = 2.4, 2.6
+            width_per_ax, height = 2.2, 2.6
 
             for met in effect_metrics:
                 fig, axes = plt.subplots(nrows=1, ncols=n_h,
@@ -389,11 +389,84 @@ def summarize_step1(file_path: str) -> None:
                         frameon=False
                     )
 
-                plt.tight_layout(rect=[0, 0.08, 1, 1])
+                plt.tight_layout()
                 axes[0].set_ylabel(latex_metric.get(met, met))
                 out_path = outdir / f"condensed_effects_{met}.pdf"
                 plt.savefig(out_path, format="pdf", dpi=200, bbox_inches="tight")
                 plt.close(fig)
+    # --- 7) Analysis by Test-Training Split (C-TTS) ---
+    if "test_train_name" in df_sub_enabled.columns:
+        tts_col = "test_train_name"
+        df_tts = df_sub_enabled.copy()
+
+        # Normalize labels for readability
+        df_tts[tts_col] = (
+            df_tts[tts_col].astype(str)
+            .str.replace("TestTrainSplit.", "", regex=False)
+            .str.replace("_", " ")
+            .str.strip()
+        )
+
+        # Metrics to analyze
+        tts_metrics = [m for m in ["nrmse_mean", "wasserstein_distance",
+                                   "mean_in_one_sigma_interval", "execution_time_s", "score"]
+                       if m in df_tts.columns]
+
+        # LaTeX-style labels
+        metric_labels = {
+            "nrmse_mean": r"$NRMSE$",
+            "wasserstein_distance": r"$W$",
+            "mean_in_one_sigma_interval": r"$C_{\pm\sigma}$",
+            "execution_time_s": r"$ET$",
+            "score": r"$SC$",
+        }
+
+        # --- Summary Table ---
+        print("\n=== Step 7: Test-Training Split Analysis ===")
+        summary = df_tts.groupby(tts_col)[tts_metrics].agg(["mean", "std"]).round(4)
+        print(summary)
+
+        # --- Z-score normalization for cross-metric comparability ---
+        std = df_tts[tts_metrics].std(ddof=0).replace(0, np.nan)
+        df_tts_z = df_tts.copy()
+        df_tts_z[tts_metrics] = (df_tts[tts_metrics] - df_tts[tts_metrics].mean()) / std
+        df_tts_z['execution_time_s'] *= -1
+        df_tts_z['wasserstein_distance'] *= -1
+        df_tts_z = df_tts_z.fillna(0.0)
+
+        # --- Plot: Standardized metric means per Test-Training Split ---
+        plt.rcParams.update({
+            "font.size": 8,
+            "font.family": "serif",
+            "font.serif": ["Computer Modern", "DejaVu Serif"],
+            "mathtext.fontset": "cm",
+        })
+        sns.set_theme(style="whitegrid", font="serif")
+
+        # Mean z-score per metric per C-TTS
+        mean_z = df_tts_z.groupby(tts_col)[tts_metrics].mean()
+
+        fig, ax = plt.subplots(figsize=(8, 2.8))
+        sns.heatmap(
+            mean_z.T,
+            cmap="BuGn", center=0,
+            cbar_kws={"label": "(inverted) z-score"},
+            linewidths=0.3, linecolor="white",
+            ax=ax
+        )
+
+        ax.set_xlabel("")
+        ax.set_ylabel("Metric")
+        ax.set_yticklabels([metric_labels.get(m, m) for m in tts_metrics], rotation=0)
+        ax.set_title(r"Metrics across Test–Training Configurations (C-TTS)")
+
+        plt.tight_layout()
+        out_path = Path("../analysis_results/plots_phase1/step1_tts_metric_comparison.pdf")
+        plt.savefig(out_path, format="pdf", dpi=200, bbox_inches="tight")
+        plt.close(fig)
+
+    else:
+        print("No 'test_train_name' column found — skipping C-TTS analysis.")
 
 
 if __name__ == "__main__":
