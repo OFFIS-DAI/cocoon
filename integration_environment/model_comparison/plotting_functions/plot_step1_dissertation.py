@@ -159,7 +159,6 @@ def summarize_step1(file_path: str) -> None:
             "learning_rate_weighting",  # C-LR
             "butterfly_threshold_value",  # C-BT
             "substitution_priority_name",  # C-SP (categorical)
-            "test_train_name",  # C-TTS (categorical)
         ]
         hparams_present = [c for c in candidate_hparams if c in df_sub_enabled.columns]
 
@@ -198,8 +197,7 @@ def summarize_step1(file_path: str) -> None:
                 "batch_size_ipupa": r"$C\text{-}IP$",
                 "learning_rate_weighting": r"$C\text{-}LR$",
                 "butterfly_threshold_value": r"$C\text{-}BT$",
-                "substitution_priority_name": r"$C\text{-}SP$",
-                "test_train_name": r"$C\text{-}TTS$",
+                "substitution_priority_name": r"$C\text{-}SP$"
             }
 
             def _row_label(s: str) -> str:
@@ -213,6 +211,8 @@ def summarize_step1(file_path: str) -> None:
             std = abs_table.std(ddof=0).replace(0, np.nan)
             abs_table_std = (abs_table - abs_table.mean()) / std
             abs_table_std = abs_table_std.fillna(0.0)
+            abs_table_std['execution_time_s'] *= -1
+            abs_table_std['wasserstein_distance'] *= -1
 
             # Styling (Computer Modern look without usetex)
             plt.rcParams.update({
@@ -250,9 +250,9 @@ def summarize_step1(file_path: str) -> None:
             # Standardized (z-score) heatmap
             draw_heatmap(
                 abs_table_std,
-                cbar_label="z-score",
+                cbar_label="(inverted) z-score",
                 fname="step1_hyperparam_metric_std_values.pdf",
-                vmin=-2.5, vmax=2.5, center=0, cmap="vlag"
+                vmin=-2.5, vmax=2.5, center=0, cmap="BuGn"
             )
         else:
             print("Absolute/standardized heatmaps: no recognized hyper-parameter columns found.")
