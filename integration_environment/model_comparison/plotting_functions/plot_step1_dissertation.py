@@ -259,6 +259,142 @@ def summarize_step1(file_path: str) -> None:
     else:
         print("Absolute/standardized heatmaps skipped: no data in filtered subset.")
 
+    # --- 6) Factor effects by scenario (traffic configuration × network type) ---
+    if not df_plot.empty:
+        network_col = "network_type"
+        traffic_col = "traffic_configuration"
+
+        if network_col is None or traffic_col is None:
+            print("Factor-effects plot skipped: could not find network/traffic columns.")
+        else:
+            # Hyperparameters to analyse (present in file)
+            hparams = [
+                "cluster_distance_threshold",  # C-DT
+                "batch_size_ipupa",  # C-IP
+                "learning_rate_weighting",  # C-LR
+                "butterfly_threshold_value",  # C-BT
+                "substitution_priority_name",  # C-SP (categorical)
+            ]
+            hparams = [h for h in hparams if h in df_sub_enabled.columns]
+
+            # Metrics to inspect
+            effect_metrics = [m for m in ["nrmse_mean", "wasserstein_distance", "execution_time_s", "score"]
+                              if m in df_sub_enabled.columns]
+
+            # Pretty names (LaTeX-like) for labels
+            latex_metric = {
+                "nrmse_mean": r"$NRMSE$",
+                "wasserstein_distance": r"$W$",
+                "execution_time_s": r"$ET$",
+                "score": r"$SC$",
+            }
+            latex_hparam = {
+                "cluster_distance_threshold": r"$C\text{-}DT$",
+                "batch_size_ipupa": r"$C\text{-}IP$",
+                "learning_rate_weighting": r"$C\text{-}LR$",
+                "butterfly_threshold_value": r"$C\text{-}BT$",
+                "substitution_priority_name": r"$C\text{-}SP$",
+            }
+
+            # Aesthetics
+            plt.rcParams.update({
+                "font.size": 7,
+                "font.family": "serif",
+                "font.serif": ["Computer Modern", "DejaVu Serif"],
+                "mathtext.fontset": "cm",
+                "axes.unicode_minus": False,
+            })
+            sns.set_theme(style="whitegrid", context="notebook", font="serif")
+
+            outdir = Path("../analysis_results/plots_phase1/factor_effects_condensed")
+            outdir.mkdir(parents=True, exist_ok=True)
+
+            # Prepare data
+            df_f = df_sub_enabled.copy()
+            df_f[network_col] = (df_f[network_col].astype(str)
+                                 .str.replace("NetworkModelType.", "", regex=False).str.strip())
+            df_f[traffic_col] = (df_f[traffic_col].astype(str)
+                                 .str.replace("TrafficConfig.", "", regex=False)
+                                 .str.replace("evaluation_", "", regex=False).str.strip())
+
+            hue_order = sorted(df_f[network_col].dropna().unique())
+            style_order = sorted(df_f[traffic_col].dropna().unique())
+
+            def level_order(series):
+                if pd.api.types.is_numeric_dtype(series):
+                    return sorted(series.dropna().unique())
+                return sorted(series.dropna().unique())
+
+            n_h = len(hparams)
+            width_per_ax, height = 2.4, 2.6
+
+            for met in effect_metrics:
+                fig, axes = plt.subplots(nrows=1, ncols=n_h,
+                                         figsize=(width_per_ax * n_h, height),
+                                         sharey=False)
+                if n_h == 1:
+                    axes = [axes]
+                else:
+                    axes = list(axes)
+
+                for idx, (ax, h) in enumerate(zip(axes, hparams)):
+                    ord_h = level_order(df_f[h])
+
+                    # >>> Make x categorical with explicit order
+                    if not pd.api.types.is_numeric_dtype(df_f[h]):
+                        df_f[h] = pd.Categorical(df_f[h], categories=ord_h, ordered=True)
+
+                    # Only last axis builds a legend; we’ll replace it with a figure legend
+                    legend_flag = "auto" if idx == (n_h - 1) else False
+
+                    sns.lineplot(
+                        data=df_f,
+                        x=h, y=met,
+                        hue=network_col, hue_order=hue_order,
+                        style=traffic_col, style_order=style_order,
+                        markers=True, dashes=False,
+                        errorbar=("ci", 95),
+                        legend=legend_flag,
+                        ax=ax,
+                    )
+
+                    ax.set_xlabel(latex_hparam.get(h, h))
+                    #ax.set_title(latex_metric.get(met, met))
+                    if idx != 0:
+                        ax.set_ylabel("")
+                    # For numeric hyperparams, ensure sorted ticks
+                    if pd.api.types.is_numeric_dtype(df_f[h]):
+                        ax.set_xticks(ord_h)
+
+                # Rotate x-ticks on the rightmost subplot
+                right_ax = axes[-1]
+                for label in right_ax.get_xticklabels():
+                    label.set_rotation(20)  # rotate
+                    label.set_ha('right')  # align right for readability
+
+                # Single shared legend
+                last_ax = axes[-1]
+                last_leg = last_ax.get_legend()
+                handles, labels = ([], [])
+                if last_leg is not None:
+                    handles = last_leg.legend_handles
+                    labels = [t.get_text() for t in last_leg.get_texts()]
+                    last_leg.remove()
+
+                if handles and labels:
+                    fig.legend(
+                        handles, labels,
+                        loc="lower center",  # place below the figure
+                        bbox_to_anchor=(0.5, -0.5),  # centered, slightly below the axes
+                        frameon=False
+                    )
+
+                plt.tight_layout(rect=[0, 0.08, 1, 1])
+                axes[0].set_ylabel(latex_metric.get(met, met))
+                out_path = outdir / f"condensed_effects_{met}.pdf"
+                plt.savefig(out_path, format="pdf", dpi=200, bbox_inches="tight")
+                plt.close(fig)
+
 
 if __name__ == "__main__":
     summarize_step1("../analysis_results/aggregated_results1.csv")
