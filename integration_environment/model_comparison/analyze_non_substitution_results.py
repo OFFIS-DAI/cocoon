@@ -14,7 +14,7 @@ PATTERN = "*.csv"
 OUT_DIR = Path("analysis_results")
 
 
-def compute_metrics(y_true: pd.Series, y_pred: pd.Series) -> Dict[str, float]:
+def compute_metrics(y_true: pd.Series, y_pred: pd.Series, rolling: bool = False) -> Dict[str, float]:
     s = pd.concat([y_true, y_pred], axis=1).dropna()
     if s.empty:
         return {"mae": np.nan, "rmse": np.nan, "nrmse": np.nan}
@@ -24,16 +24,24 @@ def compute_metrics(y_true: pd.Series, y_pred: pd.Series) -> Dict[str, float]:
     rmse = math.sqrt(np.mean((yt - yp) ** 2))
     denom = np.mean(np.abs(yt)) if np.mean(np.abs(yt)) != 0 else (np.std(yt) if np.std(yt) != 0 else 1.0)
     nrmse = rmse / denom
-    return {"mae": mae, "rmse": rmse, "nrmse": nrmse}
+    if rolling:
+        result_dict = {}
+        step_size = 50
+        start = 0
+        while start < len(yt):
+            end = start + step_size if (start+step_size) < len(yt) else len(yt)
+            cur_mae = np.mean(np.abs(yt[start:end] - yp[start:end]))
+            cur_rmse = math.sqrt(np.mean((yt[start:end] - yp[start:end]) ** 2))
 
-
-def rolling_abs_error(y_true: pd.Series, y_pred: pd.Series, window: int) -> pd.Series:
-    s = pd.concat([y_true.rename("yt"), y_pred.rename("yp")], axis=1).dropna()
-    if s.empty:
-        return pd.Series(dtype=float, name="rae")
-    rae = (s["yt"] - s["yp"]).abs().rolling(window=window, min_periods=max(1, window // 5)).mean()
-    rae.name = "rae"
-    return rae
+            result_dict[f'mae_start{start}'] = cur_mae
+            result_dict[f'rmse_start{start}'] = cur_rmse
+            start += step_size
+        result_dict['mae'] = mae
+        result_dict['rmse'] = rmse
+        result_dict['nrmse'] = nrmse
+        return result_dict
+    else:
+        return {"mae": mae, "rmse": rmse, "nrmse": nrmse}
 
 
 # -------- Core processing --------
@@ -65,7 +73,8 @@ def process_file(csv_path: Path) -> Optional[Dict[str, float]]:
     if cluster_col in df:  summary.update(
         {f"cluster_{k}": v for k, v in compute_metrics(df[y_col], df[cluster_col]).items()})
     if weighted_col in df: summary.update(
-        {f"weighted_{k}": v for k, v in compute_metrics(df[y_col], df[weighted_col]).items()})
+        {f"weighted_{k}": v for k, v in compute_metrics(df[y_col], df[weighted_col], rolling=True).items()})
+
     return summary
 
 
