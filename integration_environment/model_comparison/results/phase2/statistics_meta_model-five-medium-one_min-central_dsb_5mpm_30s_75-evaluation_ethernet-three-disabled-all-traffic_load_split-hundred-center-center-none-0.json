@@ -1,0 +1,21 @@
+{
+  "scenario_id": "meta_model-five-medium-one_min-central_dsb_5mpm_30s_75-evaluation_ethernet-three-disabled-all-traffic_load_split-hundred-center-center-none-0",
+  "execution_start_time": "2025-11-13 00:48:19.112770",
+  "execution_end_time": "2025-11-13 00:48:30.944105",
+  "execution_run_time_s": 11.831335544586182,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 264.4609375,
+    "final_memory_mb": 264.4609375,
+    "peak_memory_mb": 264.4609375,
+    "min_memory_mb": 264.4609375,
+    "avg_memory_mb": 264.4609375,
+    "memory_change_mb": 0.0,
+    "measurements_count": 12
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": false
+  }
+}

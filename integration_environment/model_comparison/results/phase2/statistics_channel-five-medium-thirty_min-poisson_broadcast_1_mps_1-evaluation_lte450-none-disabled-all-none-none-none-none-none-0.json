@@ -1,0 +1,21 @@
+{
+  "scenario_id": "channel-five-medium-thirty_min-poisson_broadcast_1_mps_1-evaluation_lte450-none-disabled-all-none-none-none-none-none-0",
+  "execution_start_time": "2025-11-15 03:11:23.589550",
+  "execution_end_time": "2025-11-15 03:13:33.656038",
+  "execution_run_time_s": 130.0664882659912,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 246.95703125,
+    "final_memory_mb": 246.95703125,
+    "peak_memory_mb": 246.95703125,
+    "min_memory_mb": 246.95703125,
+    "avg_memory_mb": 246.95703125,
+    "memory_change_mb": 0.0,
+    "measurements_count": 130
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": false
+  }
+}

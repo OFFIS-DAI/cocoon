@@ -1,0 +1,21 @@
+{
+  "scenario_id": "detailed-five-medium-one_min-cbr_broadcast_1_mps-evaluation_lte-none-disabled-all-none-none-none-none-none-0",
+  "execution_start_time": "2025-11-12 17:17:52.478463",
+  "execution_end_time": "2025-11-12 17:19:58.856082",
+  "execution_run_time_s": 126.37761902809143,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 197.1796875,
+    "final_memory_mb": 197.1796875,
+    "peak_memory_mb": 197.1796875,
+    "min_memory_mb": 197.1796875,
+    "avg_memory_mb": 197.1796875,
+    "memory_change_mb": 0.0,
+    "measurements_count": 118
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": false
+  }
+}

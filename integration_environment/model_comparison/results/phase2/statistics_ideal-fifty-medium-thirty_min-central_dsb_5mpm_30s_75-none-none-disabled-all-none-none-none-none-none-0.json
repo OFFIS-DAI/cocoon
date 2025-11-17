@@ -1,0 +1,21 @@
+{
+  "scenario_id": "ideal-fifty-medium-thirty_min-central_dsb_5mpm_30s_75-none-none-disabled-all-none-none-none-none-none-0",
+  "execution_start_time": "2025-11-12 22:58:17.225736",
+  "execution_end_time": "2025-11-12 22:58:22.755190",
+  "execution_run_time_s": 5.529454708099365,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 273.20703125,
+    "final_memory_mb": 231.109375,
+    "peak_memory_mb": 277.84765625,
+    "min_memory_mb": 231.109375,
+    "avg_memory_mb": 260.5013020833333,
+    "memory_change_mb": -42.09765625,
+    "measurements_count": 6
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": false
+  }
+}

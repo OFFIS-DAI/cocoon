@@ -1,0 +1,21 @@
+{
+  "scenario_id": "channel-fifty-medium-thirty_min-central_dsb_5mpm_30s_75-evaluation_lte-none-disabled-all-none-none-none-none-none-0",
+  "execution_start_time": "2025-11-15 03:10:52.673013",
+  "execution_end_time": "2025-11-15 03:11:05.186535",
+  "execution_run_time_s": 12.513521909713745,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 264.2578125,
+    "final_memory_mb": 251.5390625,
+    "peak_memory_mb": 264.2578125,
+    "min_memory_mb": 251.5390625,
+    "avg_memory_mb": 254.03425480769232,
+    "memory_change_mb": -12.71875,
+    "measurements_count": 13
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": false
+  }
+}

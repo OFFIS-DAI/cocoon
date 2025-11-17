@@ -1,0 +1,21 @@
+{
+  "scenario_id": "meta_model-twenty-medium-thirty_min-central_dsb_5mpm_30s_75-evaluation_ethernet-three-disabled-all-traffic_load_split-hundred-center-center-none-0",
+  "execution_start_time": "2025-11-13 07:32:59.677660",
+  "execution_end_time": "2025-11-13 07:37:59.623294",
+  "execution_run_time_s": 299.94563388824463,
+  "timeout_occurred": true,
+  "timeout_limit_s": 300,
+  "timeout_error_message": "Scenario execution exceeded 300 second timeout",
+  "messages_sent": 654,
+  "messages_received": 647,
+  "messages_completed": 647,
+  "memory_statistics": {
+    "initial_memory_mb": 257.66015625,
+    "final_memory_mb": 238.80859375,
+    "peak_memory_mb": 257.69140625,
+    "min_memory_mb": 238.609375,
+    "avg_memory_mb": 255.78549479166668,
+    "memory_change_mb": -18.8515625,
+    "measurements_count": 300
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "scenario_id": "meta_model-fifty-medium-one_min-central_dsb_5mpm_30s_75-evaluation_lte-three-disabled-all-traffic_model_split-hundred-center-center-none-0",
+  "execution_start_time": "2025-11-14 11:53:57.002895",
+  "execution_end_time": "2025-11-14 11:57:08.159171",
+  "execution_run_time_s": 191.15627598762512,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 212.01953125,
+    "final_memory_mb": 212.01953125,
+    "peak_memory_mb": 212.01953125,
+    "min_memory_mb": 212.01953125,
+    "avg_memory_mb": 212.01953125,
+    "memory_change_mb": 0.0,
+    "measurements_count": 191
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": false
+  }
+}

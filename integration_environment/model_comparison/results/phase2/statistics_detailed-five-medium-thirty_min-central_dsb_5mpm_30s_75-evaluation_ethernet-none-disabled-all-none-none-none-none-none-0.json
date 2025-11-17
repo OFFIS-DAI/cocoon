@@ -1,0 +1,21 @@
+{
+  "scenario_id": "detailed-five-medium-thirty_min-central_dsb_5mpm_30s_75-evaluation_ethernet-none-disabled-all-none-none-none-none-none-0",
+  "execution_start_time": "2025-11-12 12:54:09.388075",
+  "execution_end_time": "2025-11-12 12:59:09.388111",
+  "execution_run_time_s": 300.000036239624,
+  "timeout_occurred": true,
+  "timeout_limit_s": 300,
+  "timeout_error_message": "Scenario execution exceeded 300 second timeout",
+  "messages_sent": 565,
+  "messages_received": 561,
+  "messages_completed": 561,
+  "memory_statistics": {
+    "initial_memory_mb": 187.37890625,
+    "final_memory_mb": 187.421875,
+    "peak_memory_mb": 187.421875,
+    "min_memory_mb": 187.37890625,
+    "avg_memory_mb": 187.39782552083332,
+    "memory_change_mb": 0.04296875,
+    "measurements_count": 300
+  }
+}

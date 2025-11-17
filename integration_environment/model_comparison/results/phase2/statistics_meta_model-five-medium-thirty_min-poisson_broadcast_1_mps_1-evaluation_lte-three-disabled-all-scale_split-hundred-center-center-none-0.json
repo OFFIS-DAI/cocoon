@@ -1,0 +1,21 @@
+{
+  "scenario_id": "meta_model-five-medium-thirty_min-poisson_broadcast_1_mps_1-evaluation_lte-three-disabled-all-scale_split-hundred-center-center-none-0",
+  "execution_start_time": "2025-11-14 00:00:39.195921",
+  "execution_end_time": "2025-11-14 00:05:39.063883",
+  "execution_run_time_s": 299.8679621219635,
+  "timeout_occurred": true,
+  "timeout_limit_s": 300,
+  "timeout_error_message": "Scenario execution exceeded 300 second timeout",
+  "messages_sent": 556,
+  "messages_received": 554,
+  "messages_completed": 554,
+  "memory_statistics": {
+    "initial_memory_mb": 216.87109375,
+    "final_memory_mb": 216.87109375,
+    "peak_memory_mb": 216.87109375,
+    "min_memory_mb": 216.87109375,
+    "avg_memory_mb": 216.87109375,
+    "memory_change_mb": 0.0,
+    "measurements_count": 300
+  }
+}

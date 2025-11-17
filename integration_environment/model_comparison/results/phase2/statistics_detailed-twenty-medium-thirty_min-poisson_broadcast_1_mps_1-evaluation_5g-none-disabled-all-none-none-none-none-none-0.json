@@ -1,0 +1,21 @@
+{
+  "scenario_id": "detailed-twenty-medium-thirty_min-poisson_broadcast_1_mps_1-evaluation_5g-none-disabled-all-none-none-none-none-none-0",
+  "execution_start_time": "2025-11-12 16:17:52.302469",
+  "execution_end_time": "2025-11-12 16:22:52.304057",
+  "execution_run_time_s": 300.0015881061554,
+  "timeout_occurred": true,
+  "timeout_limit_s": 300,
+  "timeout_error_message": "Scenario execution exceeded 300 second timeout",
+  "messages_sent": 3800,
+  "messages_received": 3781,
+  "messages_completed": 3781,
+  "memory_statistics": {
+    "initial_memory_mb": 194.14453125,
+    "final_memory_mb": 194.29296875,
+    "peak_memory_mb": 194.29296875,
+    "min_memory_mb": 194.14453125,
+    "avg_memory_mb": 194.1903444840604,
+    "memory_change_mb": 0.1484375,
+    "measurements_count": 298
+  }
+}

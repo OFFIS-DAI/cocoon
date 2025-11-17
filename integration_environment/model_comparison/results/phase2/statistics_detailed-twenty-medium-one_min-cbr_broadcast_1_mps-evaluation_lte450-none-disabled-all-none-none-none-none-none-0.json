@@ -1,0 +1,21 @@
+{
+  "scenario_id": "detailed-twenty-medium-one_min-cbr_broadcast_1_mps-evaluation_lte450-none-disabled-all-none-none-none-none-none-0",
+  "execution_start_time": "2025-11-12 21:05:30.473046",
+  "execution_end_time": "2025-11-12 21:10:30.472112",
+  "execution_run_time_s": 299.9990658760071,
+  "timeout_occurred": true,
+  "timeout_limit_s": 300,
+  "timeout_error_message": "Scenario execution exceeded 300 second timeout",
+  "messages_sent": 741,
+  "messages_received": 728,
+  "messages_completed": 728,
+  "memory_statistics": {
+    "initial_memory_mb": 197.9921875,
+    "final_memory_mb": 198.0234375,
+    "peak_memory_mb": 198.0234375,
+    "min_memory_mb": 197.9921875,
+    "avg_memory_mb": 198.02020833333333,
+    "memory_change_mb": 0.03125,
+    "measurements_count": 300
+  }
+}
