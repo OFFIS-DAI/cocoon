@@ -203,7 +203,8 @@ def get_scenario_configurations_for_phase_2():
                                                                learning_rate_weighting=LearningRateWeighting.center,
                                                                butterfly_threshold_value=ButterflyThresholdValue.center,
                                                                substitution_priority=SubstitutionPriority.none,
-                                                               test_train_split=tts)
+                                                               test_train_split=tts,
+                                                               substitution=Substitution.enabled)
                                 if config.scenario_id not in existing_configuration_ids:
                                     scenario_configurations.append(config)
                         else:
