@@ -199,50 +199,79 @@ def summarize_step2(file_path: str) -> None:
         .unique()
     )
 
-    # --- 6) PLOTS FOR FILTERED MODEL TYPES ----------------------------------
-    for metric in metrics_present:
-        print(f"Plotting metric: {metric}")
+    # --- 6) PLOTS FOR FILTERED MODEL TYPES: all metrics as rows in one figure ---
 
-        # ----- A) Influence of number of devices -----
-        if not df_devices.empty:
-            g = sns.relplot(
-                data=df_devices,
-                x="num_devices_num",
-                y=metric,
-                hue="traffic_model",
-                hue_order=hue_order,
-                col="model_type_norm",
-                col_order=model_type_order,
-                kind="line",
-                marker="o",
-                facet_kws={"sharey": False, "sharex": True},
-                errorbar=("ci", 95),
-                height=3,
-                aspect=1.1,
-            )
-            g.set_axis_labels("Number of devices", metric_labels.get(metric, metric))
-            g.set_titles("{col_name}")
+    if not df_devices.empty:
+        # Long format over metrics
+        metric_order = [m for m in metrics if m in metrics_present]
+        df_long_devices = df_devices.melt(
+            id_vars=["model_type_norm", "num_devices_num", "traffic_model"],
+            value_vars=metrics_present,
+            var_name="metric",
+            value_name="value",
+        ).dropna(subset=["value"])
 
-            # Build figure-level legend UNDER the plots
-            handles, labels = g.axes.flat[0].get_legend_handles_labels()
-            if g._legend is not None:
-                g._legend.remove()
-            g.fig.legend(
-                handles,
-                labels,
-                loc="lower center",
-                bbox_to_anchor=(0.5, -0.02),
-                ncol=min(len(hue_order), 4),
-                frameon=False,
-                title="Traffic model",
-            )
+        print("Plotting num_devices influence for all metrics in one figure...")
 
-            plt.tight_layout(rect=[0, 0.22, 1, 1])  # leave space at bottom
-            out_path = outdir / f"step2_compare_modeltypes_numdevices_{metric}.pdf"
-            g.savefig(out_path, dpi=200, bbox_inches="tight")
-            plt.close(g.fig)
-        else:
-            print(f"[INFO] No data with valid num_devices_num for metric {metric}.")
+        g = sns.relplot(
+            data=df_long_devices,
+            x="num_devices_num",
+            y="value",
+            hue="traffic_model",
+            hue_order=hue_order,
+            col="model_type_norm",
+            col_order=model_type_order,
+            row="metric",  # metrics stacked as rows
+            row_order=metric_order,
+            kind="line",
+            marker="o",
+            facet_kws={"sharex": True, "sharey": False},
+            errorbar=("ci", 95),
+            height=2.2,
+            aspect=1.4,
+        )
+
+        # Set axis labels (metric label on y-axis only)
+        for row_idx, metric in enumerate(metric_order):
+            for ax in g.axes[row_idx]:
+                ax.set_ylabel(metric_labels.get(metric, metric))
+
+        g.set_axis_labels("Number of devices", None)
+
+        # Column titles = model type only
+        g.set_titles(col_template="{col_name}", row_template="")
+
+        # Remove any leftover row titles
+        for row in g.axes:
+            for ax in row:
+                if 'channel' in ax.get_title():
+                    ax.set_title('Channel Model')
+                if 'meta' in ax.get_title():
+                    ax.set_title('Meta-Model')
+                if 'static' in ax.get_title():
+                    ax.set_title('Static Graph Model')
+                # ax.set_title(ax.get_title().replace("metric = ", ""), loc="center")
+
+        # Figure-level legend under all subplots
+        handles, labels = g.axes[0, 0].get_legend_handles_labels()
+        if g._legend is not None:
+            g._legend.remove()
+        g.fig.legend(
+            handles,
+            labels,
+            loc="lower center",
+            bbox_to_anchor=(0.5, 0.0),
+            ncol=min(len(hue_order), 4),
+            frameon=False,
+            title="Traffic model",
+        )
+
+        plt.tight_layout(rect=[0, 0.15, 1, 1])  # leave space at bottom for legend
+        out_path = outdir / "step2_compare_modeltypes_numdevices_allmetrics.pdf"
+        g.savefig(out_path, dpi=200, bbox_inches="tight")
+        plt.close(g.fig)
+    else:
+        print("[INFO] No data with valid num_devices_num for any metric.")
 
 
 if __name__ == "__main__":
