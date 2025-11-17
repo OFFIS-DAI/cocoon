@@ -1,0 +1,21 @@
+{
+  "scenario_id": "detailed-ten-medium-thirty_min-central_dsb_5mpm_30s_75-evaluation_lte450-none-disabled-all-none-none-none-none-none-0",
+  "execution_start_time": "2025-11-12 21:00:11.519613",
+  "execution_end_time": "2025-11-12 21:05:11.523511",
+  "execution_run_time_s": 300.00389766693115,
+  "timeout_occurred": true,
+  "timeout_limit_s": 300,
+  "timeout_error_message": "Scenario execution exceeded 300 second timeout",
+  "messages_sent": 252,
+  "messages_received": 250,
+  "messages_completed": 250,
+  "memory_statistics": {
+    "initial_memory_mb": 197.9921875,
+    "final_memory_mb": 197.9921875,
+    "peak_memory_mb": 197.9921875,
+    "min_memory_mb": 197.9921875,
+    "avg_memory_mb": 197.9921875,
+    "memory_change_mb": 0.0,
+    "measurements_count": 300
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "scenario_id": "meta_model-five-medium-one_min-poisson_broadcast_1_mps_1-evaluation_5g-three-disabled-all-traffic_load_split-hundred-center-center-none-0",
+  "execution_start_time": "2025-11-13 12:26:36.772607",
+  "execution_end_time": "2025-11-13 12:27:37.328808",
+  "execution_run_time_s": 60.55620098114014,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 217.48046875,
+    "final_memory_mb": 217.48046875,
+    "peak_memory_mb": 217.48046875,
+    "min_memory_mb": 217.48046875,
+    "avg_memory_mb": 217.48046875,
+    "memory_change_mb": 0.0,
+    "measurements_count": 61
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": false
+  }
+}

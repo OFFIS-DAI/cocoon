@@ -1,0 +1,21 @@
+{
+  "scenario_id": "channel-twenty-medium-thirty_min-poisson_broadcast_1_mps_1-evaluation_ethernet-none-disabled-all-none-none-none-none-none-0",
+  "execution_start_time": "2025-11-15 01:50:05.126673",
+  "execution_end_time": "2025-11-15 01:52:12.730266",
+  "execution_run_time_s": 127.60359334945679,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 214.29296875,
+    "final_memory_mb": 214.29296875,
+    "peak_memory_mb": 214.29296875,
+    "min_memory_mb": 214.29296875,
+    "avg_memory_mb": 214.29296875,
+    "memory_change_mb": 0.0,
+    "measurements_count": 128
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": false
+  }
+}

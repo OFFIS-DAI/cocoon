@@ -1,0 +1,10 @@
+msg_id,sender,receiver,size_B,time_send_ms,time_receive_ms,delay_ms
+node0_0,node0,node1,100,8658,8677,19
+node0_1,node0,node2,100,8658,8677,19
+node0_2,node0,node3,100,8658,8677,19
+node0_3,node0,node4,100,8658,8677,19
+node0_4,node0,node5,100,8658,8677,19
+node0_5,node0,node6,100,8658,8677,19
+node0_6,node0,node7,100,8658,8677,19
+node0_7,node0,node8,100,8658,8677,19
+node0_8,node0,node9,100,8658,8677,19

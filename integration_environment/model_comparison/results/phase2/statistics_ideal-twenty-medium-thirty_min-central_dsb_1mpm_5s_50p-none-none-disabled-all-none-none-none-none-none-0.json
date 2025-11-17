@@ -1,0 +1,21 @@
+{
+  "scenario_id": "ideal-twenty-medium-thirty_min-central_dsb_1mpm_5s_50p-none-none-disabled-all-none-none-none-none-none-0",
+  "execution_start_time": "2025-11-12 22:43:34.372349",
+  "execution_end_time": "2025-11-12 22:43:35.617499",
+  "execution_run_time_s": 1.245149850845337,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 221.6875,
+    "final_memory_mb": 221.6875,
+    "peak_memory_mb": 221.6875,
+    "min_memory_mb": 221.6875,
+    "avg_memory_mb": 221.6875,
+    "memory_change_mb": 0.0,
+    "measurements_count": 2
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": false
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "scenario_id": "detailed-ten-medium-one_min-cbr_broadcast_1_mps-evaluation_ethernet-none-disabled-all-none-none-none-none-none-0",
+  "execution_start_time": "2025-11-12 12:59:22.818094",
+  "execution_end_time": "2025-11-12 13:03:52.448890",
+  "execution_run_time_s": 269.63079619407654,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 187.6171875,
+    "final_memory_mb": 188.125,
+    "peak_memory_mb": 188.125,
+    "min_memory_mb": 187.6171875,
+    "avg_memory_mb": 187.7184207375479,
+    "memory_change_mb": 0.5078125,
+    "measurements_count": 261
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": false
+  }
+}

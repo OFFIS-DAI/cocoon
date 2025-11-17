@@ -1,0 +1,21 @@
+{
+  "scenario_id": "static_graph-ten-medium-thirty_min-poisson_broadcast_1_mps_1-evaluation_lte-none-disabled-all-none-none-none-none-none-0",
+  "execution_start_time": "2025-11-16 11:28:01.184394",
+  "execution_end_time": "2025-11-16 11:30:05.500661",
+  "execution_run_time_s": 124.3162670135498,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 250.71484375,
+    "final_memory_mb": 250.71484375,
+    "peak_memory_mb": 250.71484375,
+    "min_memory_mb": 250.71484375,
+    "avg_memory_mb": 250.71484375,
+    "memory_change_mb": 0.0,
+    "measurements_count": 125
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": false
+  }
+}

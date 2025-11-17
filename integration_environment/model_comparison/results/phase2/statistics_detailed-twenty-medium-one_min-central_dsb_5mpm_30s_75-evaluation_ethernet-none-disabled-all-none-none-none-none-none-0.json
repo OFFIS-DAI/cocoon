@@ -1,0 +1,21 @@
+{
+  "scenario_id": "detailed-twenty-medium-one_min-central_dsb_5mpm_30s_75-evaluation_ethernet-none-disabled-all-none-none-none-none-none-0",
+  "execution_start_time": "2025-11-12 14:13:38.640221",
+  "execution_end_time": "2025-11-12 14:14:44.849431",
+  "execution_run_time_s": 66.20921015739441,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 194.359375,
+    "final_memory_mb": 194.359375,
+    "peak_memory_mb": 194.359375,
+    "min_memory_mb": 194.359375,
+    "avg_memory_mb": 194.359375,
+    "memory_change_mb": 0.0,
+    "measurements_count": 48
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": false
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "scenario_id": "detailed-ten-medium-thirty_min-central_dsb_5mpm_30s_75-evaluation_5g-none-disabled-all-none-none-none-none-none-0",
+  "execution_start_time": "2025-11-12 15:59:44.868249",
+  "execution_end_time": "2025-11-12 16:04:44.865514",
+  "execution_run_time_s": 299.9972643852234,
+  "timeout_occurred": true,
+  "timeout_limit_s": 300,
+  "timeout_error_message": "Scenario execution exceeded 300 second timeout",
+  "messages_sent": 841,
+  "messages_received": 834,
+  "messages_completed": 834,
+  "memory_statistics": {
+    "initial_memory_mb": 175.875,
+    "final_memory_mb": 177.1015625,
+    "peak_memory_mb": 177.1015625,
+    "min_memory_mb": 175.875,
+    "avg_memory_mb": 176.55490885416665,
+    "memory_change_mb": 1.2265625,
+    "measurements_count": 300
+  }
+}

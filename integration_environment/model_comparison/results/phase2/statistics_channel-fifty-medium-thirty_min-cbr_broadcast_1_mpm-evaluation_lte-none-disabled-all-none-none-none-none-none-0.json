@@ -1,0 +1,21 @@
+{
+  "scenario_id": "channel-fifty-medium-thirty_min-cbr_broadcast_1_mpm-evaluation_lte-none-disabled-all-none-none-none-none-none-0",
+  "execution_start_time": "2025-11-15 02:59:34.588701",
+  "execution_end_time": "2025-11-15 02:59:36.395445",
+  "execution_run_time_s": 1.8067443370819092,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 260.484375,
+    "final_memory_mb": 260.484375,
+    "peak_memory_mb": 260.484375,
+    "min_memory_mb": 260.484375,
+    "avg_memory_mb": 260.484375,
+    "memory_change_mb": 0.0,
+    "measurements_count": 2
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": false
+  }
+}

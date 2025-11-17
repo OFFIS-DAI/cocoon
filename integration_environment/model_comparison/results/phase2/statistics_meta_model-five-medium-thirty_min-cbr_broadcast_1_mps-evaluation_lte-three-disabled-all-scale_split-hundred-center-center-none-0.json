@@ -1,0 +1,21 @@
+{
+  "scenario_id": "meta_model-five-medium-thirty_min-cbr_broadcast_1_mps-evaluation_lte-three-disabled-all-scale_split-hundred-center-center-none-0",
+  "execution_start_time": "2025-11-13 23:11:41.884273",
+  "execution_end_time": "2025-11-13 23:16:41.829790",
+  "execution_run_time_s": 299.94551706314087,
+  "timeout_occurred": true,
+  "timeout_limit_s": 300,
+  "timeout_error_message": "Scenario execution exceeded 300 second timeout",
+  "messages_sent": 592,
+  "messages_received": 591,
+  "messages_completed": 591,
+  "memory_statistics": {
+    "initial_memory_mb": 216.87109375,
+    "final_memory_mb": 216.87109375,
+    "peak_memory_mb": 216.87109375,
+    "min_memory_mb": 216.87109375,
+    "avg_memory_mb": 216.87109375,
+    "memory_change_mb": 0.0,
+    "measurements_count": 300
+  }
+}

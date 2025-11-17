@@ -1,0 +1,21 @@
+{
+  "scenario_id": "channel-ten-medium-thirty_min-cbr_broadcast_1_mps-evaluation_5g-none-disabled-all-none-none-none-none-none-0",
+  "execution_start_time": "2025-11-15 02:14:34.527003",
+  "execution_end_time": "2025-11-15 02:14:41.024087",
+  "execution_run_time_s": 6.497083902359009,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 229.96875,
+    "final_memory_mb": 228.96875,
+    "peak_memory_mb": 229.96875,
+    "min_memory_mb": 228.96875,
+    "avg_memory_mb": 229.39732142857142,
+    "memory_change_mb": -1.0,
+    "measurements_count": 7
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": false
+  }
+}

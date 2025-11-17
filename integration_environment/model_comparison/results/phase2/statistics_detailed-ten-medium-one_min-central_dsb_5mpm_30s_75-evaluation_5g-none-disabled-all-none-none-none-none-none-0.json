@@ -1,0 +1,21 @@
+{
+  "scenario_id": "detailed-ten-medium-one_min-central_dsb_5mpm_30s_75-evaluation_5g-none-disabled-all-none-none-none-none-none-0",
+  "execution_start_time": "2025-11-12 15:59:14.615827",
+  "execution_end_time": "2025-11-12 15:59:36.704588",
+  "execution_run_time_s": 22.08876132965088,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 174.15625,
+    "final_memory_mb": 174.35546875,
+    "peak_memory_mb": 174.375,
+    "min_memory_mb": 174.15625,
+    "avg_memory_mb": 174.30095108695653,
+    "memory_change_mb": 0.19921875,
+    "measurements_count": 23
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": false
+  }
+}

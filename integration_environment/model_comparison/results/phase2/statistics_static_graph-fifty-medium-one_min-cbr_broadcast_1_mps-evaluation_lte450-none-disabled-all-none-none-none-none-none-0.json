@@ -1,0 +1,21 @@
+{
+  "scenario_id": "static_graph-fifty-medium-one_min-cbr_broadcast_1_mps-evaluation_lte450-none-disabled-all-none-none-none-none-none-0",
+  "execution_start_time": "2025-11-16 12:04:08.792530",
+  "execution_end_time": "2025-11-16 12:04:11.792085",
+  "execution_run_time_s": 2.9995548725128174,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 272.93359375,
+    "final_memory_mb": 272.93359375,
+    "peak_memory_mb": 272.93359375,
+    "min_memory_mb": 272.93359375,
+    "avg_memory_mb": 272.93359375,
+    "memory_change_mb": 0.0,
+    "measurements_count": 3
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": false
+  }
+}

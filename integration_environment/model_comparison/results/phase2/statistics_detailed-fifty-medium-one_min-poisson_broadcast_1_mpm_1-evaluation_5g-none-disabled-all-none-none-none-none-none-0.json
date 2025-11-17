@@ -1,0 +1,21 @@
+{
+  "scenario_id": "detailed-fifty-medium-one_min-poisson_broadcast_1_mpm_1-evaluation_5g-none-disabled-all-none-none-none-none-none-0",
+  "execution_start_time": "2025-11-12 16:59:12.139598",
+  "execution_end_time": "2025-11-12 16:59:17.868434",
+  "execution_run_time_s": 5.7288360595703125,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 197.16796875,
+    "final_memory_mb": 197.16796875,
+    "peak_memory_mb": 197.16796875,
+    "min_memory_mb": 197.16796875,
+    "avg_memory_mb": 197.16796875,
+    "memory_change_mb": 0.0,
+    "measurements_count": 6
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": false
+  }
+}

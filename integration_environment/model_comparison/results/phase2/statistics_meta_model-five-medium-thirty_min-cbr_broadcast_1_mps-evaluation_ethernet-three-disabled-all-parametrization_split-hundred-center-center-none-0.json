@@ -1,0 +1,21 @@
+{
+  "scenario_id": "meta_model-five-medium-thirty_min-cbr_broadcast_1_mps-evaluation_ethernet-three-disabled-all-parametrization_split-hundred-center-center-none-0",
+  "execution_start_time": "2025-11-12 23:09:59.515136",
+  "execution_end_time": "2025-11-12 23:14:59.468396",
+  "execution_run_time_s": 299.95325994491577,
+  "timeout_occurred": true,
+  "timeout_limit_s": 300,
+  "timeout_error_message": "Scenario execution exceeded 300 second timeout",
+  "messages_sent": 528,
+  "messages_received": 527,
+  "messages_completed": 527,
+  "memory_statistics": {
+    "initial_memory_mb": 232.87890625,
+    "final_memory_mb": 232.87890625,
+    "peak_memory_mb": 232.87890625,
+    "min_memory_mb": 232.87890625,
+    "avg_memory_mb": 232.87890625,
+    "memory_change_mb": 0.0,
+    "measurements_count": 300
+  }
+}

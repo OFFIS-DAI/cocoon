@@ -1,0 +1,21 @@
+{
+  "scenario_id": "meta_model-ten-medium-one_min-cbr_broadcast_1_mps-evaluation_lte450-three-disabled-all-traffic_model_split-hundred-center-center-none-0",
+  "execution_start_time": "2025-11-14 15:06:24.620726",
+  "execution_end_time": "2025-11-14 15:10:14.494223",
+  "execution_run_time_s": 229.87349677085876,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 208.1796875,
+    "final_memory_mb": 208.1796875,
+    "peak_memory_mb": 208.1796875,
+    "min_memory_mb": 208.1796875,
+    "avg_memory_mb": 208.1796875,
+    "memory_change_mb": 0.0,
+    "measurements_count": 230
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": false
+  }
+}

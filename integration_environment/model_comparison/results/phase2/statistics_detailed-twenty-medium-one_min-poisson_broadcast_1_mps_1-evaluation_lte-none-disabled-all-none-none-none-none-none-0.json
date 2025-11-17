@@ -1,0 +1,21 @@
+{
+  "scenario_id": "detailed-twenty-medium-one_min-poisson_broadcast_1_mps_1-evaluation_lte-none-disabled-all-none-none-none-none-none-0",
+  "execution_start_time": "2025-11-12 18:42:03.256959",
+  "execution_end_time": "2025-11-12 18:47:03.250963",
+  "execution_run_time_s": 299.99400448799133,
+  "timeout_occurred": true,
+  "timeout_limit_s": 300,
+  "timeout_error_message": "Scenario execution exceeded 300 second timeout",
+  "messages_sent": 741,
+  "messages_received": 738,
+  "messages_completed": 738,
+  "memory_statistics": {
+    "initial_memory_mb": 197.1796875,
+    "final_memory_mb": 197.1796875,
+    "peak_memory_mb": 197.1796875,
+    "min_memory_mb": 197.1796875,
+    "avg_memory_mb": 197.1796875,
+    "memory_change_mb": 0.0,
+    "measurements_count": 300
+  }
+}
