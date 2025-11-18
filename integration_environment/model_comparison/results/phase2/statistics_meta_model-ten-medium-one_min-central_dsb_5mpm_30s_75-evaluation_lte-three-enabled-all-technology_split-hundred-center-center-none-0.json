@@ -1,0 +1,27 @@
+{
+  "scenario_id": "meta_model-ten-medium-one_min-central_dsb_5mpm_30s_75-evaluation_lte-three-enabled-all-technology_split-hundred-center-center-none-0",
+  "execution_start_time": "2025-11-17 19:23:05.413123",
+  "execution_end_time": "2025-11-17 19:23:19.924525",
+  "execution_run_time_s": 14.511402130126953,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 297.37890625,
+    "final_memory_mb": 297.34765625,
+    "peak_memory_mb": 297.37890625,
+    "min_memory_mb": 297.34765625,
+    "avg_memory_mb": 297.37667410714283,
+    "memory_change_mb": -0.03125,
+    "measurements_count": 14
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": true,
+    "substitution_time_s": 1763403798.2092867,
+    "substitution_message_index": 102,
+    "confidence_score": 0.5215977349383448,
+    "total_messages_processed": 27,
+    "cluster_prediction_errors_count": 26,
+    "online_prediction_errors_count": 0
+  }
+}

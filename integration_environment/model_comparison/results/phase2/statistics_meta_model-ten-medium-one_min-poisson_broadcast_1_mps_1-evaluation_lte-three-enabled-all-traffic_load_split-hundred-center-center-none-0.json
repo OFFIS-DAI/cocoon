@@ -1,0 +1,27 @@
+{
+  "scenario_id": "meta_model-ten-medium-one_min-poisson_broadcast_1_mps_1-evaluation_lte-three-enabled-all-traffic_load_split-hundred-center-center-none-0",
+  "execution_start_time": "2025-11-17 18:46:49.867149",
+  "execution_end_time": "2025-11-17 18:47:03.972707",
+  "execution_run_time_s": 14.105558156967163,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 297.34765625,
+    "final_memory_mb": 297.34765625,
+    "peak_memory_mb": 297.34765625,
+    "min_memory_mb": 297.34765625,
+    "avg_memory_mb": 297.34765625,
+    "memory_change_mb": 0.0,
+    "measurements_count": 13
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": true,
+    "substitution_time_s": 1763401620.5686922,
+    "substitution_message_index": 101,
+    "confidence_score": 0.5210882360373669,
+    "total_messages_processed": 27,
+    "cluster_prediction_errors_count": 29,
+    "online_prediction_errors_count": 0
+  }
+}

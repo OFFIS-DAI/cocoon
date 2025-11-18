@@ -1,0 +1,21 @@
+{
+  "scenario_id": "meta_model-five-medium-one_min-cbr_broadcast_1_mpm-evaluation_ethernet-three-enabled-all-traffic_model_split-hundred-center-center-none-0",
+  "execution_start_time": "2025-11-17 08:17:24.707579",
+  "execution_end_time": "2025-11-17 08:17:25.733394",
+  "execution_run_time_s": 1.0258147716522217,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 234.3046875,
+    "final_memory_mb": 234.3046875,
+    "peak_memory_mb": 234.3046875,
+    "min_memory_mb": 234.3046875,
+    "avg_memory_mb": 234.3046875,
+    "memory_change_mb": 0.0,
+    "measurements_count": 2
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": false
+  }
+}

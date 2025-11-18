@@ -1,0 +1,27 @@
+{
+  "scenario_id": "meta_model-ten-medium-thirty_min-cbr_broadcast_1_mps-evaluation_ethernet-three-enabled-all-traffic_load_split-hundred-center-center-none-0",
+  "execution_start_time": "2025-11-17 08:59:06.120674",
+  "execution_end_time": "2025-11-17 09:03:48.531626",
+  "execution_run_time_s": 282.41095209121704,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 281.3984375,
+    "final_memory_mb": 286.83203125,
+    "peak_memory_mb": 286.83203125,
+    "min_memory_mb": 281.3984375,
+    "avg_memory_mb": 286.16765202702703,
+    "memory_change_mb": 5.43359375,
+    "measurements_count": 259
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": true,
+    "substitution_time_s": 1763366357.875673,
+    "substitution_message_index": 101,
+    "confidence_score": 0.5214050142406589,
+    "total_messages_processed": 27,
+    "cluster_prediction_errors_count": 25,
+    "online_prediction_errors_count": 0
+  }
+}

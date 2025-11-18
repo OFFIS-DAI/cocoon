@@ -1,0 +1,27 @@
+{
+  "scenario_id": "meta_model-ten-medium-one_min-poisson_broadcast_1_mps_1-evaluation_lte450-three-enabled-all-scale_split-hundred-center-center-none-0",
+  "execution_start_time": "2025-11-17 23:26:44.632883",
+  "execution_end_time": "2025-11-17 23:26:57.575759",
+  "execution_run_time_s": 12.942875385284424,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 299.6328125,
+    "final_memory_mb": 299.6328125,
+    "peak_memory_mb": 299.6328125,
+    "min_memory_mb": 299.6328125,
+    "avg_memory_mb": 299.6328125,
+    "memory_change_mb": 0.0,
+    "measurements_count": 12
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": true,
+    "substitution_time_s": 1763418414.237285,
+    "substitution_message_index": 100,
+    "confidence_score": 0.5155228227362316,
+    "total_messages_processed": 27,
+    "cluster_prediction_errors_count": 30,
+    "online_prediction_errors_count": 0
+  }
+}

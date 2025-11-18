@@ -1,0 +1,27 @@
+{
+  "scenario_id": "meta_model-ten-medium-one_min-central_dsb_5mpm_30s_75-evaluation_ethernet-three-enabled-all-parametrization_split-hundred-center-center-none-0",
+  "execution_start_time": "2025-11-17 09:56:44.539115",
+  "execution_end_time": "2025-11-17 09:56:58.055297",
+  "execution_run_time_s": 13.51618218421936,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 287.39453125,
+    "final_memory_mb": 287.39453125,
+    "peak_memory_mb": 287.39453125,
+    "min_memory_mb": 287.39453125,
+    "avg_memory_mb": 287.39453125,
+    "memory_change_mb": 0.0,
+    "measurements_count": 13
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": true,
+    "substitution_time_s": 1763369816.4148061,
+    "substitution_message_index": 101,
+    "confidence_score": 0.520877182081485,
+    "total_messages_processed": 27,
+    "cluster_prediction_errors_count": 25,
+    "online_prediction_errors_count": 0
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "scenario_id": "meta_model-twenty-medium-thirty_min-poisson_broadcast_1_mps_1-evaluation_ethernet-three-enabled-all-parametrization_split-hundred-center-center-none-0",
+  "execution_start_time": "2025-11-17 10:33:54.749319",
+  "execution_end_time": "2025-11-17 10:38:54.754543",
+  "execution_run_time_s": 300.0052242279053,
+  "timeout_occurred": true,
+  "timeout_limit_s": 300,
+  "timeout_error_message": "Scenario execution exceeded 300 second timeout",
+  "messages_sent": 15694,
+  "messages_received": 15676,
+  "messages_completed": 15676,
+  "memory_statistics": {
+    "initial_memory_mb": 301.4765625,
+    "final_memory_mb": 301.4765625,
+    "peak_memory_mb": 301.4765625,
+    "min_memory_mb": 301.4765625,
+    "avg_memory_mb": 301.4765625,
+    "memory_change_mb": 0.0,
+    "measurements_count": 270
+  }
+}

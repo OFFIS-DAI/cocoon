@@ -1,0 +1,27 @@
+{
+  "scenario_id": "meta_model-fifty-medium-one_min-cbr_broadcast_1_mps-evaluation_lte450-three-enabled-all-technology_split-hundred-center-center-none-0",
+  "execution_start_time": "2025-11-18 01:17:36.842582",
+  "execution_end_time": "2025-11-18 01:17:54.905237",
+  "execution_run_time_s": 18.062655448913574,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 293.02734375,
+    "final_memory_mb": 292.99609375,
+    "peak_memory_mb": 293.02734375,
+    "min_memory_mb": 292.99609375,
+    "avg_memory_mb": 293.00344669117646,
+    "memory_change_mb": -0.03125,
+    "measurements_count": 17
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": true,
+    "substitution_time_s": 1763425060.131789,
+    "substitution_message_index": 143,
+    "confidence_score": 0.5061063008899332,
+    "total_messages_processed": 49,
+    "cluster_prediction_errors_count": 3,
+    "online_prediction_errors_count": 0
+  }
+}

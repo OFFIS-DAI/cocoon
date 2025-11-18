@@ -1,0 +1,27 @@
+{
+  "scenario_id": "meta_model-twenty-medium-thirty_min-cbr_broadcast_1_mpm-evaluation_5g-three-enabled-all-technology_split-hundred-center-center-none-0",
+  "execution_start_time": "2025-11-17 15:08:01.850656",
+  "execution_end_time": "2025-11-17 15:08:41.256416",
+  "execution_run_time_s": 39.405760288238525,
+  "initialization_start_time": "1970-01-01 01:00:00",
+  "initialization_end_time": "1970-01-01 01:00:00",
+  "initialization_runtime_s": 0,
+  "memory_statistics": {
+    "initial_memory_mb": 301.21484375,
+    "final_memory_mb": 301.18359375,
+    "peak_memory_mb": 301.21484375,
+    "min_memory_mb": 301.18359375,
+    "avg_memory_mb": 301.21324118589746,
+    "memory_change_mb": -0.03125,
+    "measurements_count": 39
+  },
+  "meta_model_substitution": {
+    "substitution_occurred": true,
+    "substitution_time_s": 1763388518.104162,
+    "substitution_message_index": 107,
+    "confidence_score": 0.501003519764381,
+    "total_messages_processed": 95,
+    "cluster_prediction_errors_count": 76,
+    "online_prediction_errors_count": 0
+  }
+}
