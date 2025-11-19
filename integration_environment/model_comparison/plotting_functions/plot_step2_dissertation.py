@@ -432,6 +432,212 @@ def plot_metric_distributions_all_models(
     plt.close(fig)
     print(f"Saved distribution plot for all models to: {out_path}")
 
+def plot_heatmap_scenarios_all_models(
+    df: pd.DataFrame,
+    metrics_present: List[str],
+    outdir: Path,
+) -> None:
+    """
+    Heatmaps: alle Metriken für alle Modelle, gruppiert nach
+    Network Technology, Traffic, Number Devices und Duration.
+
+    - Zeilen: konkrete Szenario-Kombination (net | traffic | devs | duration)
+    - Spalten: Modelle
+    - Panel: Metrik
+
+    Meta-Model-Szenarien mit Substitution werden im Label mit '•' markiert.
+    """
+    df_hm = df.copy()
+    df_hm = df_hm[~df_hm["model_type"].isin(EXCLUDE_MODELS)]
+
+    df_hm = df_hm[df_hm['scenario_duration'] == 'ScenarioDuration.one_min'][df_hm['nrmse_mean'] < 50]
+
+    if df_hm.empty:
+        print("[INFO] No data for heatmap (all models, all factors).")
+        return
+
+    # Network Technology (bereinigt)
+    df_hm["network_model"] = (
+        df_hm["network_type"]
+        .astype(str)
+        .str.replace("NetworkModelType.", "", regex=False)
+        .str.replace("evaluation_", "", regex=False)
+        .str.strip()
+    )
+
+    # Traffic
+    if "traffic_model" not in df_hm.columns:
+        df_hm["traffic_model"] = (
+            df_hm["traffic_configuration"]
+            .astype(str)
+            .str.replace("TrafficConfig.", "", regex=False)
+            .str.replace("evaluation_", "", regex=False)
+            .str.strip()
+        )
+
+    # Number of devices (numerisch)
+    if "num_devices_num" not in df_hm.columns:
+        dev_map = {"five": 5, "ten": 10, "twenty": 20, "fifty": 50}
+        df_hm["num_devices_num"] = (
+            df_hm["num_devices"]
+            .astype(str)
+            .str.replace("NumDevices.", "", regex=False)
+            .map(dev_map)
+        )
+
+    # Duration-Label
+    df_hm["duration_label"] = (
+        df_hm["scenario_duration"]
+        .astype(str)
+        .str.replace("ScenarioDuration.", "", regex=False)
+    )
+    duration_map = {
+        "one_min": "1 min",
+        "five_min": "5 min",
+        "ten_min": "10 min",
+        "thirty_min": "30 min",
+    }
+    df_hm["duration_label"] = (
+        df_hm["duration_label"].map(duration_map).fillna(df_hm["duration_label"])
+    )
+
+    # Nur vollständige Szenarien
+    df_hm = df_hm.dropna(
+        subset=["network_model", "traffic_model", "num_devices_num", "duration_label"]
+    )
+    if df_hm.empty:
+        print("[INFO] No complete scenarios for heatmap (all factors).")
+        return
+
+    metric_order = [m for m in METRICS if m in metrics_present]
+    if not metric_order:
+        print("[INFO] No metrics present for heatmap (all factors).")
+        return
+
+    # Szenario-Kombinationslabel (interne ID)
+    df_hm["scenario_label"] = (
+        df_hm["network_model"]
+        + " | "
+        + df_hm["traffic_model"]
+        + " | "
+        + df_hm["num_devices_num"].astype(int).astype(str)
+        + " dev | "
+        + df_hm["duration_label"]
+    )
+
+    # Sortierung und feste Reihenfolge
+    df_hm = df_hm.sort_values(
+        ["network_model", "traffic_model", "num_devices_num", "duration_label"]
+    )
+    scenario_order = df_hm["scenario_label"].drop_duplicates().tolist()
+
+    # Mapping: interne Label -> "01  5g | ..."
+    scenario_display_map = {
+        lab: f"{idx+1:02d}  {lab}" for idx, lab in enumerate(scenario_order)
+    }
+
+    # Meta-Model-Substitution pro Szenario
+    subst_by_scenario = None
+    if "substitution_occurred" in df_hm.columns:
+        df_meta = df_hm[df_hm["model_type"] == "meta_model"].copy()
+        if not df_meta.empty:
+            subst_by_scenario = (
+                df_meta.groupby("scenario_label")["substitution_occurred"]
+                .any()
+                .reindex(scenario_order)
+                .fillna(False)
+            )
+
+    # Plot-Layout
+    n_metrics = len(metric_order)
+    configure_plot_style(font_size=8)
+
+    fig, axes = plt.subplots(
+        nrows=n_metrics,
+        ncols=1,
+        figsize=(8, max(4, 0.20 * len(scenario_order) * n_metrics)),
+        sharex=False,
+    )
+    if n_metrics == 1:
+        axes = [axes]
+
+    for ax, metric in zip(axes, metric_order):
+        grouped = (
+            df_hm.groupby(
+                ["scenario_label", "model_type"],
+                as_index=False,
+            )[metric]
+            .mean()
+        )
+
+        grouped["scenario_label"] = pd.Categorical(
+            grouped["scenario_label"],
+            categories=scenario_order,
+            ordered=True,
+        )
+
+        pivot = grouped.pivot(
+            index="scenario_label",
+            columns="model_type",
+            values=metric,
+        )
+        pivot.columns = [MODEL_LABELS.get(c, c) for c in pivot.columns]
+
+        # Colormap je Metrik: C_{±σ} umgedreht
+        if metric == "mean_in_one_sigma_interval":
+            cmap = "viridis_r"
+        else:
+            cmap = "viridis"
+
+        # Heatmap mit deutlicheren Linien
+        sns.heatmap(
+            pivot,
+            ax=ax,
+            cmap=cmap,
+            cbar=True,
+            linewidths=0.5,
+            linecolor="black",
+            annot=True,
+            fmt=".2f",
+            annot_kws={"fontsize": 5},
+        )
+
+        ax.set_ylabel("")
+        ax.set_xlabel("")
+        ax.set_title(METRIC_LABELS.get(metric, metric), loc="left")
+        ax.tick_params(axis="y", labelsize=6, pad=2)
+
+        # Y-Tick-Positionen explizit setzen (eine pro Heatmap-Zeile)
+        n_rows = pivot.shape[0]
+        ax.set_yticks(np.arange(n_rows) + 0.5)
+
+        # Zu jedem internen Szenario-Label ein Anzeige-Label bauen
+        yticklabels = []
+        for internal in pivot.index:
+            disp = scenario_display_map.get(internal, internal)
+            if subst_by_scenario is not None and subst_by_scenario.get(internal, False):
+                disp = "• " + disp
+            yticklabels.append(disp)
+
+        ax.set_yticklabels(yticklabels, fontsize=6)
+
+    if subst_by_scenario is not None:
+        fig.text(
+            0.01,
+            0.01,
+            "•  scenario with substitution in Meta-Model",
+            fontsize=7,
+            ha="left",
+            va="bottom",
+        )
+
+    plt.tight_layout()
+    out_path = outdir / "step2_heatmap_metrics_by_scenario_and_model.pdf"
+    plt.savefig(out_path, dpi=200, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Saved scenario-factor heatmap (all models, all metrics) to: {out_path}")
+
+
 
 def plot_meta_model_by_test_train_split(
     df_overall: pd.DataFrame,
@@ -635,6 +841,7 @@ def summarize_step2(file_path: str) -> None:
     plot_num_devices_influence(
         df_devices, metrics_present, model_type_order, hue_order, outdir
     )
+    plot_heatmap_scenarios_all_models(df, metrics_present, outdir)
 
 
 if __name__ == "__main__":
