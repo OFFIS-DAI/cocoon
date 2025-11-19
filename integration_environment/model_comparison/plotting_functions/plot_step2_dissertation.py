@@ -187,6 +187,126 @@ def summarize_step2(file_path: str) -> None:
         plt.close()
         print(f"Saved overall accuracy plot to: {out_path}")
 
+    # --- 4b) Accuracy metrics by communication network model ---
+
+    if "network_type" in df.columns:
+        df_net = df.copy()
+
+        # Exclude ideal + detailed as above
+        if "model_type_norm" in df_net.columns and exclude_models:
+            df_net = df_net[~df_net["model_type_norm"].isin(exclude_models)]
+
+        # Map model types to labels
+        df_net["model_type_norm"] = df_net["model_type_norm"].map(model_labels)
+
+        # Clean network model naming
+        df_net["network_model"] = (
+            df_net["network_type"]
+            .astype(str)
+            .str.replace("NetworkModelType.", "", regex=False)
+            .str.replace("evaluation_", "", regex=False)
+            .str.strip()
+        )
+
+        # Long format over metrics
+        df_long_net = df_net.melt(
+            id_vars=["model_type_norm", "network_model"],
+            value_vars=metrics_present,
+            var_name="metric",
+            value_name="value",
+        ).dropna(subset=["value"])
+
+        if df_long_net.empty:
+            print("[INFO] No data for accuracy-by-network-model plot (df_long_net is empty).")
+        else:
+            metric_order = [m for m in metrics if m in metrics_present]
+            network_order = sorted(
+                df_long_net["network_model"]
+                .dropna()
+                .unique()
+            )
+
+            g_net = sns.FacetGrid(
+                df_long_net,
+                row="metric",
+                row_order=metric_order,
+                col="network_model",
+                col_order=network_order,
+                sharey=False,       # different scales per metric
+                height=2.2,
+                aspect=1.1,
+            )
+            # Fixed colors for model types
+            palette = {
+                "Channel": "#4C72B0",  # muted blue
+                "Meta-Model": "#DD8452",  # muted orange
+                "Static Graph": "#55A868",  # muted green
+            }
+            g_net.map_dataframe(
+                sns.pointplot,
+                x="model_type_norm",
+                y="value",
+                hue="model_type_norm",
+                dodge=0.4,
+                errorbar=("ci", 95),
+                join=False,
+                palette=palette
+            )
+
+            # Axis labelling
+            for row_idx, metric in enumerate(metric_order):
+                for ax in g_net.axes[row_idx]:
+                    ax.set_ylabel(metric_labels.get(metric, metric))
+                    ax.set_xlabel("")
+                    ax.tick_params(axis="x", rotation=60)
+
+            g_net.set_titles(col_template="{col_name}", row_template="")
+
+            # --- Adjust subplot titles ---
+            for ax in g_net.axes.flatten():
+                title = ax.get_title()
+
+                if "5g" in title:
+                    ax.set_title(f"5G")
+                elif "ethernet" in title:
+                    ax.set_title(f"Ethernet")
+                elif "lte450" in title:
+                    ax.set_title(f"LTE450")
+                elif "lte" in title:
+                    ax.set_title(f"LTE")
+
+            # Build manual legend from unique model types
+            from matplotlib.lines import Line2D
+            model_types_unique = df_long_net["model_type_norm"].unique()
+            legend_elements = [
+                Line2D(
+                    [0], [0],
+                    marker="o",
+                    linestyle="",
+                    markersize=6,
+                    color=palette[m],
+                    label=m
+                )
+                for m in model_types_unique
+            ]
+
+            g_net.fig.legend(
+                handles=legend_elements,
+                loc="lower center",
+                bbox_to_anchor=(0.5, 0.0),
+                ncol=min(len(model_types_unique), 3),
+                frameon=False,
+                title="Model type",
+            )
+
+            plt.tight_layout(rect=[0, 0.15, 1, 1])
+            out_path = outdir / "step2_accuracy_by_networkmodel_and_modeltype.pdf"
+            g_net.savefig(out_path, dpi=200, bbox_inches="tight")
+            plt.close(g_net.fig)
+            print(f"Saved accuracy-by-network-model plot to: {out_path}")
+    else:
+        print("[WARN] Column 'network_type' not found – skipping network-model accuracy plot.")
+
     # Recompute orders based on filtered data
     model_type_order = sorted(
         df_devices['model_type_norm']
