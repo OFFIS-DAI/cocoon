@@ -183,8 +183,8 @@ def get_scenario_configurations_for_phase_2():
                                        TrafficConfig.central_dsb_5mpm_30s_75
                                        ]:
                     for scenario_duration in [
-                        ScenarioDuration.one_min,
-                        ScenarioDuration.thirty_min
+                        ScenarioDuration.five_min,
+                        ScenarioDuration.ten_min
                     ]:
                         if model_type == ModelType.meta_model:
                             for tts in [TestTrainSplit.parametrization_split,

@@ -24,6 +24,7 @@ class PayloadSizeConfig(Enum):
 class ScenarioDuration(Enum):
     one_min = 60 * 1000
     five_min = 5 * 60 * 1000
+    ten_min = 10 * 60 * 1000
     thirty_min = 30 * 60 * 1000
     one_hour = 60 * 60 * 1000
     one_day = 60 * 60 * 1000 * 24
