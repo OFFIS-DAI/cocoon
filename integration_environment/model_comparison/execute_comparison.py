@@ -83,6 +83,9 @@ def get_training_df(scenario_configuration: ScenarioConfiguration):
         selected_traffic_configs_for_training = [c for c in existing_configurations
                                                  if (search_str not in c.traffic_configuration.name and
                                                      c.network_type == scenario_configuration.network_type)]
+    elif scenario_configuration.test_train_split == TestTrainSplit.none:
+        selected_traffic_configs_for_training = existing_configurations
+
     if len(selected_traffic_configs_for_training) > scenario_configuration.amount_of_scenarios_in_training_data.value:
         selected_traffic_configs_for_training = random.sample(selected_traffic_configs_for_training,
                                                               scenario_configuration.amount_of_scenarios_in_training_data.value)
@@ -98,6 +101,7 @@ def get_training_df(scenario_configuration: ScenarioConfiguration):
         return pd.DataFrame.empty
     complete_df = pd.concat(dataframes)
     complete_df.dropna(subset=['actual_delay_ms'], inplace=True)
+    complete_df = complete_df[complete_df['actual_delay_ms'] <= 3000]
     return complete_df
 
 
