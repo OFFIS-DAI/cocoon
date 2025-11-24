@@ -330,14 +330,7 @@ def plot_accuracy_by_network_model(
         for m in model_types_unique
     ]
 
-    g_net.fig.legend(
-        handles=legend_elements,
-        loc="lower center",
-        bbox_to_anchor=(0.5, 0.0),
-        ncol=min(len(model_types_unique), 3),
-        frameon=False,
-        title="Model type",
-    )
+
 
     plt.tight_layout(rect=[0, 0.15, 1, 1])
     out_path = outdir / "step2_accuracy_by_networkmodel_and_modeltype.pdf"
@@ -415,7 +408,7 @@ def plot_metric_distributions_all_models(
                 ax.set_ylabel("")
 
             if metric == "nrmse_mean":
-                ax.set_xlim([-10, 50])
+                ax.set_xlim([-1, 10])
             elif metric == "mean_in_one_sigma_interval":
                 ax.set_xlim([-0.1, 1.1])
             elif metric == "wasserstein_distance":
@@ -449,8 +442,6 @@ def plot_heatmap_scenarios_all_models(
     """
     df_hm = df.copy()
     df_hm = df_hm[~df_hm["model_type"].isin(EXCLUDE_MODELS)]
-
-    df_hm = df_hm[df_hm['scenario_duration'] == 'ScenarioDuration.one_min'][df_hm['nrmse_mean'] < 50]
 
     if df_hm.empty:
         print("[INFO] No data for heatmap (all models, all factors).")
@@ -773,7 +764,7 @@ def plot_num_devices_influence(
     g.set_axis_labels("Number of devices", None)
     g.set_titles(col_template="{col_name}", row_template="")
 
-    for row in g.axes:
+    for n_r, row in enumerate(g.axes):
         for ax in row:
             title = ax.get_title().lower()
             if "channel" in title:
@@ -782,6 +773,15 @@ def plot_num_devices_influence(
                 ax.set_title("Meta-Model")
             elif "static" in title:
                 ax.set_title("Static Graph Model")
+            if n_r == 0:
+                # NRMSE
+                ax.set_ylim([0,3])
+            if n_r == 1:
+                # C sigma
+                ax.set_ylim([0, 1])
+            if n_r == 2:
+                # W
+                ax.set_ylim([0, 4000])
 
     handles, labels = g.axes[0, 0].get_legend_handles_labels()
     if g._legend is not None:
@@ -834,6 +834,7 @@ def summarize_step2(file_path: str) -> None:
     df_devices, model_type_order, hue_order = prepare_devices_subset(df)
 
     # Plots
+    plot_heatmap_scenarios_all_models(df, metrics_present, outdir)
     plot_overall_accuracy(df_overall, metrics_present, outdir)
     plot_accuracy_by_network_model(df, metrics_present, outdir)
     plot_metric_distributions_all_models(df_overall, outdir)
@@ -841,7 +842,7 @@ def summarize_step2(file_path: str) -> None:
     plot_num_devices_influence(
         df_devices, metrics_present, model_type_order, hue_order, outdir
     )
-    plot_heatmap_scenarios_all_models(df, metrics_present, outdir)
+
 
 
 if __name__ == "__main__":
