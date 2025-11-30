@@ -191,7 +191,7 @@ def main():
             dashes=True,
             linewidth=2,
         )
-        ax.set_xlabel("Chunk end (row index)")
+        ax.set_xlabel("Chunk end (message index)")
         ax.set_ylabel("Error (mean across scenarios)")
         ax.set_title(f"Chunked MAE/RMSE over time by {cat}")
         plt.xlim(50, 250)

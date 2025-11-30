@@ -9,7 +9,6 @@ import pandas as pd
 import seaborn as sns
 from matplotlib.lines import Line2D
 
-
 # ---------------------------------------------------------------------------
 # Global configuration
 # ---------------------------------------------------------------------------
@@ -137,8 +136,9 @@ def add_derived_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+
 def prepare_overall_view(
-    df: pd.DataFrame,
+        df: pd.DataFrame,
 ) -> Tuple[pd.DataFrame, List[str]]:
     """
     Prepare df_overall: drop excluded models and map model_type_norm to labels.
@@ -179,9 +179,9 @@ def prepare_devices_subset(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str], L
 # ---------------------------------------------------------------------------
 
 def plot_overall_accuracy(
-    df_overall: pd.DataFrame,
-    metrics_present: List[str],
-    outdir: Path,
+        df_overall: pd.DataFrame,
+        metrics_present: List[str],
+        outdir: Path,
 ) -> None:
     """Plot overall accuracy metrics across all scenarios (per metric)."""
     df_long = df_overall.melt(
@@ -221,6 +221,12 @@ def plot_overall_accuracy(
         ax.set_xlabel("")
         ax.set_ylabel("Metric value")
         ax.tick_params(axis="x", rotation=45)
+        if metric == 'nrmse_mean':
+            ax.set_ylim([0, 1])
+        elif metric == 'mean_in_one_sigma_interval':
+            ax.set_ylim([0, 1])
+        else:
+            ax.set_ylim([0, 300])
 
     plt.tight_layout()
     out_path = outdir / "step2_overall_accuracy_metrics_by_modeltype.pdf"
@@ -230,9 +236,9 @@ def plot_overall_accuracy(
 
 
 def plot_accuracy_by_network_model(
-    df: pd.DataFrame,
-    metrics_present: List[str],
-    outdir: Path,
+        df: pd.DataFrame,
+        metrics_present: List[str],
+        outdir: Path,
 ) -> None:
     """Plot accuracy metrics by communication network model and model type."""
     if "network_type" not in df.columns:
@@ -330,8 +336,6 @@ def plot_accuracy_by_network_model(
         for m in model_types_unique
     ]
 
-
-
     plt.tight_layout(rect=[0, 0.15, 1, 1])
     out_path = outdir / "step2_accuracy_by_networkmodel_and_modeltype.pdf"
     g_net.savefig(out_path, dpi=200, bbox_inches="tight")
@@ -340,8 +344,8 @@ def plot_accuracy_by_network_model(
 
 
 def plot_metric_distributions_all_models(
-    df_overall: pd.DataFrame,
-    outdir: Path,
+        df_overall: pd.DataFrame,
+        outdir: Path,
 ) -> None:
     """Plot distributions of metrics for all models in one figure (one row per model)."""
     available_metrics = [m for m in METRICS if m in df_overall.columns]
@@ -425,10 +429,11 @@ def plot_metric_distributions_all_models(
     plt.close(fig)
     print(f"Saved distribution plot for all models to: {out_path}")
 
+
 def plot_heatmap_scenarios_all_models(
-    df: pd.DataFrame,
-    metrics_present: List[str],
-    outdir: Path,
+        df: pd.DataFrame,
+        metrics_present: List[str],
+        outdir: Path,
 ) -> None:
     """
     Heatmaps: alle Metriken für alle Modelle, gruppiert nach
@@ -507,13 +512,13 @@ def plot_heatmap_scenarios_all_models(
 
     # Szenario-Kombinationslabel (interne ID)
     df_hm["scenario_label"] = (
-        df_hm["network_model"]
-        + " | "
-        + df_hm["traffic_model"]
-        + " | "
-        + df_hm["num_devices_num"].astype(int).astype(str)
-        + " dev | "
-        + df_hm["duration_label"]
+            df_hm["network_model"]
+            + " | "
+            + df_hm["traffic_model"]
+            + " | "
+            + df_hm["num_devices_num"].astype(int).astype(str)
+            + " dev | "
+            + df_hm["duration_label"]
     )
 
     # Sortierung und feste Reihenfolge
@@ -524,7 +529,7 @@ def plot_heatmap_scenarios_all_models(
 
     # Mapping: interne Label -> "01  5g | ..."
     scenario_display_map = {
-        lab: f"{idx+1:02d}  {lab}" for idx, lab in enumerate(scenario_order)
+        lab: f"{idx + 1:02d}  {lab}" for idx, lab in enumerate(scenario_order)
     }
 
     # Meta-Model-Substitution pro Szenario
@@ -629,11 +634,10 @@ def plot_heatmap_scenarios_all_models(
     print(f"Saved scenario-factor heatmap (all models, all metrics) to: {out_path}")
 
 
-
 def plot_meta_model_by_test_train_split(
-    df_overall: pd.DataFrame,
-    metrics_present: List[str],
-    outdir: Path,
+        df_overall: pd.DataFrame,
+        metrics_present: List[str],
+        outdir: Path,
 ) -> None:
     """Plot meta-model accuracy metrics by test-train split."""
     if "test_train_name" not in df_overall.columns:
@@ -717,11 +721,11 @@ def plot_meta_model_by_test_train_split(
 
 
 def plot_num_devices_influence(
-    df_devices: pd.DataFrame,
-    metrics_present: List[str],
-    model_type_order: List[str],
-    hue_order: List[str],
-    outdir: Path,
+        df_devices: pd.DataFrame,
+        metrics_present: List[str],
+        model_type_order: List[str],
+        hue_order: List[str],
+        outdir: Path,
 ) -> None:
     """Plot influence of number of devices on metrics (rows) and model types (columns)."""
     if df_devices.empty:
@@ -775,7 +779,7 @@ def plot_num_devices_influence(
                 ax.set_title("Static Graph Model")
             if n_r == 0:
                 # NRMSE
-                ax.set_ylim([0,3])
+                ax.set_ylim([0, 3])
             if n_r == 1:
                 # C sigma
                 ax.set_ylim([0, 1])
@@ -797,10 +801,317 @@ def plot_num_devices_influence(
     )
 
     plt.tight_layout(rect=[0, 0.15, 1, 1])
-    out_path = outdir / "step2_compare_modeltypes_numdevices_allmetrics.pdf"
+    out_path = outdir / "step2_compare_modeltypes_numdevices_allmetrics.svg"
     g.savefig(out_path, dpi=200, bbox_inches="tight")
     plt.close(g.fig)
     print(f"Saved num-devices influence plot to: {out_path}")
+
+
+def analyze_meta_model_substitution(
+        df: pd.DataFrame,
+        metrics_present: List[str],
+        outdir: Path,
+) -> None:
+    """
+    Analyse substitution behaviour of the meta-model:
+
+    - Substitution rates by network technology
+    - Impact of substitution on meta-model accuracy metrics
+    """
+    if "substitution_occurred" not in df.columns:
+        print("[WARN] Column 'substitution_occurred' not found – skipping substitution analysis.")
+        return
+
+    # Only meta-model rows
+    df_meta = df[df["model_type"] == "meta_model"].copy()
+    if df_meta.empty:
+        print("[INFO] No meta-model rows found – skipping substitution analysis.")
+        return
+
+    # Clean network model label (reuse scheme from other plots)
+    if "network_type" in df_meta.columns:
+        df_meta["network_model"] = (
+            df_meta["network_type"]
+            .astype(str)
+            .str.replace("NetworkModelType.", "", regex=False)
+            .str.replace("evaluation_", "", regex=False)
+            .str.strip()
+        )
+    else:
+        df_meta["network_model"] = "unknown"
+
+    # ------------------------------------------------------------------
+    # 1) Substitution rate by network technology
+    # ------------------------------------------------------------------
+    subst_by_net = (
+        df_meta.groupby("network_model")["substitution_occurred"]
+        .mean()
+        .reset_index(name="substitution_rate")
+    )
+
+    configure_plot_style(font_size=9)
+    plt.figure(figsize=(4, 2.8))
+    sns.barplot(
+        data=subst_by_net,
+        x="network_model",
+        y="substitution_rate",
+        errorbar=("ci", 95),
+    )
+    plt.ylim(0, 1)
+    plt.ylabel("Substitution rate")
+    plt.xlabel("Network technology")
+    plt.title("Meta-Model substitution rate by technology")
+    plt.xticks(rotation=30, ha="right")
+    plt.tight_layout()
+    out_path = outdir / "step2_meta_substitution_rate_by_network.pdf"
+    plt.savefig(out_path, dpi=200, bbox_inches="tight")
+    plt.close()
+    print(f"Saved meta-model substitution-by-network plot to: {out_path}")
+
+    # ------------------------------------------------------------------
+    # 2) Impact of substitution on meta-model accuracy metrics
+    # ------------------------------------------------------------------
+    metrics_for_plot = [m for m in METRICS if m in metrics_present]
+
+    if not metrics_for_plot:
+        print("[INFO] No metrics present for substitution accuracy analysis.")
+        return
+
+    df_long = df_meta.melt(
+        id_vars=["substitution_occurred"],
+        value_vars=metrics_for_plot,
+        var_name="metric",
+        value_name="value",
+    ).dropna(subset=["value"])
+
+    if df_long.empty:
+        print("[INFO] No data for substitution-related accuracy plot.")
+        return
+
+    configure_plot_style(font_size=9)
+    g = sns.FacetGrid(
+        df_long,
+        col="metric",
+        col_order=metrics_for_plot,
+        sharey=False,
+        height=3,
+        aspect=1.0,
+    )
+    g.map_dataframe(
+        sns.pointplot,
+        x="substitution_occurred",
+        y="value",
+        hue="substitution_occurred",
+        dodge=0.3,
+        errorbar=("ci", 95),
+        linestyle="none",
+    )
+
+    for ax, metric in zip(g.axes.flat, metrics_for_plot):
+        ax.set_xlabel("Substitution occurred")
+        ax.set_ylabel(METRIC_LABELS.get(metric, metric))
+        ax.set_xticklabels(["No", "Yes"])
+        ax.set_title(METRIC_LABELS.get(metric, metric))
+        if metric == 'nrmse_mean':
+            ax.set_ylim([0, 1])
+        elif metric == 'mean_in_one_sigma_interval':
+            ax.set_ylim([0, 1])
+        else:
+            ax.set_ylim([0, 300])
+
+    if g._legend is not None:
+        g._legend.remove()
+
+    plt.tight_layout()
+    out_path = outdir / "step2_meta_accuracy_by_substitution.pdf"
+    g.savefig(out_path, dpi=200, bbox_inches="tight")
+    plt.close(g.fig)
+    print(f"Saved meta-model accuracy-by-substitution plot to: {out_path}")
+
+
+def plot_meta_model_relative_accuracy(
+        df: pd.DataFrame,
+        metrics_present: List[str],
+        outdir: Path,
+) -> None:
+    """
+    Compare meta-model accuracy to other models on a per-scenario basis.
+
+    For each metric and scenario, compute a directional advantage:
+      > 0  => Meta-Model better
+      < 0  => Meta-Model worse
+    """
+    if "scenario_id" not in df.columns:
+        print("[WARN] Column 'scenario_id' not found – skipping relative accuracy analysis.")
+        return
+
+    # Need at least meta_model + one other model
+    if "meta_model" not in df["model_type"].unique():
+        print("[INFO] No meta_model entries – skipping relative accuracy analysis.")
+        return
+
+    metrics_for_plot = [m for m in METRICS if m in metrics_present]
+    if not metrics_for_plot:
+        print("[INFO] No metrics present for relative accuracy analysis.")
+        return
+
+    # Direction: +1 => larger is better, -1 => smaller is better
+    direction_map = {
+        "nrmse_mean": -1,
+        "wasserstein_distance": -1,
+        "mean_in_one_sigma_interval": 1,
+    }
+
+    all_diffs = []
+
+    for metric in metrics_for_plot:
+        df_metric = df[["scenario_id", "model_type", metric]].dropna()
+        if df_metric.empty:
+            continue
+
+        pivot = df_metric.pivot_table(
+            index="scenario_id",
+            columns="model_type",
+            values=metric,
+            aggfunc="mean",
+        )
+
+        if "meta_model" not in pivot.columns:
+            continue
+
+        for other in pivot.columns:
+            if other == "meta_model":
+                continue
+
+            # Only scenarios where both are available
+            valid_rows = pivot[["meta_model", other]].dropna()
+            if valid_rows.empty:
+                continue
+
+            diff = valid_rows["meta_model"] - valid_rows[other]
+            direction = direction_map.get(metric, -1)
+            directional_diff = diff * direction
+
+            tmp = pd.DataFrame(
+                {
+                    "scenario_id": valid_rows.index,
+                    "metric": metric,
+                    "other_model": MODEL_LABELS.get(other, other),
+                    "relative_advantage": directional_diff,
+                }
+            )
+            all_diffs.append(tmp)
+
+    if not all_diffs:
+        print("[INFO] No valid pairs for relative accuracy analysis.")
+        return
+
+    df_diff = pd.concat(all_diffs, ignore_index=True)
+
+    configure_plot_style(font_size=9)
+    g = sns.FacetGrid(
+        df_diff,
+        col="metric",
+        col_order=metrics_for_plot,
+        sharey=False,
+        height=3,
+        aspect=1.0,
+    )
+    g.map_dataframe(
+        sns.boxplot,
+        x="other_model",
+        y="relative_advantage",
+    )
+
+    for ax, metric in zip(g.axes.flat, metrics_for_plot):
+        ax.axhline(0.0, linestyle="--", linewidth=1, color="gray")
+        ax.set_xlabel("Reference model")
+        ax.set_ylabel("Meta-Model advantage")
+        ax.set_title(METRIC_LABELS.get(metric, metric))
+        ax.tick_params(axis="x", rotation=45)
+        for label in ax.get_xticklabels():
+            label.set_horizontalalignment("right")
+
+    plt.tight_layout()
+    out_path = outdir / "step2_meta_relative_accuracy_vs_models.pdf"
+    g.savefig(out_path, dpi=200, bbox_inches="tight")
+    plt.close(g.fig)
+    print(f"Saved meta-model relative-accuracy plot to: {out_path}")
+
+
+def plot_accuracy_performance_tradeoff(
+        df_overall: pd.DataFrame,
+        metrics_present: List[str],
+        outdir: Path,
+) -> None:
+    """
+    Analyse trade-off between accuracy and performance efficiency.
+
+    - Uses the first available runtime column (runtime / runtime_seconds / execution_time)
+    - Scatter plots of accuracy metric vs. runtime per model type.
+    """
+    # Try to detect a runtime column heuristically
+    candidate_cols = [
+        c
+        for c in df_overall.columns
+        if any(k in c.lower() for k in ["runtime", "exec_time", "execution_time"])
+    ]
+    if not candidate_cols:
+        print("[WARN] No runtime column found – skipping accuracy vs. performance trade-off analysis.")
+        return
+
+    runtime_col = candidate_cols[0]
+    print(f"[INFO] Using '{runtime_col}' as runtime column for trade-off analysis.")
+
+    metrics_for_plot = [m for m in METRICS if m in metrics_present]
+    if not metrics_for_plot:
+        print("[INFO] No metrics present for trade-off analysis.")
+        return
+
+    df_tradeoff = df_overall.dropna(subset=[runtime_col]).copy()
+    if df_tradeoff.empty:
+        print("[INFO] No rows with runtime values – skipping trade-off analysis.")
+        return
+
+    # Long format: one row per (run, metric)
+    df_long = df_tradeoff.melt(
+        id_vars=["model_type_norm", runtime_col],
+        value_vars=metrics_for_plot,
+        var_name="metric",
+        value_name="value",
+    ).dropna(subset=["value"])
+
+    configure_plot_style(font_size=9)
+    g = sns.FacetGrid(
+        df_long,
+        col="metric",
+        col_order=metrics_for_plot,
+        sharex=False,
+        sharey=False,
+        height=3,
+        aspect=1.1,
+        hue="model_type_norm",
+    )
+    g.map_dataframe(
+        sns.scatterplot,
+        x=runtime_col,
+        y="value",
+        alpha=0.7,
+    )
+
+    for ax, metric in zip(g.axes.flat, metrics_for_plot):
+        ax.set_xscale("log")
+        ax.set_xlabel("Runtime [log scale]")
+        ax.set_ylabel(METRIC_LABELS.get(metric, metric))
+        ax.set_title(METRIC_LABELS.get(metric, metric))
+
+    g.add_legend(title="Model")
+
+    plt.tight_layout()
+    out_path = outdir / "step2_accuracy_vs_runtime_tradeoff.pdf"
+    g.savefig(out_path, dpi=200, bbox_inches="tight")
+    plt.close(g.fig)
+    print(f"Saved accuracy vs. performance trade-off plot to: {out_path}")
 
 
 # ---------------------------------------------------------------------------
@@ -843,6 +1154,17 @@ def summarize_step2(file_path: str) -> None:
         df_devices, metrics_present, model_type_order, hue_order, outdir
     )
 
+    analyze_meta_model_substitution(df, metrics_present, outdir)
+    plot_meta_model_relative_accuracy(df, metrics_present, outdir)
+    plot_accuracy_performance_tradeoff(df_overall, metrics_present, outdir)
+
+    plot_num_devices_influence(
+        df_devices, metrics_present, model_type_order, hue_order, outdir
+    )
+
+    plot_num_devices_influence(
+        df_devices, metrics_present, model_type_order, hue_order, outdir
+    )
 
 
 if __name__ == "__main__":

@@ -224,9 +224,10 @@ def summarize_step1(file_path: str) -> None:
             })
             sns.set_theme(style="whitegrid", font='serif')
 
-            # Helper to draw heatmap + horizontal separators
             def draw_heatmap(data, cbar_label, fname, vmin=None, vmax=None, center=None, cmap="crest"):
-                fig, ax = plt.subplots(figsize=(1.4 * data.shape[1] + 3, 0.42 * data.shape[0] + 2))
+                fig, ax = plt.subplots(figsize=(1.4 * data.shape[1] + 3,
+                                                0.42 * data.shape[0] + 2))
+
                 hm = sns.heatmap(
                     data,
                     vmin=vmin, vmax=vmax, center=center,
@@ -237,27 +238,33 @@ def summarize_step1(file_path: str) -> None:
                 ax.set_xticklabels(col_labels, rotation=0)
                 ax.set_yticklabels(row_labels, rotation=0)
 
-                # Horizontal separators between hyperparameters
-                breaks = np.cumsum(group_sizes)[:-1]  # row boundaries (in data coords)
+                breaks = np.cumsum(group_sizes)[:-1]
                 for y in breaks:
                     ax.hlines(y, xmin=0, xmax=data.shape[1], colors="black", linewidth=1)
 
                 plt.tight_layout()
                 out_path = Path(f"../analysis_results/plots_phase1/{fname}")
                 out_path.parent.mkdir(parents=True, exist_ok=True)
+
+                # PDF (Original)
                 plt.savefig(out_path, format="pdf", dpi=200, bbox_inches="tight")
+
+                # 🌟 PNG für PowerPoint
+                plt.savefig(out_path.with_suffix(".svg"), format="svg",
+                            dpi=350, bbox_inches="tight")
 
             # Standardized (z-score) heatmap
             draw_heatmap(
                 abs_table_std,
                 cbar_label="(inverted) z-score",
-                fname="step1_hyperparam_metric_std_values.pdf",
+                fname="step1_hyperparam_metric_std_values.png",
                 vmin=-2.5, vmax=2.5, center=0, cmap="BuGn"
             )
         else:
             print("Absolute/standardized heatmaps: no recognized hyper-parameter columns found.")
     else:
         print("Absolute/standardized heatmaps skipped: no data in filtered subset.")
+
 
     # --- 6) Factor effects by scenario (traffic configuration × network type) ---
     if not df_plot.empty:

@@ -143,6 +143,13 @@ def plot_hyperparam_score_heatmaps(df: pd.DataFrame, fig_name: str = "phase1_hea
     plt.savefig(out_path.as_posix(), dpi=200, bbox_inches="tight")
     plt.close()
 
+
+# ---- Phase 1: Heatmaps of Score by Hyper-parameter ----
+try:
+    _df_heat = load_results(phase=1)
+    plot_hyperparam_score_heatmaps(_df_heat.copy(), fig_name="phase1_heatmap_scores.png")
+except Exception as e:
+    print(f"[heatmap generation skipped] {e}")
 # --- Phase 1: Main Effects ---
 df_main = load_results(phase=1)
 for response, fig_name in [
@@ -159,6 +166,8 @@ for response, fig_name in [
 results_dir = '../analysis_results/plots_phase1/'
 Path(results_dir).mkdir(parents=True, exist_ok=True)  # create dir if not exists
 
+
+
 # --- Phase 2: Model Comparison ---
 df_phase2 = load_results(phase=2)
 for response, fig_name in [('mean_in_one_sigma_interval', 'mean_in_one_sigma_interval'),
@@ -168,9 +177,3 @@ for response, fig_name in [('mean_in_one_sigma_interval', 'mean_in_one_sigma_int
                            ]:
     plot_model_comparison(df_phase2.copy(), response=response, fig_name=f"phase2_model_comparison_{fig_name}.png")
 
-# ---- Phase 1: Heatmaps of Score by Hyper-parameter ----
-try:
-    _df_heat = load_results(phase=1)
-    plot_hyperparam_score_heatmaps(_df_heat.copy(), fig_name="phase1_heatmap_scores.png")
-except Exception as e:
-    print(f"[heatmap generation skipped] {e}")
