@@ -29,6 +29,7 @@ class EvaluationResult:
     mean: Optional[float]
     std: Optional[float]
     mean_message_cv: Optional[float]
+    mean_num_messages: Optional[int]
 
     # accuracy metrics
     nrmse_mean: Optional[float]
@@ -163,16 +164,18 @@ def calculate_metrics_grouped(baseline_dfs: List[pd.DataFrame], model_dfs: List[
         # Process baseline simulation
         baseline_indexed = baseline_df.set_index(['msg_id', 'sender', 'receiver'])['delay_ms']
         for msg_key, delay in baseline_indexed.items():
-            if msg_key not in baseline_delays_by_message:
-                baseline_delays_by_message[msg_key] = []
-            baseline_delays_by_message[msg_key].append(delay)
+            if delay <= 3000: # filter for messages with delay times <= 3000 ms
+                if msg_key not in baseline_delays_by_message:
+                    baseline_delays_by_message[msg_key] = []
+                baseline_delays_by_message[msg_key].append(delay)
 
         # Process model simulation
         model_indexed = model_df.set_index(['msg_id', 'sender', 'receiver'])['delay_ms']
         for msg_key, delay in model_indexed.items():
-            if msg_key not in model_delays_by_message:
-                model_delays_by_message[msg_key] = []
-            model_delays_by_message[msg_key].append(delay)
+            if delay <= 3000:
+                if msg_key not in model_delays_by_message:
+                    model_delays_by_message[msg_key] = []
+                model_delays_by_message[msg_key].append(delay)
 
     # Find common messages across both baseline and model simulations
     common_messages = set(baseline_delays_by_message.keys()).intersection(set(model_delays_by_message.keys()))
@@ -474,6 +477,7 @@ def analyze_results(results_folder: str) -> List[EvaluationResult]:
                     mean=mean_delay,
                     std=std_delay,
                     mean_message_cv=cv,
+                    mean_num_messages=np.mean([len(df) for df in dataframes]),
                     nrmse_mean=None,  # No RMSE for baseline models
                     nrmse_std=None,  # No MAE for baseline models
                     mean_in_sigma_interval=None,
@@ -513,6 +517,7 @@ def analyze_results(results_folder: str) -> List[EvaluationResult]:
                     mean_message_cv=cv,
                     nrmse_mean=nrmse_means,
                     nrmse_std=nrmse_std,
+                    mean_num_messages=np.mean([len(df) for df in dataframes]),
                     mean_in_sigma_interval=mean_in_one_sigma_interval,
                     wasserstein_dist=wasserstein_dist,
                     execution_time_s=mean_execution_time,
@@ -589,6 +594,7 @@ def save_evaluation_results_to_csv(
                 'scenario_duration': result.scenario_config.scenario_duration,
                 'traffic_configuration': result.scenario_config.traffic_configuration,
                 'network_type': result.scenario_config.network_type,
+                'mean_number_of_messages': result.mean_num_messages,
 
                 # Factor values (raw)
                 'cluster_distance_threshold': result.scenario_config.cluster_distance_threshold.value if result.scenario_config.cluster_distance_threshold else None,
