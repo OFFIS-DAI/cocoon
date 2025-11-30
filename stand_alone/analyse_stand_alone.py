@@ -134,7 +134,7 @@ ax.set_ylim(bottom=min(0.0, float(np.nanmin(np.concatenate([y_true, y_pred])))),
 ax.legend(loc="best", frameon=True)
 fig.tight_layout()
 
-fig_path_png = out_dir / "pred_vs_real_over_time_bin100_filled.png"
+fig_path_png = out_dir / "pred_vs_real_over_time_bin100_filled.svg"
 fig_path_pdf = out_dir / "pred_vs_real_over_time_bin100_filled.pdf"
 fig.savefig(fig_path_png, dpi=200)
 fig.savefig(fig_path_pdf)
