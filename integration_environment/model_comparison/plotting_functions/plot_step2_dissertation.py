@@ -226,7 +226,7 @@ def plot_overall_accuracy(
         elif metric == 'mean_in_one_sigma_interval':
             ax.set_ylim([0, 1])
         else:
-            ax.set_ylim([0, 300])
+            ax.set_ylim([0, 30])
 
     plt.tight_layout()
     out_path = outdir / "step2_overall_accuracy_metrics_by_modeltype.pdf"
@@ -779,13 +779,13 @@ def plot_num_devices_influence(
                 ax.set_title("Static Graph Model")
             if n_r == 0:
                 # NRMSE
-                ax.set_ylim([0, 3])
+                ax.set_ylim([0, 2])
             if n_r == 1:
                 # C sigma
                 ax.set_ylim([0, 1])
             if n_r == 2:
                 # W
-                ax.set_ylim([0, 4000])
+                ax.set_ylim([0, 100])
 
     handles, labels = g.axes[0, 0].get_legend_handles_labels()
     if g._legend is not None:
@@ -801,8 +801,8 @@ def plot_num_devices_influence(
     )
 
     plt.tight_layout(rect=[0, 0.15, 1, 1])
-    out_path = outdir / "step2_compare_modeltypes_numdevices_allmetrics.svg"
-    g.savefig(out_path, dpi=200, bbox_inches="tight")
+    out_path = outdir / "step2_compare_modeltypes_numdevices_allmetrics.pdf"
+    g.savefig(out_path, dpi=200, bbox_inches="tight", format='pdf')
     plt.close(g.fig)
     print(f"Saved num-devices influence plot to: {out_path}")
 
@@ -905,6 +905,7 @@ def analyze_meta_model_substitution(
         dodge=0.3,
         errorbar=("ci", 95),
         linestyle="none",
+        palette="Greens"
     )
 
     for ax, metric in zip(g.axes.flat, metrics_for_plot):
@@ -917,7 +918,7 @@ def analyze_meta_model_substitution(
         elif metric == 'mean_in_one_sigma_interval':
             ax.set_ylim([0, 1])
         else:
-            ax.set_ylim([0, 300])
+            ax.set_ylim([0, 30])
 
     if g._legend is not None:
         g._legend.remove()
@@ -1038,6 +1039,82 @@ def plot_meta_model_relative_accuracy(
     plt.close(g.fig)
     print(f"Saved meta-model relative-accuracy plot to: {out_path}")
 
+def plot_execution_time_all_models_boxplot(
+        df: pd.DataFrame,
+        outdir: Path,
+) -> None:
+    """Compare execution time across all modeling approaches using boxplots.
+    Meta-Model is split by whether substitution occurred (Yes/No).
+    """
+    runtime_col = "execution_time_s"
+
+    if runtime_col not in df.columns:
+        print(f"[WARN] Column '{runtime_col}' not found – skipping execution-time plot.")
+        return
+
+    df_rt = df.dropna(subset=[runtime_col]).copy()
+    if df_rt.empty:
+        print("[INFO] No runtime data available for execution-time plot.")
+        return
+
+    # Create group labels (Meta-Model split by substitution flag)
+    def label_row(r):
+        mt = str(r.get("model_type_norm", "")).strip().lower()
+        if mt in ["meta_model", "meta model", "meta-model"]:
+            # Guard against missing column
+            if "substitution_occurred" in df_rt.columns:
+                sub = r.get("substitution_occurred", False)
+                return f"{'Meta-Model ' + '$S$' if bool(sub) else 'Meta-Model ' + '$\overline{S}$'}"
+            return "Meta-Model"
+        elif mt == "channel":
+            return "Channel Model"
+        elif mt == "static_graph":
+            return "Static Graph Model"
+        elif mt == "detailed":
+            return "Detailed Model"
+        elif mt == "ideal":
+            return "Ideal Model"
+        return r.get("model_type_norm", "unknown")
+
+    df_rt["model_group"] = df_rt.apply(label_row, axis=1)
+
+    # Order: keep your narrative order
+    order = [
+        "Ideal Model",
+        "Channel Model",
+        "Static Graph Model",
+        'Meta-Model ' + '$S$',
+        'Meta-Model ' + '$\overline{S}$',
+        "Detailed Model",
+    ]
+    # Only keep those present
+    order = [o for o in order if o in set(df_rt["model_group"])]
+
+    configure_plot_style(font_size=9)
+    plt.figure(figsize=(6.2, 3.2))
+
+    sns.boxplot(
+        data=df_rt,
+        x="model_group",
+        y=runtime_col,
+        order=order,
+        palette='YlGnBu',
+        showfliers=True,   # set False if you prefer cleaner plots
+    )
+
+    plt.yscale("log")
+    plt.ylabel("Execution time [s] (log)")
+    plt.xlabel("")
+    plt.xticks(rotation=25, ha="right")
+
+    plt.tight_layout()
+    out_path = outdir / "step2_execution_time_by_model_boxplot_meta_split.pdf"
+    plt.savefig(out_path, dpi=200, bbox_inches="tight")
+    plt.close()
+
+    print(f"Saved execution-time boxplot to: {out_path}")
+
+
 
 def plot_accuracy_performance_tradeoff(
         df_overall: pd.DataFrame,
@@ -1050,17 +1127,7 @@ def plot_accuracy_performance_tradeoff(
     - Uses the first available runtime column (runtime / runtime_seconds / execution_time)
     - Scatter plots of accuracy metric vs. runtime per model type.
     """
-    # Try to detect a runtime column heuristically
-    candidate_cols = [
-        c
-        for c in df_overall.columns
-        if any(k in c.lower() for k in ["runtime", "exec_time", "execution_time"])
-    ]
-    if not candidate_cols:
-        print("[WARN] No runtime column found – skipping accuracy vs. performance trade-off analysis.")
-        return
-
-    runtime_col = candidate_cols[0]
+    runtime_col = "execution_time_s"
     print(f"[INFO] Using '{runtime_col}' as runtime column for trade-off analysis.")
 
     metrics_for_plot = [m for m in METRICS if m in metrics_present]
@@ -1144,6 +1211,7 @@ def summarize_step2(file_path: str) -> None:
     df_overall, metrics_present = prepare_overall_view(df)
     df_devices, model_type_order, hue_order = prepare_devices_subset(df)
 
+    plot_execution_time_all_models_boxplot(df, outdir)
     # Plots
     plot_heatmap_scenarios_all_models(df, metrics_present, outdir)
     plot_overall_accuracy(df_overall, metrics_present, outdir)
