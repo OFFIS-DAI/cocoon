@@ -7,6 +7,14 @@ for different metrics per factor AND save the same tables as CSV files.
   - Factor S: scenario duration (5 min, 10 min)
   - Factor ND: number of devices (5, 10, 20, 50)
   - Factor CN: communication network technology (LTE, LTE450, Ethernet, 5G)
+
+NOTE: This version REMOVES the columns for:
+  - Detailed Model
+  - Ideal Model
+and keeps only:
+  - Channel Model
+  - Static Graph Model
+  - Meta-Model splits (pa, tl, tm, sc, te)
 """
 
 import pandas as pd
@@ -18,7 +26,7 @@ def format_mean_std(sub_df: pd.DataFrame, metric_col: str, for_csv: bool = False
     Return mean/std formatting.
 
     - LaTeX mode (for_csv=False): '$mean\\pm std$'
-    - CSV mode   (for_csv=True):  'mean, std'
+    - CSV mode   (for_csv=True):  'mean'  (kept as mean only, consistent with your current CSV export)
 
     For CSV: no math mode, no \\pm.
     """
@@ -52,11 +60,9 @@ def build_table_rows_for_metric(df: pd.DataFrame, metric_col: str) -> pd.DataFra
     """
     Build the logical table for a given metric as a DataFrame for CSV export.
 
-    Values are plain 'mean, std' strings (no LaTeX math mode, no \\pm).
-
     Columns:
       Factor, Stage,
-      Channel Model, Static Graph Model, Detailed Model, Ideal Model,
+      Channel Model, Static Graph Model,
       Meta-pa, Meta-tl, Meta-tm, Meta-sc, Meta-te
     """
     # Mapping of split names → abbreviations
@@ -81,7 +87,7 @@ def build_table_rows_for_metric(df: pd.DataFrame, metric_col: str) -> pd.DataFra
         return df[df["network_type"].astype(str).str.contains(token, case=False, na=False)].copy()
 
     def csv_stat_for(sub_df: pd.DataFrame, model_type: str, split_name: str | None = None) -> str:
-        """CSV-safe mean/std for given model_type (+optional split)."""
+        """CSV-safe mean value for given model_type (+optional split)."""
         sub = sub_df[sub_df["model_type"] == model_type]
         if split_name is not None and "test_train_name" in sub_df.columns:
             sub = sub[sub["test_train_name"] == split_name]
@@ -99,19 +105,13 @@ def build_table_rows_for_metric(df: pd.DataFrame, metric_col: str) -> pd.DataFra
         sub = subset_by_traffic(token)
         ch_val = csv_stat_for(sub, "channel")
         sg_val = csv_stat_for(sub, "static_graph")
-        det_val = csv_stat_for(sub, "detailed")
-        ideal_val = csv_stat_for(sub, "ideal")
-        meta_vals = [
-            csv_stat_for(sub, "meta_model", split_name)
-            for split_name, _abbr in meta_splits
-        ]
+        meta_vals = [csv_stat_for(sub, "meta_model", split_name) for split_name, _abbr in meta_splits]
+
         row = {
             "Factor": "T",
             "Stage": label_row,
             "Channel Model": ch_val,
             "Static Graph Model": sg_val,
-            "Detailed Model": det_val,
-            "Ideal Model": ideal_val,
         }
         for (split_name, abbr), val in zip(meta_splits, meta_vals):
             row[f"Meta-{abbr}"] = val
@@ -119,74 +119,44 @@ def build_table_rows_for_metric(df: pd.DataFrame, metric_col: str) -> pd.DataFra
 
     # ----------------- Factor S (Scenario Duration) -----------------------
     sub_5 = subset_by_duration("five")
-    ch_5 = csv_stat_for(sub_5, "channel")
-    sg_5 = csv_stat_for(sub_5, "static_graph")
-    det_5 = csv_stat_for(sub_5, "detailed")
-    ideal_5 = csv_stat_for(sub_5, "ideal")
-    meta_5 = [
-        csv_stat_for(sub_5, "meta_model", split_name)
-        for split_name, _a in meta_splits
-    ]
     row_5 = {
         "Factor": "S",
         "Stage": "5 min",
-        "Channel Model": ch_5,
-        "Static Graph Model": sg_5,
-        "Detailed Model": det_5,
-        "Ideal Model": ideal_5,
+        "Channel Model": csv_stat_for(sub_5, "channel"),
+        "Static Graph Model": csv_stat_for(sub_5, "static_graph"),
     }
-    for (split_name, abbr), val in zip(meta_splits, meta_5):
-        row_5[f"Meta-{abbr}"] = val
+    for split_name, abbr in meta_splits:
+        row_5[f"Meta-{abbr}"] = csv_stat_for(sub_5, "meta_model", split_name)
     rows.append(row_5)
 
     sub_10 = subset_by_duration("ten")
-    ch_10 = csv_stat_for(sub_10, "channel")
-    sg_10 = csv_stat_for(sub_10, "static_graph")
-    det_10 = csv_stat_for(sub_10, "detailed")
-    ideal_10 = csv_stat_for(sub_10, "ideal")
-    meta_10 = [
-        csv_stat_for(sub_10, "meta_model", split_name)
-        for split_name, _a in meta_splits
-    ]
     row_10 = {
         "Factor": "S",
         "Stage": "10 min",
-        "Channel Model": ch_10,
-        "Static Graph Model": sg_10,
-        "Detailed Model": det_10,
-        "Ideal Model": ideal_10,
+        "Channel Model": csv_stat_for(sub_10, "channel"),
+        "Static Graph Model": csv_stat_for(sub_10, "static_graph"),
     }
-    for (split_name, abbr), val in zip(meta_splits, meta_10):
-        row_10[f"Meta-{abbr}"] = val
+    for split_name, abbr in meta_splits:
+        row_10[f"Meta-{abbr}"] = csv_stat_for(sub_10, "meta_model", split_name)
     rows.append(row_10)
 
     # ----------------- Factor ND (Num Devices) ----------------------------
     nd_levels = [
-        ('NumDevices.five', 5),
-        ('NumDevices.ten', 10),
-        ('NumDevices.twenty', 20),
-        ('NumDevices.fifty', 50),
+        ("NumDevices.five", 5),
+        ("NumDevices.ten", 10),
+        ("NumDevices.twenty", 20),
+        ("NumDevices.fifty", 50),
     ]
     for token, label_row in nd_levels:
         sub_nd = subset_by_num_devices(token)
-        ch_nd = csv_stat_for(sub_nd, "channel")
-        sg_nd = csv_stat_for(sub_nd, "static_graph")
-        det_nd = csv_stat_for(sub_nd, "detailed")
-        ideal_nd = csv_stat_for(sub_nd, "ideal")
-        meta_nd = [
-            csv_stat_for(sub_nd, "meta_model", split_name)
-            for split_name, _a in meta_splits
-        ]
         row_nd = {
             "Factor": "ND",
             "Stage": str(label_row),
-            "Channel Model": ch_nd,
-            "Static Graph Model": sg_nd,
-            "Detailed Model": det_nd,
-            "Ideal Model": ideal_nd,
+            "Channel Model": csv_stat_for(sub_nd, "channel"),
+            "Static Graph Model": csv_stat_for(sub_nd, "static_graph"),
         }
-        for (split_name, abbr), val in zip(meta_splits, meta_nd):
-            row_nd[f"Meta-{abbr}"] = val
+        for split_name, abbr in meta_splits:
+            row_nd[f"Meta-{abbr}"] = csv_stat_for(sub_nd, "meta_model", split_name)
         rows.append(row_nd)
 
     # ----------------- Factor CN (Network Type) ---------------------------
@@ -198,24 +168,14 @@ def build_table_rows_for_metric(df: pd.DataFrame, metric_col: str) -> pd.DataFra
     ]
     for label_row, token in network_rows:
         sub_net = subset_by_network(token)
-        ch_net = csv_stat_for(sub_net, "channel")
-        sg_net = csv_stat_for(sub_net, "static_graph")
-        det_net = csv_stat_for(sub_net, "detailed")
-        ideal_net = csv_stat_for(sub_net, "idea")
-        meta_net = [
-            csv_stat_for(sub_net, "meta_model", split_name)
-            for split_name, _a in meta_splits
-        ]
         row_net = {
             "Factor": "CN",
             "Stage": label_row,
-            "Channel Model": ch_net,
-            "Static Graph Model": sg_net,
-            "Detailed Model": det_net,
-            "Ideal Model": ideal_net,
+            "Channel Model": csv_stat_for(sub_net, "channel"),
+            "Static Graph Model": csv_stat_for(sub_net, "static_graph"),
         }
-        for (split_name, abbr), val in zip(meta_splits, meta_net):
-            row_net[f"Meta-{abbr}"] = val
+        for split_name, abbr in meta_splits:
+            row_net[f"Meta-{abbr}"] = csv_stat_for(sub_net, "meta_model", split_name)
         rows.append(row_net)
 
     return pd.DataFrame(rows)
@@ -252,20 +212,22 @@ def print_latex_table_for_metric(
     print("\\renewcommand{\\arraystretch}{1.5}")
     print(f"\\caption{{{caption}}}")
     print(f"\\label{{{label}}}")
-    # 11 columns: Factor, Stages, 9 metric subcolumns
-    print("\\begin{tabular}{lllllllllll}")
+
+    # 9 columns: Factor, Stages, 2 base models, 5 meta-splits
+    print("\\begin{tabular}{lllllllll}")
     print("\\hline")
     print(
         "\\textbf{Factor} & \\textbf{Stages} & "
-        f"\\multicolumn{{9}}{{l}}{{\\textbf{{{metric_tex}}}}} \\\\ \\hline"
+        f"\\multicolumn{{7}}{{l}}{{\\textbf{{{metric_tex}}}}} \\\\ \\hline"
     )
-    # Header: 4 base models + 5 meta-splits
+
+    # Header: 2 base models + 5 meta-splits
     print(
         "\\textbf{CM} &  & "
-        "Channel Model & Static Graph Model & Detailed Model & Ideal Model & "
+        "Channel Model & Static Graph Model & "
         "\\multicolumn{5}{l}{Meta-Model} \\\\ \\hline"
     )
-    print("\\textbf{C-TTS} &  &  &  &  &  & pa & tl & tm & sc & te \\\\ \\hline")
+    print("\\textbf{C-TTS} &  &  &  & pa & tl & tm & sc & te \\\\ \\hline")
 
     meta_splits = [
         ("parametrization_split", "pa"),
@@ -297,15 +259,13 @@ def print_latex_table_for_metric(
         sub = subset_by_traffic(token)
         ch_val = latex_cell_for_model(sub, "channel", metric_col)
         sg_val = latex_cell_for_model(sub, "static_graph", metric_col)
-        det_val = latex_cell_for_model(sub, "detailed_model", metric_col)
-        ideal_val = latex_cell_for_model(sub, "ideal_model", metric_col)
         meta_vals = [
             latex_cell_for_model(sub, "meta_model", metric_col, split_name)
             for split_name, _abbr in meta_splits
         ]
         prefix = "\\multirow{3}{*}{\\textbf{T}}" if i == 0 else " "
         print(
-            f"{prefix} & {label_row} & {ch_val} & {sg_val} & {det_val} & {ideal_val} & "
+            f"{prefix} & {label_row} & {ch_val} & {sg_val} & "
             + " & ".join(meta_vals)
             + " \\\\"
         )
@@ -313,50 +273,44 @@ def print_latex_table_for_metric(
     print(" \\hline")
 
     # Factor S
-    print("\\multirow{2}{*}{\\textbf{S}} & 5 min & ", end="")
     sub_5 = subset_by_duration("five")
     ch_5 = latex_cell_for_model(sub_5, "channel", metric_col)
     sg_5 = latex_cell_for_model(sub_5, "static_graph", metric_col)
-    det_5 = latex_cell_for_model(sub_5, "detailed_model", metric_col)
-    ideal_5 = latex_cell_for_model(sub_5, "ideal_model", metric_col)
     meta_5 = [
         latex_cell_for_model(sub_5, "meta_model", metric_col, split_name)
         for split_name, _a in meta_splits
     ]
-    print(f"{ch_5} & {sg_5} & {det_5} & {ideal_5} & " + " & ".join(meta_5) + " \\\\")
+    print("\\multirow{2}{*}{\\textbf{S}} & 5 min & "
+          f"{ch_5} & {sg_5} & " + " & ".join(meta_5) + " \\\\")
 
-    print(" & 10 min & ", end="")
     sub_10 = subset_by_duration("ten")
     ch_10 = latex_cell_for_model(sub_10, "channel", metric_col)
     sg_10 = latex_cell_for_model(sub_10, "static_graph", metric_col)
-    det_10 = latex_cell_for_model(sub_10, "detailed_model", metric_col)
-    ideal_10 = latex_cell_for_model(sub_10, "ideal_model", metric_col)
     meta_10 = [
         latex_cell_for_model(sub_10, "meta_model", metric_col, split_name)
         for split_name, _a in meta_splits
     ]
-    print(f"{ch_10} & {sg_10} & {det_10} & {ideal_10} & " + " & ".join(meta_10) + " \\\\ \\hline")
+    print(" & 10 min & "
+          f"{ch_10} & {sg_10} & " + " & ".join(meta_10) + " \\\\ \\hline")
 
     # Factor ND
     nd_levels = [
-        ('NumDevices.five', 5),
-        ('NumDevices.ten', 10),
-        ('NumDevices.twenty', 20),
-        ('NumDevices.fifty', 50),
+        ("NumDevices.five", 5),
+        ("NumDevices.ten", 10),
+        ("NumDevices.twenty", 20),
+        ("NumDevices.fifty", 50),
     ]
     for i, (token, label_row) in enumerate(nd_levels):
         sub_nd = subset_by_num_devices(token)
         ch_nd = latex_cell_for_model(sub_nd, "channel", metric_col)
         sg_nd = latex_cell_for_model(sub_nd, "static_graph", metric_col)
-        det_nd = latex_cell_for_model(sub_nd, "detailed_model", metric_col)
-        ideal_nd = latex_cell_for_model(sub_nd, "ideal_model", metric_col)
         meta_nd = [
             latex_cell_for_model(sub_nd, "meta_model", metric_col, split_name)
             for split_name, _a in meta_splits
         ]
         factor_label = "\\textbf{ND}" if i == 0 else "\\textbf{}"
         print(
-            f"{factor_label} & {label_row} & {ch_nd} & {sg_nd} & {det_nd} & {ideal_nd} & "
+            f"{factor_label} & {label_row} & {ch_nd} & {sg_nd} & "
             + " & ".join(meta_nd)
             + " \\\\"
         )
@@ -374,15 +328,13 @@ def print_latex_table_for_metric(
         sub_net = subset_by_network(token)
         ch_net = latex_cell_for_model(sub_net, "channel", metric_col)
         sg_net = latex_cell_for_model(sub_net, "static_graph", metric_col)
-        det_net = latex_cell_for_model(sub_net, "detailed_model", metric_col)
-        ideal_net = latex_cell_for_model(sub_net, "ideal_model", metric_col)
         meta_net = [
             latex_cell_for_model(sub_net, "meta_model", metric_col, split_name)
             for split_name, _a in meta_splits
         ]
         prefix = "\\multirow{4}{*}{\\textbf{CN}}" if i == 0 else " "
         print(
-            f"{prefix} & {label_row} & {ch_net} & {sg_net} & {det_net} & {ideal_net} & "
+            f"{prefix} & {label_row} & {ch_net} & {sg_net} & "
             + " & ".join(meta_net)
             + " \\\\"
         )
