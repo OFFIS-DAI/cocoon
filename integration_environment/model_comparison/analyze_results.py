@@ -11,8 +11,7 @@ import pandas as pd
 import numpy as np
 import json
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
-from dataclasses import dataclass
+from typing import Dict, List, Tuple, Optional, Any
 
 from scipy.stats import wasserstein_distance
 
@@ -150,89 +149,93 @@ def find_matching_ideal_simulations(config: ScenarioConfiguration, ideal_results
             return matching_results
 
 
-def calculate_metrics_grouped(baseline_dfs: List[pd.DataFrame], model_dfs: List[pd.DataFrame]) -> Tuple[float, float, float, float]:
-    if len(baseline_dfs) != len(model_dfs):
-        raise ValueError(f"Mismatch in number of runs: {len(baseline_dfs)} baseline vs {len(model_dfs)} model")
+def calculate_metrics_grouped(
+        baseline_dfs: List[pd.DataFrame],
+        model_dfs: List[pd.DataFrame],
+        delay_cap_ms: int = 3000,
+) -> Tuple[float, float, float, float]:
+    """
+    Compares baseline vs model delay distributions per message key, even if the number
+    of runs differs between baseline_dfs and model_dfs.
 
-    # Collect delays for each message across all runs
-    baseline_delays_by_message = {}
-    model_delays_by_message = {}
+    Returns:
+      (nrmse_means, nrmse_std, mean_in_sigma_interval, mean_wasserstein)
+    """
+    MsgKey = Tuple[Any, Any, Any]  # (msg_id, sender, receiver)
 
-    for baseline_df, model_df in zip(baseline_dfs, model_dfs):
-        baseline_df.dropna(subset=['delay_ms'], inplace=True)
-        model_df.dropna(subset=['delay_ms'], inplace=True)
-        # Process baseline simulation
-        baseline_indexed = baseline_df.set_index(['msg_id', 'sender', 'receiver'])['delay_ms']
-        for msg_key, delay in baseline_indexed.items():
-            if delay <= 3000: # filter for messages with delay times <= 3000 ms
-                if msg_key not in baseline_delays_by_message:
-                    baseline_delays_by_message[msg_key] = []
-                baseline_delays_by_message[msg_key].append(delay)
+    def collect_delays(dfs: List[pd.DataFrame]) -> Dict[MsgKey, List[float]]:
+        delays_by_msg: Dict[MsgKey, List[float]] = {}
+        for df in dfs:
+            if df is None or df.empty:
+                continue
+            # avoid in-place mutation of caller's dataframes
+            d = df.dropna(subset=["delay_ms"]).copy()
+            d = d[d["delay_ms"] <= delay_cap_ms]
 
-        # Process model simulation
-        model_indexed = model_df.set_index(['msg_id', 'sender', 'receiver'])['delay_ms']
-        for msg_key, delay in model_indexed.items():
-            if delay <= 3000:
-                if msg_key not in model_delays_by_message:
-                    model_delays_by_message[msg_key] = []
-                model_delays_by_message[msg_key].append(delay)
+            if d.empty:
+                continue
 
-    # Find common messages across both baseline and model simulations
-    common_messages = set(baseline_delays_by_message.keys()).intersection(set(model_delays_by_message.keys()))
+            indexed = d.set_index(["msg_id", "sender", "receiver"])["delay_ms"]
+            for msg_key, delay in indexed.items():
+                delays_by_msg.setdefault(msg_key, []).append(float(delay))
+        return delays_by_msg
 
-    if len(common_messages) == 0:
-        raise ValueError("No common messages found between baseline and model simulations across all runs")
+    baseline_delays_by_message = collect_delays(baseline_dfs)
+    model_delays_by_message = collect_delays(model_dfs)
 
-    # Calculate mean delay for each message across runs
-    baseline_mean_delays = []
-    model_mean_delays = []
+    common_messages = set(baseline_delays_by_message).intersection(model_delays_by_message)
+    if not common_messages:
+        raise ValueError("No common messages found between baseline and model across all runs")
 
-    baseline_std_delays = []
-    model_std_delays = []
-
-    means_in_sigma_interval = []
-    wasserstein_distances = []
+    baseline_mean_delays, model_mean_delays = [], []
+    baseline_std_delays, model_std_delays = [], []
+    means_in_sigma_interval, wasserstein_distances = [], []
 
     for msg_key in common_messages:
-        # calculate mean value of same messages
-        baseline_mean = np.mean(baseline_delays_by_message[msg_key])
-        model_mean = np.mean(model_delays_by_message[msg_key])
-        baseline_mean_delays.append(baseline_mean)
-        model_mean_delays.append(model_mean)
+        b = np.asarray(baseline_delays_by_message[msg_key], dtype=float)
+        m = np.asarray(model_delays_by_message[msg_key], dtype=float)
 
-        # calculate std value of same messages
-        baseline_std = np.std(baseline_delays_by_message[msg_key])
-        model_std = np.std(model_delays_by_message[msg_key])
-        baseline_std_delays.append(baseline_std)
-        model_std_delays.append(model_std)
+        # Means / stds
+        b_mean = float(np.mean(b))
+        m_mean = float(np.mean(m))
+        b_std = float(np.std(b, ddof=0))
+        m_std = float(np.std(m, ddof=0))
 
-        # calculate the one-sigma-interval
-        interval_lower = baseline_mean - abs(baseline_std)
-        interval_upper = baseline_mean + abs(baseline_std)
-        messages_in_interval = [interval_lower <= m <= interval_upper for m in model_delays_by_message[msg_key]]
-        mean_in_interval = np.mean(messages_in_interval)
-        means_in_sigma_interval.append(mean_in_interval)
+        baseline_mean_delays.append(b_mean)
+        model_mean_delays.append(m_mean)
+        baseline_std_delays.append(b_std)
+        model_std_delays.append(m_std)
 
-        wasserstein_dist = wasserstein_distance(baseline_delays_by_message[msg_key], model_delays_by_message[msg_key])
-        wasserstein_distances.append(wasserstein_dist)
+        # One-sigma interval coverage (fraction of model samples within baseline mean±std)
+        lo, hi = b_mean - abs(b_std), b_mean + abs(b_std)
+        means_in_sigma_interval.append(float(np.mean((m >= lo) & (m <= hi))))
 
-    # Convert to numpy arrays for calculations
-    baseline_mean_delays = np.array(baseline_mean_delays)
-    model_mean_delays = np.array(model_mean_delays)
-    baseline_std_delays = np.array(baseline_std_delays)
-    model_std_delays = np.array(model_std_delays)
+        # 1-Wasserstein (Earth Mover's Distance) between the two empirical samples
+        wasserstein_distances.append(float(wasserstein_distance(b, m)))
 
-    # Calculate RMSE and MAE between the mean delays
-    differences = model_mean_delays - baseline_mean_delays
-    rmse_means = np.sqrt(np.mean(differences ** 2))
-    nrmse_means = rmse_means / np.mean(baseline_mean_delays) if np.mean(baseline_mean_delays) > 0 else float('inf')
+    baseline_mean_delays = np.asarray(baseline_mean_delays, dtype=float)
+    model_mean_delays = np.asarray(model_mean_delays, dtype=float)
+    baseline_std_delays = np.asarray(baseline_std_delays, dtype=float)
+    model_std_delays = np.asarray(model_std_delays, dtype=float)
 
-    # Calculate RMSE and MAE between the std delays
-    differences_std = model_std_delays - baseline_std_delays
-    rmse_std = np.sqrt(np.mean(differences_std ** 2))
-    nrmse_std = rmse_std / np.mean(baseline_std_delays) if np.mean(baseline_std_delays) > 0 else float('inf')
+    # NRMSE on means
+    diff = model_mean_delays - baseline_mean_delays
+    rmse_means = float(np.sqrt(np.mean(diff ** 2)))
+    denom_means = float(np.mean(baseline_mean_delays))
+    nrmse_means = rmse_means / denom_means if denom_means > 0 else float("inf")
 
-    return nrmse_means, nrmse_std, np.mean(means_in_sigma_interval), np.mean(wasserstein_distances)
+    # NRMSE on stds (guard against denom==0)
+    diff_std = model_std_delays - baseline_std_delays
+    rmse_std = float(np.sqrt(np.mean(diff_std ** 2)))
+    denom_std = float(np.mean(baseline_std_delays))
+    nrmse_std = rmse_std / denom_std if denom_std > 0 else float("inf")
+
+    return (
+        nrmse_means,
+        nrmse_std,
+        float(np.mean(means_in_sigma_interval)),
+        float(np.mean(wasserstein_distances)),
+    )
 
 
 def calculate_delay_statistics(dataframes: List[pd.DataFrame]) -> Tuple[float, float, float]:
@@ -346,7 +349,6 @@ def analyze_results(results_folder: str) -> List[EvaluationResult]:
     # Find all CSV and JSON files
     csv_files = list(results_path.glob("messages_*.csv"))
     json_files = list(results_path.glob("statistics_*.json"))
-
 
     print(
         f"Found {len(csv_files)} standard CSV files, and {len(json_files)} JSON files in {results_folder}")
@@ -498,7 +500,8 @@ def analyze_results(results_folder: str) -> List[EvaluationResult]:
                     continue
 
                 # Calculate overall metrics across all runs
-                nrmse_means, nrmse_std, mean_in_one_sigma_interval, wasserstein_dist = calculate_metrics_grouped(baseline_dfs, dataframes)
+                nrmse_means, nrmse_std, mean_in_one_sigma_interval, wasserstein_dist = calculate_metrics_grouped(
+                    baseline_dfs, dataframes)
 
                 mean_execution_time = float(np.mean(execution_times))
 
@@ -656,7 +659,7 @@ def analyze_results_with_csv_export(results_folder: str, output_file: Optional[s
 
 # Example usage (add this to the end of your existing script):
 if __name__ == "__main__":
-    phase = 1
+    phase = 2
 
     # Create output directory
     Path('analysis_results').mkdir(exist_ok=True)
