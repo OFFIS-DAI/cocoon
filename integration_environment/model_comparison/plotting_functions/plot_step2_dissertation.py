@@ -1114,7 +1114,234 @@ def plot_execution_time_all_models_boxplot(
 
     print(f"Saved execution-time boxplot to: {out_path}")
 
+def plot_execution_time_pointplots_by_devices_and_duration(
+        df: pd.DataFrame,
+        outdir: Path,
+) -> None:
 
+    runtime_col = "execution_time_s"
+    if runtime_col not in df.columns:
+        print(f"[WARN] Column '{runtime_col}' not found – skipping runtime pointplots.")
+        return
+
+    df_rt = df.dropna(subset=[runtime_col]).copy()
+    if df_rt.empty:
+        print("[INFO] No runtime data available.")
+        return
+
+    # --- model labels ---
+    def label_row(r):
+        mt = str(r.get("model_type_norm", "")).strip().lower()
+        if mt == "meta_model":
+            return "Meta-Model"
+        elif mt == "channel":
+            return "Channel Model"
+        elif mt == "static_graph":
+            return "Static Graph Model"
+        elif mt == "detailed":
+            return "Detailed Model"
+        elif mt == "ideal":
+            return "Ideal Model"
+        return "Unknown"
+
+    df_rt["model_group"] = df_rt.apply(label_row, axis=1)
+    model_order = sorted(df_rt["model_group"].unique())
+
+    # --- duration labels ---
+    df_rt["duration_label"] = (
+        df_rt["scenario_duration"]
+        .astype(str)
+        .str.replace("ScenarioDuration.", "", regex=False)
+        .map({
+            "one_min": "1 min",
+            "five_min": "5 min",
+            "ten_min": "10 min",
+            "thirty_min": "30 min",
+        })
+    )
+
+    configure_plot_style(font_size=9)
+
+    fig, axes = plt.subplots(
+        ncols=2,
+        figsize=(10.5, 3.4),
+        sharey=True,
+    )
+
+    # -------------------------------------------------
+    # Left: execution time vs number of devices
+    # -------------------------------------------------
+    df_dev = df_rt.dropna(subset=["num_devices_num"])
+    sns.pointplot(
+        data=df_dev,
+        x="num_devices_num",
+        y=runtime_col,
+        hue="model_group",
+        hue_order=model_order,
+        errorbar=("ci", 95),
+        markers="o",
+        linestyles="-",
+        ax=axes[0],
+    )
+    axes[0].set_xlabel("Number of devices")
+    axes[0].set_ylabel("Execution time [s]")
+    #axes[0].set_yscale("log")
+    axes[0].legend_.remove()
+
+    # -------------------------------------------------
+    # Right: execution time vs scenario duration
+    # -------------------------------------------------
+    df_dur = df_rt.dropna(subset=["duration_label"])
+    duration_order = ["1 min", "5 min", "10 min", "30 min"]
+    duration_order = [d for d in duration_order if d in df_dur["duration_label"].unique()]
+
+    sns.pointplot(
+        data=df_dur,
+        x="duration_label",
+        y=runtime_col,
+        hue="model_group",
+        hue_order=model_order,
+        order=duration_order,
+        errorbar=("ci", 95),
+        markers="o",
+        linestyles="-",
+        ax=axes[1],
+    )
+    axes[1].set_xlabel("Scenario duration")
+    axes[1].set_ylabel("")
+    #axes[1].set_yscale("log")
+    axes[1].legend_.remove()
+
+    # -------------------------------------------------
+    # Shared legend (same style as duration plot)
+    # -------------------------------------------------
+    handles, labels = axes[1].get_legend_handles_labels()
+    fig.legend(
+        handles,
+        labels,
+        title="Model",
+        loc="lower center",
+        bbox_to_anchor=(0.5, -0.25),
+        ncol=len(model_order),
+        frameon=False,
+    )
+
+    plt.tight_layout(rect=[0, 0.05, 1, 1])
+    out_path = outdir / "step2_execution_time_pointplots_devices_and_duration.pdf"
+    plt.savefig(out_path, dpi=200, bbox_inches="tight")
+    plt.close(fig)
+
+    print(f"Saved combined runtime pointplots to: {out_path}")
+
+def plot_execution_time_by_traffic_complexity(
+        df: pd.DataFrame,
+        outdir: Path,
+) -> None:
+    """
+    Execution time vs increasing traffic complexity:
+      CBR -> Poisson -> CDSB
+    Lines: model_group (same mapping as other runtime plots)
+    """
+    runtime_col = "execution_time_s"
+    if runtime_col not in df.columns:
+        print(f"[WARN] Column '{runtime_col}' not found – skipping traffic-complexity runtime plot.")
+        return
+
+    # Need traffic_model (derived) or traffic_configuration
+    df_rt = df.dropna(subset=[runtime_col]).copy()
+    if df_rt.empty:
+        print("[INFO] No runtime data available for traffic-complexity plot.")
+        return
+
+    # Ensure traffic_model exists (your pipeline already creates it in add_derived_columns)
+    if "traffic_model" not in df_rt.columns:
+        df_rt["traffic_model"] = (
+            df_rt["traffic_configuration"]
+            .astype(str)
+            .str.replace("TrafficConfig.", "", regex=False)
+            .str.replace("evaluation_", "", regex=False)
+            .str.strip()
+        )
+
+    # --- model grouping (consistent with your later version: no substitution split) ---
+    def label_row(r):
+        mt = str(r.get("model_type_norm", "")).strip().lower()
+        if mt == "meta_model":
+            return "Meta-Model"
+        elif mt == "channel":
+            return "Channel Model"
+        elif mt == "static_graph":
+            return "Static Graph Model"
+        elif mt == "detailed":
+            return "Detailed Model"
+        elif mt == "ideal":
+            return "Ideal Model"
+        return "Unknown"
+
+    df_rt["model_group"] = df_rt.apply(label_row, axis=1)
+
+    # Keep only the three traffic classes of interest (case-insensitive contains)
+    # Adapt these matches if your labels differ (e.g., "cbr", "poisson", "cdsb")
+    def traffic_class(t: str) -> str | None:
+        tl = str(t).strip().lower()
+        if "cbr" in tl:
+            return "CBR"
+        if "poisson" in tl:
+            return "Poisson"
+        if "central_dsb" in tl:
+            return "CDSB"
+        print(tl)
+        return None
+
+    df_rt["traffic_complexity"] = df_rt["traffic_model"].map(traffic_class)
+    df_rt = df_rt.dropna(subset=["traffic_complexity"])
+
+    if df_rt.empty:
+        print("[INFO] No rows matched traffic classes (CBR/Poisson/CDSB).")
+        return
+
+    complexity_order = ["CBR", "Poisson", "CDSB"]
+    model_order = sorted(df_rt["model_group"].unique())
+
+    configure_plot_style(font_size=9)
+    plt.figure(figsize=(8, 3.2))
+
+    ax = sns.pointplot(
+        data=df_rt,
+        x="traffic_complexity",
+        y=runtime_col,
+        hue="model_group",
+        hue_order=model_order,
+        order=complexity_order,
+        errorbar=("ci", 95),
+        markers="o",
+        linestyles="-",
+    )
+
+    ax.set_xlabel("Traffic configuration")
+    ax.set_ylabel("Execution time [s]")
+    #ax.set_yscale("log")
+
+    # Legend outside (same style you used for the duration plot)
+    leg = ax.get_legend()
+    if leg is not None:
+        leg.remove()
+    handles, labels = ax.get_legend_handles_labels()
+    plt.gcf().legend(
+        handles,
+        labels,
+        title="Model",
+        loc="lower center",
+        bbox_to_anchor=(0.5, -0.25),
+        ncol=min(len(model_order), 5),
+        frameon=False,
+    )
+
+    plt.tight_layout(rect=[0, 0.01, 1, 1])
+    out_path = outdir / "step2_execution_time_by_traffic_complexity.pdf"
+    plt.savefig(out_path, dpi=200, bbox_inches="tight")
+    plt.close()
+    print(f"Saved runtime vs traffic-complexity plot to: {out_path}")
 
 def plot_accuracy_performance_tradeoff(
         df_overall: pd.DataFrame,
@@ -1206,7 +1433,7 @@ def summarize_step2(file_path: str) -> None:
     add_basic_info(df)
     validate_required_columns(df)
     df = add_derived_columns(df)
-
+    plot_execution_time_by_traffic_complexity(df, outdir)
     # Prepare views
     df_overall, metrics_present = prepare_overall_view(df)
     df_devices, model_type_order, hue_order = prepare_devices_subset(df)
@@ -1221,6 +1448,7 @@ def summarize_step2(file_path: str) -> None:
     plot_num_devices_influence(
         df_devices, metrics_present, model_type_order, hue_order, outdir
     )
+    plot_execution_time_pointplots_by_devices_and_duration(df, outdir)
 
     analyze_meta_model_substitution(df, metrics_present, outdir)
     plot_meta_model_relative_accuracy(df, metrics_present, outdir)

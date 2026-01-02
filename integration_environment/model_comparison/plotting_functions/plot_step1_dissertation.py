@@ -257,7 +257,7 @@ def summarize_step1(file_path: str) -> None:
             draw_heatmap(
                 abs_table_std,
                 cbar_label="(inverted) z-score",
-                fname="step1_hyperparam_metric_std_values.png",
+                fname="step1_hyperparam_metric_std_values.pdf",
                 vmin=-2.5, vmax=2.5, center=0, cmap="BuGn"
             )
         else:
