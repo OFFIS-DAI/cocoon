@@ -178,7 +178,7 @@ class ScenarioConfiguration:
                 f"-{self.traffic_configuration.name}-{self.network_type.name}-{self.cluster_distance_threshold.name}-"
                 f"{self.substitution.name}-{self.amount_of_scenarios_in_training_data.name}-{self.test_train_split.name}-"
                 f"{self.i_pupa.name}-{self.learning_rate_weighting.name}-{self.butterfly_threshold_value.name}"
-                f"-{self.substitution_priority.name}-{self.prediction_model_type}-{self.run}")
+                f"-{self.substitution_priority.name}-{self.prediction_model_type.name}-{self.run}")
 
     @property
     def omnet_config(self):

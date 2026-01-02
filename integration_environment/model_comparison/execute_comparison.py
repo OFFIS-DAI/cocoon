@@ -292,8 +292,11 @@ def get_central_composite_design(substitution: Substitution = Substitution.enabl
 
 def get_scenario_configurations_for_phase_1():
     scenario_configurations = []
-    existing_configuration_ids = [f.split('messages_')[1].split('.')[0] for f in os.listdir('results/phase1') if
-                                  'messages_' in f]
+    try:
+        existing_configuration_ids = [f.split('messages_')[1].split('.')[0] for f in os.listdir('results/phase1') if
+                                      'messages_' in f]
+    except FileNotFoundError:
+        existing_configuration_ids = []
     payload_size = PayloadSizeConfig.medium
     n_devices = NumDevices.five
     networks = [NetworkModelType.evaluation_5g, NetworkModelType.evaluation_ethernet]
@@ -721,7 +724,7 @@ async def run_benchmark_suite_screening(phase: int = None):
     else:
         requirement_analysis_configs = []
 
-    if phase == 'random_forest':
+    if phase == 3:
         add_on_random_forest_configs = get_scenario_configurations_for_phase_1()
         for conf in add_on_random_forest_configs:
             conf.prediction_model_type = PredictionModelType.random_forest_regressor
