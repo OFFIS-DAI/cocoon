@@ -208,7 +208,8 @@ def get_scenario_configurations_for_phase_2():
                                                                butterfly_threshold_value=ButterflyThresholdValue.center,
                                                                substitution_priority=SubstitutionPriority.none,
                                                                test_train_split=tts,
-                                                               substitution=Substitution.enabled)
+                                                               substitution=Substitution.enabled,
+                                                               prediction_model_type=PredictionModelType.decision_tree_regressor)
                                 if config.scenario_id not in existing_configuration_ids:
                                     scenario_configurations.append(config)
                         else:
@@ -325,7 +326,8 @@ def get_scenario_configurations_for_phase_1():
                                                butterfly_threshold_value=row['C-BT'],
                                                substitution_priority=row['C-SP'],
                                                test_train_split=row['C-TTS'],
-                                               substitution=Substitution.enabled)
+                                               substitution=Substitution.enabled,
+                                               prediction_model_type=PredictionModelType.decision_tree_regressor)
                 if config.scenario_id not in existing_configuration_ids:
                     scenario_configurations.append(config)
             for i, row in central_composite_design_without_substitution.iterrows():
@@ -342,7 +344,8 @@ def get_scenario_configurations_for_phase_1():
                                                substitution_priority=SubstitutionPriority.none,
                                                amount_of_scenarios_in_training_data=row['C-AT'],
                                                test_train_split=row['C-TTS'],
-                                               substitution=Substitution.disabled)
+                                               substitution=Substitution.disabled,
+                                               prediction_model_type=PredictionModelType.decision_tree_regressor)
                 if config.scenario_id not in existing_configuration_ids:
                     scenario_configurations.append(config)
 
@@ -406,7 +409,10 @@ def get_scheduler(scenario_configuration: ScenarioConfiguration,
                                   learning_rate_weighting=scenario_configuration.learning_rate_weighting.value,
                                   substitution_priority=scenario_configuration.substitution_priority.value,
                                   substitution_enabled=True
-                                  if scenario_configuration.substitution == Substitution.enabled else False
+                                  if scenario_configuration.substitution == Substitution.enabled else False,
+                                  use_random_forest=True
+                                  if scenario_configuration.prediction_model_type ==
+                                     PredictionModelType.random_forest_regressor else False
                                   )
     elif scenario_configuration.model_type == ModelType.meta_model_training:
         return MetaModelScheduler(container_mapping=container_mapping,
@@ -715,12 +721,21 @@ async def run_benchmark_suite_screening(phase: int = None):
     else:
         requirement_analysis_configs = []
 
+    if phase == 'random_forest':
+        add_on_random_forest_configs = get_scenario_configurations_for_phase_1()
+        for conf in add_on_random_forest_configs:
+            conf.prediction_model_type = PredictionModelType.random_forest_regressor
+    else:
+        add_on_random_forest_configs = []
+
     num_scen = (len(meta_model_training_configs) +
-                len(face_centered_central_composite_design_configs) + len(requirement_analysis_configs))
+                len(face_centered_central_composite_design_configs) + len(requirement_analysis_configs) +
+                len(add_on_random_forest_configs))
 
     print(f'Phase 0: {len(meta_model_training_configs)} scenarios for meta-model training.\n'
           f'Phase 1: {len(face_centered_central_composite_design_configs)} scenarios for meta-model optimization. \n'
-          f'Phase 2: {len(requirement_analysis_configs)} scenarios for requirement analysis. '
+          f'Phase 2: {len(requirement_analysis_configs)} scenarios for requirement analysis. \n'
+          f'Add on: {len(add_on_random_forest_configs)} scenarios for add-on analysis of random forest performance. \n'
           f'Worst case execution time: {num_scen * num_repetitions * 10} minutes /'
           f'{num_scen * num_repetitions * 10 / 60} hours.')
     for i, scenario_configuration in enumerate(meta_model_training_configs):
@@ -740,9 +755,14 @@ async def run_benchmark_suite_screening(phase: int = None):
             await run_scenario_config(scenario_configuration=scenario_configuration, run=r,
                                       phase=2, timeout_seconds=5 * 60)  # 5 minute timeout
 
+    for i, scenario_configuration in enumerate(add_on_random_forest_configs):
+        print(f'Run config {i}/{len(add_on_random_forest_configs)}')
+        await run_scenario_config(scenario_configuration=scenario_configuration, run=0,
+                                  phase=3, timeout_seconds=60 * 20)  # 20 minute timeout
+
 
 if __name__ == "__main__":
     # 0: meta-model training data generation
     # 1: meta-model optimization
     # 2: base model comparison with requirement analysis
-    asyncio.run(run_benchmark_suite_screening(phase=None))
+    asyncio.run(run_benchmark_suite_screening(phase=2))

@@ -348,7 +348,7 @@ class MetaModelScheduler(DetailedModelScheduler):
                  in_training_mode: bool = True, training_df: Optional[pd.DataFrame] = None,
                  cluster_distance_threshold: float = 5, scenario_duration_ms: int = 200 * 1000, i_pupa: int = 100,
                  learning_rate_weighting=0.5, butterfly_threshold_value: float = 0.8,
-                 substitution_priority: str = 'none', substitution_enabled=True):
+                 substitution_priority: str = 'none', substitution_enabled=True, use_random_forest=False):
         super().__init__(container_mapping=container_mapping,
                          inet_installation_path=inet_installation_path,
                          simu5G_installation_path=simu5G_installation_path,
@@ -364,7 +364,8 @@ class MetaModelScheduler(DetailedModelScheduler):
                                           i_pupa=i_pupa, alpha=learning_rate_weighting,
                                           butterfly_threshold_value=butterfly_threshold_value,
                                           substitution_priority=substitution_priority,
-                                          substitution_enabled=substitution_enabled)
+                                          substitution_enabled=substitution_enabled,
+                                          use_random_forest=use_random_forest)
         self.meta_model_only = False
         self.msg_id_to_msg = None
         self.meta_model_msg_counter = 0

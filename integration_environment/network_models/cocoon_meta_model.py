@@ -290,7 +290,8 @@ class CocoonMetaModel:
                  alpha: float = 0.3,
                  butterfly_threshold_value: float = 0.8,
                  substitution_priority: str = 'none',
-                 substitution_enabled: bool = True):
+                 substitution_enabled: bool = True,
+                 use_random_forest: bool = False):
         """
         Initialize cocoon model.
         """
@@ -316,7 +317,7 @@ class CocoonMetaModel:
         self.clustering_distance_threshold = cluster_distance_threshold
         self.cluster_centroids = {}  # {cluster_id: centroid_vector}
 
-        self.use_random_forest = False
+        self.use_random_forest = use_random_forest
 
         # DataFrame containing training data for the regressors
         self.training_df = None

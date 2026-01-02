@@ -142,6 +142,12 @@ class SubstitutionPriority(Enum):
     topology_stability = 'topology_stability'
 
 
+class PredictionModelType(Enum):
+    none = 'none'
+    decision_tree_regressor = 'decision_tree_regressor'
+    random_forest_regressor = 'random_forest_regressor'
+
+
 @dataclass
 class ScenarioConfiguration:
     payload_size: PayloadSizeConfig = PayloadSizeConfig.none
@@ -161,6 +167,8 @@ class ScenarioConfiguration:
     butterfly_threshold_value: ButterflyThresholdValue = ButterflyThresholdValue.none
     substitution_priority: SubstitutionPriority = SubstitutionPriority.none
 
+    prediction_model_type: PredictionModelType = PredictionModelType.none
+
     run: int = 0
 
     @property
@@ -170,7 +178,7 @@ class ScenarioConfiguration:
                 f"-{self.traffic_configuration.name}-{self.network_type.name}-{self.cluster_distance_threshold.name}-"
                 f"{self.substitution.name}-{self.amount_of_scenarios_in_training_data.name}-{self.test_train_split.name}-"
                 f"{self.i_pupa.name}-{self.learning_rate_weighting.name}-{self.butterfly_threshold_value.name}"
-                f"-{self.substitution_priority.name}-{self.run}")
+                f"-{self.substitution_priority.name}-{self.prediction_model_type}-{self.run}")
 
     @property
     def omnet_config(self):
@@ -179,9 +187,19 @@ class ScenarioConfiguration:
     @classmethod
     def from_scenario_id(cls, scenario_id: str) -> 'ScenarioConfiguration':
         try:
-            (model_str, devices_str, payload_str, duration_str, traffic_str, network_str, cl_thr_str, substitution_str,
-             amount_of_scen_str, test_train_split_str,
-             i_pupa, learning_rate, butterfly_threshold_value, substitution_priority, run) = scenario_id.split('-')
+            split_id = scenario_id.split('-')
+            if len(split_id) == 15:
+                (model_str, devices_str, payload_str, duration_str, traffic_str, network_str, cl_thr_str,
+                 substitution_str,
+                 amount_of_scen_str, test_train_split_str,
+                 i_pupa, learning_rate, butterfly_threshold_value, substitution_priority, run) = split_id
+                prediction_model_type = PredictionModelType.none
+            else:
+                (model_str, devices_str, payload_str, duration_str, traffic_str, network_str, cl_thr_str,
+                 substitution_str,
+                 amount_of_scen_str, test_train_split_str,
+                 i_pupa, learning_rate, butterfly_threshold_value,
+                 substitution_priority, prediction_model_type, run) = split_id
             return cls(
                 model_type=ModelType[model_str],
                 num_devices=NumDevices[devices_str],
@@ -197,6 +215,7 @@ class ScenarioConfiguration:
                 learning_rate_weighting=LearningRateWeighting[learning_rate],
                 butterfly_threshold_value=ButterflyThresholdValue[butterfly_threshold_value],
                 substitution_priority=SubstitutionPriority[substitution_priority],
+                prediction_model_type=prediction_model_type,
                 run=run
             )
         except (ValueError, KeyError) as e:
