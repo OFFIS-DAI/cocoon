@@ -193,13 +193,13 @@ class ScenarioConfiguration:
                  substitution_str,
                  amount_of_scen_str, test_train_split_str,
                  i_pupa, learning_rate, butterfly_threshold_value, substitution_priority, run) = split_id
-                prediction_model_type = PredictionModelType.none
+                prediction_model_type_str = PredictionModelType.none.name
             else:
                 (model_str, devices_str, payload_str, duration_str, traffic_str, network_str, cl_thr_str,
                  substitution_str,
                  amount_of_scen_str, test_train_split_str,
                  i_pupa, learning_rate, butterfly_threshold_value,
-                 substitution_priority, prediction_model_type, run) = split_id
+                 substitution_priority, prediction_model_type_str, run) = split_id
             return cls(
                 model_type=ModelType[model_str],
                 num_devices=NumDevices[devices_str],
@@ -215,7 +215,7 @@ class ScenarioConfiguration:
                 learning_rate_weighting=LearningRateWeighting[learning_rate],
                 butterfly_threshold_value=ButterflyThresholdValue[butterfly_threshold_value],
                 substitution_priority=SubstitutionPriority[substitution_priority],
-                prediction_model_type=prediction_model_type,
+                prediction_model_type=PredictionModelType[prediction_model_type_str],
                 run=run
             )
         except (ValueError, KeyError) as e:
