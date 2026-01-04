@@ -425,6 +425,7 @@ def analyze_results(results_folder: str) -> List[EvaluationResult]:
             test_train_split=config.test_train_split,
             amount_of_scenarios_in_training_data=config.amount_of_scenarios_in_training_data,
             substitution=config.substitution,
+            prediction_model_type=config.prediction_model_type,
             run=None  # Exclude run from grouping
         )
 
@@ -598,6 +599,7 @@ def save_evaluation_results_to_csv(
                 'traffic_configuration': result.scenario_config.traffic_configuration,
                 'network_type': result.scenario_config.network_type,
                 'mean_number_of_messages': result.mean_num_messages,
+                'prediction_model_type': result.scenario_config.prediction_model_type,
 
                 # Factor values (raw)
                 'cluster_distance_threshold': result.scenario_config.cluster_distance_threshold.value if result.scenario_config.cluster_distance_threshold else None,
@@ -683,7 +685,7 @@ if __name__ == "__main__":
         for model_type, count in model_counts.items():
             print(f"- {count} {model_type} simulations")
 
-        if phase == 1:
+        if phase == 1 or phase==3:
             # Print top scoring hyperparameter configurations
             metamodel_results = [r for r in results if r.model_type == ModelType.meta_model and r.score is not None]
             if metamodel_results:
