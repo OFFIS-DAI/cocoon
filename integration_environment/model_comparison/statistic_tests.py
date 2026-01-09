@@ -1,773 +1,249 @@
-import pandas as pd
+"""
+Revised statistical analysis for Step 1 (hyper-parameter impact).
+
+Key changes vs. the original script:
+- Uses a *single multi-factor model per metric* (hyper-parameters + scenario controls) to avoid confounding.
+- Uses transformations suited for skewed / bounded metrics (log, logit).
+- Separates substitution effects (ITT vs. PP) and reports substitution determinism.
+- Uses Type-II ANOVA (order-invariant) and reports partial eta^2 as effect size.
+- Applies Holm correction across hyper-parameters per metric.
+
+ADDON (Step 2):
+- Scenario-blocked paired model comparisons (best vs rest) per scenario group using sign-flip permutation tests.
+"""
+
+from __future__ import annotations
+
 from pathlib import Path
+from typing import Dict, List, Tuple, Optional
+
+import numpy as np
+import pandas as pd
 from statsmodels.formula.api import ols
 from statsmodels.stats.anova import anova_lm
-import itertools
 
 
-def load_results(phase: int):
-    """Load the aggregated results CSV file"""
-    results_path = Path(f"analysis_results/aggregated_results{phase}.csv")
-    df = pd.read_csv(results_path)
+# -----------------------------
+# Helpers: transformations
+# -----------------------------
+def safe_log(x: pd.Series, eps: float = 1e-9) -> pd.Series:
+    return np.log(np.clip(x.astype(float), a_min=eps, a_max=None))
+
+
+def safe_logit(x: pd.Series, eps: float = 1e-6) -> pd.Series:
+    x = x.astype(float)
+    x = np.clip(x, eps, 1 - eps)
+    return np.log(x / (1 - x))
+
+
+# -----------------------------
+# Core analysis (Step 1)
+# -----------------------------
+def load_and_filter(csv_path: Path, only_substitution_enabled: bool = True) -> pd.DataFrame:
+    df = pd.read_csv(csv_path)
+
+    required = [
+        "model_type",
+        "substitution_occurred",
+        "timeout_occurred",
+        "substitution",
+        "network_type",
+        "traffic_configuration",
+        "test_train",
+        "cluster_distance_threshold_name",
+        "batch_size_ipupa_name",
+        "learning_rate_weighting_name",
+        "butterfly_threshold_value_name",
+        "substitution_priority_name",
+    ]
+    missing = [c for c in required if c not in df.columns]
+    if missing:
+        raise ValueError(f"Missing required columns: {missing}")
+
+    # Step 1 focus: meta-model
+    df = df[df["model_type"].astype(str) == "meta_model"].copy()
+
+    # Substitution enabled subset
+    if only_substitution_enabled:
+        df = df[df["substitution"].astype(int) == 1].copy()
+
+    # Remove timeouts
+    df = df[df["timeout_occurred"].astype(bool) == False].copy()  # noqa: E712
+
+    # Clean factor strings (strip prefixes "foo.bar" -> "bar" if present)
+    for col in ["network_type", "traffic_configuration", "test_train"]:
+        df[col] = df[col].astype(str).str.replace(r"^[^.]*\.", "", regex=True)
+
     return df
 
 
-def create_factor_coding(df):
-    """
-    Create coded factor variables (-1, 0, +1) for analysis
-    """
-    df_coded = df.copy()
-
-    # Factor coding mappings based on your FCCCD design
-    factor_mappings = {
-        'cluster_distance_threshold': {1.0: -1, 3.0: 0, 5.0: 1},
-        'batch_size_ipupa': {50: -1, 100: 0, 150: 1},
-        'learning_rate_weighting': {0.1: -1, 0.5: 0, 0.9: 1},
-        'butterfly_threshold_value': {0.1: -1, 0.5: 0, 0.9: 1},
-        'substitution_priority': {'error_level': -1, 'none': 0, 'error_trend': 1}
-    }
-
-    # Create coded variables
-    for factor, mapping in factor_mappings.items():
-        if factor in df.columns:
-            coded_col = f"{factor}_coded"
-            df_coded[coded_col] = df_coded[factor].map(mapping)
-
-            # Check for unmapped values
-            unmapped = df_coded[df_coded[coded_col].isna()][factor].unique()
-            if len(unmapped) > 0:
-                print(f"Warning: Unmapped values for {factor}: {unmapped}")
-
-    return df_coded
-
-
-def simple_factor_effects_analysis(df, phase=1):
-    """
-    Simple one-way ANOVA analysis to determine factor effects on key responses
-    """
-    print("=" * 80)
-    print("SIMPLE FACTOR EFFECTS ANALYSIS")
-    print("=" * 80)
-
-    # Filter to meta-model data only
-    meta_data = df[df['model_type'] == 'meta_model'].copy()
-    print(f"Analyzing {len(meta_data)} meta-model scenarios")
-
-    if len(meta_data) == 0:
-        print("No meta-model data found!")
-        return
-
-    # Create coded variables
-    meta_data = create_factor_coding(meta_data)
-
-    # Key response variables
-    responses = {
-        'nrmse_mean': 'NRMSE (mean)',
-        'nrmse_std': 'NRMSE (std)',
-        'mean_in_one_sigma_interval': 'Mean in one-sigma-interval',
-        'substitution_message_index': 'Substitution Message Index',
-        'execution_time_s': 'Execution time (s)',
-        'score': 'Score'
-    }
-
-    # Factor variables (coded)
-    factors = {
-        'cluster_distance_threshold_coded': 'Cluster Distance Threshold',
-        'batch_size_ipupa_coded': 'Batch Size (I-Pupa)',
-        'learning_rate_weighting_coded': 'Learning Rate Weighting',
-        'butterfly_threshold_value_coded': 'Butterfly Threshold Value',
-        'substitution_priority_coded': 'Substitution Priority'
-    }
-
-    # Results storage
-    significance_results = {}
-    effect_directions = {}
-
-    print(f"\nAnalyzing {len(responses)} response variables across {len(factors)} factors...\n")
-
-    # Analyze each response variable
-    for response_col, response_name in responses.items():
-        if response_col not in meta_data.columns:
-            print(f"Warning: {response_name} not found in data")
-            continue
-
-        print("=" * 60)
-        print(f"RESPONSE: {response_name}")
-        print("=" * 60)
-
-        # Clean data for this response
-        clean_data = meta_data.dropna(subset=[response_col])
-        if len(clean_data) < 10:
-            print(f"Insufficient data for {response_name} (n={len(clean_data)})")
-            continue
-
-        response_results = {}
-        response_directions = {}
-
-        # Test each factor
-        for factor_col, factor_name in factors.items():
-            if factor_col not in clean_data.columns:
-                continue
-
-            # Remove rows with missing factor values
-            factor_data = clean_data.dropna(subset=[factor_col])
-            if len(factor_data) < 10:
-                continue
-
-            try:
-                # One-way ANOVA
-                formula = f"{response_col} ~ C({factor_col})"
-                model = ols(formula, data=factor_data).fit()
-                anova_result = anova_lm(model, typ=1)
-
-                p_value = anova_result['PR(>F)'].iloc[0]
-                f_stat = anova_result['F'].iloc[0]
-
-                # Store results
-                response_results[factor_name] = {
-                    'p_value': p_value,
-                    'f_stat': f_stat,
-                    'significant': p_value < 0.05
-                }
-
-                # Calculate means by factor level and effect direction
-                means = factor_data.groupby(factor_col)[response_col].agg(['mean', 'std', 'count'])
-
-                # Determine effect direction (for minimization objectives like RMSE, MAE, Memory)
-                if response_col in ['rmse_ms', 'mae_ms', 'memory_avg_mb']:
-                    # Lower is better
-                    best_level = means['mean'].idxmin()
-                    worst_level = means['mean'].idxmax()
-                    effect_direction = "Minimize" if best_level != worst_level else "No clear direction"
-                else:
-                    # For substitution_message_index, depends on interpretation
-                    # Assuming earlier substitution (lower index) is better
-                    best_level = means['mean'].idxmin()
-                    worst_level = means['mean'].idxmax()
-                    effect_direction = "Earlier substitution" if best_level != worst_level else "No clear direction"
-
-                response_directions[factor_name] = {
-                    'means': means,
-                    'best_level': best_level,
-                    'worst_level': worst_level,
-                    'effect_direction': effect_direction
-                }
-
-                # Print results
-                significance = ""
-                if p_value < 0.001:
-                    significance = "***"
-                elif p_value < 0.01:
-                    significance = "**"
-                elif p_value < 0.05:
-                    significance = "*"
-                else:
-                    significance = "NS"
-
-                print(f"{factor_name:30s}: F={f_stat:6.2f}, p={p_value:.4f} {significance}")
-
-                # Show means if significant
-                if p_value < 0.05:
-                    print(f"  Factor levels (coded -> mean ± std):")
-                    for level in sorted(means.index):
-                        level_desc = {-1: "Low (-1)", 0: "Center (0)", 1: "High (+1)"}.get(level, f"Level {level}")
-                        print(
-                            f"    {level_desc:12s}: {means.loc[level, 'mean']:8.3f} ± {means.loc[level, 'std']:6.3f} (n={means.loc[level, 'count']})")
-
-                    print()
-
-            except Exception as e:
-                print(f"{factor_name:30s}: Error - {str(e)}")
-
-        # Store results for this response
-        significance_results[response_name] = response_results
-        effect_directions[response_name] = response_directions
-        print()
-
-    # Create summary table
-    create_significance_summary(significance_results, effect_directions)
-
-    return significance_results, effect_directions
-
-
-def two_way_anova_analysis(df):
-    """
-    Two-way ANOVA analysis for Phase 2: examining effects of scenario parameters and model_type
-    """
-    print("=" * 80)
-    print("TWO-WAY ANOVA ANALYSIS - SCENARIO PARAMETERS vs MODEL TYPE")
-    print("=" * 80)
-
-    # Key response variables for Phase 2
-    responses = {
-        'mean': 'Mean Delay (ms)',
-        'std': 'Std Delay (ms)',
-        'mean_message_cv': 'Mean Message CV',
-        'execution_time_s': 'Execution Time (s)',
-        'nrmse_mean': 'NRMSE (mean)',
-        'nrmse_std': 'NRMSE (std)',
-        'mean_in_one_sigma_interval': 'Mean in one-sigma-interval'
-    }
-
-    # Scenario parameters
-    scenario_factors = {
-        'network_type': 'Network Type',
-        'payload_size': 'Payload Size',
-        'num_devices': 'Number of Devices',
-        'traffic_configuration': 'Traffic Configuration'
-    }
-
-    # Clean column names for analysis
-    df_clean = df.copy()
-    for col in ['network_type', 'payload_size', 'num_devices', 'traffic_configuration']:
-        if col in df_clean.columns:
-            df_clean[col] = df_clean[col].astype(str).str.replace(r'^[^.]*\.', '', regex=True)
-
-    print(f"Analyzing {len(df_clean)} total scenarios")
-    print(f"Model types: {df_clean['model_type'].value_counts().to_dict()}")
-    print()
-
-    # Results storage
-    anova_results = {}
-
-    # Analyze each response variable
-    for response_col, response_name in responses.items():
-        if response_col not in df_clean.columns:
-            print(f"Warning: {response_name} not found in data")
-            continue
-
-        print("=" * 70)
-        print(f"RESPONSE: {response_name}")
-        print("=" * 70)
-
-        # Clean data for this response
-        clean_data = df_clean.dropna(subset=[response_col])
-        if len(clean_data) < 20:
-            print(f"Insufficient data for {response_name} (n={len(clean_data)})")
-            continue
-
-        response_results = {}
-
-        # Test each scenario factor with model_type
-        for factor_col, factor_name in scenario_factors.items():
-            if factor_col not in clean_data.columns:
-                continue
-
-            # Remove rows with missing factor values
-            factor_data = clean_data.dropna(subset=[factor_col, 'model_type'])
-            if len(factor_data) < 20:
-                print(f"Insufficient data for {factor_name} (n={len(factor_data)})")
-                continue
-
-            try:
-                # Two-way ANOVA: Factor + Model_type + Interaction
-                formula = f"{response_col} ~ C({factor_col}) + C(model_type) + C({factor_col}):C(model_type)"
-                model = ols(formula, data=factor_data).fit()
-                anova_result = anova_lm(model, typ=2)
-
-                # Extract results for main effects and interaction
-                results = {}
-                for effect in anova_result.index:
-                    if 'Residual' not in effect:
-                        p_value = anova_result.loc[effect, 'PR(>F)']
-                        f_stat = anova_result.loc[effect, 'F']
-
-                        # Determine significance
-                        if p_value < 0.001:
-                            significance = "***"
-                        elif p_value < 0.01:
-                            significance = "**"
-                        elif p_value < 0.05:
-                            significance = "*"
-                        else:
-                            significance = "NS"
-
-                        results[effect] = {
-                            'f_stat': f_stat,
-                            'p_value': p_value,
-                            'significance': significance
-                        }
-
-                response_results[factor_name] = results
-
-                # Print results
-                print(f"\n{factor_name}:")
-                print(f"{'Effect':<40} {'F-stat':<10} {'p-value':<10} {'Sig':<5}")
-                print("-" * 70)
-
-                for effect, stats in results.items():
-                    effect_name = effect.replace('C(', '').replace(')', '').replace(':', ' x ')
-                    print(
-                        f"{effect_name:<40} {stats['f_stat']:<10.2f} {stats['p_value']:<10.4f} {stats['significance']:<5}")
-
-                # Show means for significant main effects
-                if f"C({factor_col})" in results and results[f"C({factor_col})"]["p_value"] < 0.05:
-                    print(f"\nMeans by {factor_name}:")
-                    factor_means = factor_data.groupby(factor_col)[response_col].agg(['mean', 'std', 'count'])
-                    for level in factor_means.index:
-                        print(
-                            f"  {level}: {factor_means.loc[level, 'mean']:.3f} ± {factor_means.loc[level, 'std']:.3f} (n={factor_means.loc[level, 'count']})")
-
-                if "C(model_type)" in results and results["C(model_type)"]["p_value"] < 0.05:
-                    print(f"\nMeans by Model Type:")
-                    model_means = factor_data.groupby('model_type')[response_col].agg(['mean', 'std', 'count'])
-                    for model in model_means.index:
-                        print(
-                            f"  {model}: {model_means.loc[model, 'mean']:.3f} ± {model_means.loc[model, 'std']:.3f} (n={model_means.loc[model, 'count']})")
-
-                # Show interaction means if significant
-                interaction_key = f"C({factor_col}):C(model_type)"
-                if interaction_key in results and results[interaction_key]["p_value"] < 0.05:
-                    print(f"\nInteraction means ({factor_name} x Model Type):")
-                    interaction_means = factor_data.groupby([factor_col, 'model_type'])[response_col].agg(
-                        ['mean', 'count'])
-                    for (factor_level, model_type), stats in interaction_means.iterrows():
-                        print(f"  {factor_level} x {model_type}: {stats['mean']:.3f} (n={stats['count']})")
-
-            except Exception as e:
-                print(f"Error analyzing {factor_name}: {str(e)}")
-
-        # Store results for this response
-        anova_results[response_name] = response_results
-        print()
-
-    # Create comprehensive summary
-    create_two_way_anova_summary(anova_results)
-
-    return anova_results
-
-
-def create_two_way_anova_summary(anova_results):
-    """
-    Create a summary table for two-way ANOVA results
-    """
-    print("=" * 80)
-    print("TWO-WAY ANOVA SUMMARY TABLE")
-    print("=" * 80)
-
-    # Get all scenario factors
-    all_factors = set()
-    for response_results in anova_results.values():
-        all_factors.update(response_results.keys())
-    all_factors = sorted(all_factors)
-
-    responses = sorted(anova_results.keys())
-
-    # Main effects summary
-    print("\nMAIN EFFECTS SIGNIFICANCE:")
-    print(f"{'Factor':<25}", end="")
-    for response in responses:
-        print(f"{response[:12]:<15}", end="")
-    print()
-    print("-" * (25 + 15 * len(responses)))
-
-    for factor in all_factors:
-        print(f"{factor:<25}", end="")
-        for response in responses:
-            if factor in anova_results[response]:
-                factor_results = anova_results[response][factor]
-                # Look for the main effect (not interaction)
-                main_effect_key = None
-                for key in factor_results.keys():
-                    if ':' not in key and 'model_type' not in key and factor.lower().replace(' ', '_') in key.lower():
-                        main_effect_key = key
-                        break
-
-                if main_effect_key and main_effect_key in factor_results:
-                    sig = factor_results[main_effect_key]['significance']
-                    print(f"{sig:<15}", end="")
-                else:
-                    print(f"{'--':<15}", end="")
-            else:
-                print(f"{'--':<15}", end="")
-        print()
-
-    # Model type effects summary
-    print(f"\nMODEL TYPE EFFECTS:")
-    print(f"{'Factor Context':<25}", end="")
-    for response in responses:
-        print(f"{response[:12]:<15}", end="")
-    print()
-    print("-" * (25 + 15 * len(responses)))
-
-    for factor in all_factors:
-        print(f"{factor:<25}", end="")
-        for response in responses:
-            if factor in anova_results[response]:
-                factor_results = anova_results[response][factor]
-                if "C(model_type)" in factor_results:
-                    sig = factor_results["C(model_type)"]['significance']
-                    print(f"{sig:<15}", end="")
-                else:
-                    print(f"{'--':<15}", end="")
-            else:
-                print(f"{'--':<15}", end="")
-        print()
-
-    # Interaction effects summary
-    print(f"\nINTERACTION EFFECTS:")
-    print(f"{'Factor x Model':<25}", end="")
-    for response in responses:
-        print(f"{response[:12]:<15}", end="")
-    print()
-    print("-" * (25 + 15 * len(responses)))
-
-    for factor in all_factors:
-        print(f"{factor}<25", end="")
-        for response in responses:
-            if factor in anova_results[response]:
-                factor_results = anova_results[response][factor]
-                # Look for interaction effect
-                interaction_key = None
-                for key in factor_results.keys():
-                    if ':' in key and 'model_type' in key:
-                        interaction_key = key
-                        break
-
-                if interaction_key and interaction_key in factor_results:
-                    sig = factor_results[interaction_key]['significance']
-                    print(f"{sig:<15}", end="")
-                else:
-                    print(f"{'--':<15}", end="")
-            else:
-                print(f"{'--':<15}", end="")
-        print()
-
-    print("\nLegend: *** p<0.001, ** p<0.01, * p<0.05, NS = not significant")
-
-
-def create_significance_summary(significance_results, effect_directions):
-    """
-    Create a summary table showing which factors are significant for which responses
-    """
-    print("=" * 80)
-    print("SIGNIFICANCE SUMMARY TABLE")
-    print("=" * 80)
-
-    # Get all factors
-    all_factors = set()
-    for response_results in significance_results.values():
-        all_factors.update(response_results.keys())
-    all_factors = sorted(all_factors)
-
-    # Create summary table
-    print(f"{'Factor':<30s}", end="")
-    responses = sorted(significance_results.keys())
-    for response in responses:
-        print(f"{response[:12]:<15s}", end="")
-    print()
-    print("-" * (30 + 15 * len(responses)))
-
-    for factor in all_factors:
-        print(f"{factor:<30s}", end="")
-        for response in responses:
-            if factor in significance_results[response]:
-                p_val = significance_results[response][factor]['p_value']
-                if p_val < 0.001:
-                    symbol = "***"
-                elif p_val < 0.01:
-                    symbol = "**"
-                elif p_val < 0.05:
-                    symbol = "*"
-                else:
-                    symbol = "NS"
-                print(f"{symbol:<15s}", end="")
-            else:
-                print(f"{'--':<15s}", end="")
-        print()
-
-    print("\nLegend: *** p<0.001, ** p<0.01, * p<0.05, NS = not significant")
-
-
-def hyperparameter_traffic_anova_analysis(df):
-    """
-    Two-way ANOVA analysis examining the combined effects of hyperparameters and traffic configuration
-    """
-    print("=" * 80)
-    print("HYPERPARAMETER x TRAFFIC CONFIGURATION ANOVA ANALYSIS")
-    print("=" * 80)
-
-    # Filter to meta-model data only
-    meta_data = df[df['model_type'] == 'meta_model'].copy()
-    print(f"Analyzing {len(meta_data)} meta-model scenarios")
-
-    if len(meta_data) == 0:
-        print("No meta-model data found!")
-        return
-
-    # Create coded variables for hyperparameters
-    factor_mappings = {
-        'cluster_distance_threshold': {1.0: -1, 3.0: 0, 5.0: 1},
-        'batch_size_ipupa': {50: -1, 100: 0, 150: 1},
-        'learning_rate_weighting': {0.1: -1, 0.5: 0, 0.9: 1},
-        'butterfly_threshold_value': {0.1: -1, 0.5: 0, 0.9: 1},
-        'substitution_priority': {'error_level': -1, 'none': 0, 'error_trend': 1},
-        'test_train_name': {'technology_split': -1, 'scale_split': 0, 'parametrization_split': 1}
-    }
-
-    for factor, mapping in factor_mappings.items():
-        if factor in meta_data.columns:
-            coded_col = f"{factor}_coded"
-            meta_data[coded_col] = meta_data[factor].map(mapping)
-
-    # Clean traffic configuration names
-    if 'traffic_configuration' in meta_data.columns:
-        meta_data['traffic_config_clean'] = meta_data['traffic_configuration'].astype(str).str.replace(r'^[^.]*\.', '',
-                                                                                                       regex=True)
-
-    # Key response variables
-    responses = {
-        'nrmse_mean': 'NRMSE (mean)',
-        'nrmse_std': 'NRMSE (std)',
-        'mean_in_one_sigma_interval': 'Mean in one-sigma-interval',
-        'substitution_message_index': 'Substitution Message Index',
-        'execution_time_s': 'Execution Time (s)',
-        'score': 'Score'
-    }
-
-    # Hyperparameter factors (coded)
-    hyperparameters = {
-        'cluster_distance_threshold_coded': 'Cluster Distance Threshold',
-        'batch_size_ipupa_coded': 'Batch Size (I-Pupa)',
-        'learning_rate_weighting_coded': 'Learning Rate Weighting',
-        'butterfly_threshold_value_coded': 'Butterfly Threshold Value',
-        'substitution_priority_coded': 'Substitution Priority',
-        'test_train_name_coded': 'Test-Train Configuration'
-    }
-
-    # Results storage
-    anova_results = {}
-
-    print(f"\nAnalyzing {len(responses)} response variables...")
-    print(f"Traffic configurations: {sorted(meta_data['traffic_config_clean'].unique())}")
-    print()
-
-    # Analyze each response variable
-    for response_col, response_name in responses.items():
-        if response_col not in meta_data.columns:
-            print(f"Warning: {response_name} not found in data")
-            continue
-
-        print("=" * 70)
-        print(f"RESPONSE: {response_name}")
-        print("=" * 70)
-
-        # Clean data for this response
-        clean_data = meta_data.dropna(subset=[response_col, 'traffic_config_clean'])
-        if len(clean_data) < 30:
-            print(f"Insufficient data for {response_name} (n={len(clean_data)})")
-            continue
-
-        response_results = {}
-
-        # Test each hyperparameter with traffic configuration
-        for hyperparam_col, hyperparam_name in hyperparameters.items():
-            if hyperparam_col not in clean_data.columns:
-                continue
-
-            factor_data = clean_data.dropna(subset=[hyperparam_col])
-            if len(factor_data) < 30:
-                continue
-
-            try:
-                # Two-way ANOVA: Hyperparameter + Traffic + Interaction
-                formula = f"{response_col} ~ C({hyperparam_col}) + C(traffic_config_clean) + C({hyperparam_col}):C(traffic_config_clean)"
-
-                try:
-                    model = ols(formula, data=factor_data).fit()
-                    anova_result = anova_lm(model, typ=2)
-                except Exception:
-                    # Try simpler model if interaction fails
-                    formula = f"{response_col} ~ C({hyperparam_col}) + C(traffic_config_clean)"
-                    model = ols(formula, data=factor_data).fit()
-                    anova_result = anova_lm(model, typ=2)
-
-                # Extract results
-                results = {}
-                for effect in anova_result.index:
-                    if 'Residual' not in effect:
-                        p_value = anova_result.loc[effect, 'PR(>F)']
-                        f_stat = anova_result.loc[effect, 'F']
-
-                        if pd.isna(p_value) or pd.isna(f_stat):
-                            continue
-
-                        # Determine significance
-                        if p_value < 0.001:
-                            significance = "***"
-                        elif p_value < 0.01:
-                            significance = "**"
-                        elif p_value < 0.05:
-                            significance = "*"
-                        else:
-                            significance = "NS"
-
-                        results[effect] = {
-                            'f_stat': f_stat,
-                            'p_value': p_value,
-                            'significance': significance
-                        }
-
-                response_results[hyperparam_name] = results
-
-                # Print results
-                print(f"\n{hyperparam_name}:")
-                print(f"{'Effect':<50} {'F-stat':<10} {'p-value':<10} {'Sig':<5}")
-                print("-" * 80)
-
-                for effect, stats in results.items():
-                    effect_name = effect.replace('C(', '').replace(')', '').replace('traffic_config_clean',
-                                                                                    'Traffic').replace(hyperparam_col,
-                                                                                                       hyperparam_name[
-                                                                                                       :15]).replace(
-                        ':', ' x ')
-                    print(
-                        f"{effect_name:<50} {stats['f_stat']:<10.2f} {stats['p_value']:<10.4f} {stats['significance']:<5}")
-
-                # Show significant main effects
-                hyperparam_effect_key = f"C({hyperparam_col})"
-                if hyperparam_effect_key in results and results[hyperparam_effect_key]["p_value"] < 0.05:
-                    print(f"\nMarginal means by {hyperparam_name}:")
-                    hyperparam_means = factor_data.groupby(hyperparam_col)[response_col].agg(['mean', 'std', 'count'])
-                    for level in sorted(hyperparam_means.index):
-                        level_desc = {-1: "Low (-1)", 0: "Center (0)", 1: "High (+1)"}.get(level, f"Level {level}")
-                        print(
-                            f"  {level_desc:12s}: {hyperparam_means.loc[level, 'mean']:8.3f} ± {hyperparam_means.loc[level, 'std']:6.3f} (n={hyperparam_means.loc[level, 'count']})")
-
-                traffic_effect_key = "C(traffic_config_clean)"
-                if traffic_effect_key in results and results[traffic_effect_key]["p_value"] < 0.05:
-                    print(f"\nMarginal means by Traffic Configuration:")
-                    traffic_means = factor_data.groupby('traffic_config_clean')[response_col].agg(
-                        ['mean', 'std', 'count'])
-                    for traffic in sorted(traffic_means.index):
-                        traffic_short = traffic[:25] + "..." if len(traffic) > 25 else traffic
-                        print(
-                            f"  {traffic_short:28s}: {traffic_means.loc[traffic, 'mean']:8.3f} ± {traffic_means.loc[traffic, 'std']:6.3f} (n={traffic_means.loc[traffic, 'count']})")
-
-                # Show interaction effects if significant
-                interaction_keys = [key for key in results.keys() if ':' in key]
-                for interaction_key in interaction_keys:
-                    if results[interaction_key]["p_value"] < 0.05:
-                        print(f"\nSignificant Interaction: {hyperparam_name} x Traffic Configuration")
-                        print(
-                            "This suggests hyperparameter effects depend on traffic type - consider traffic-specific tuning")
-
-            except Exception as e:
-                print(f"Error analyzing {hyperparam_name}: {str(e)}")
-
-        anova_results[response_name] = response_results
-        print()
-
-    # Create summary table
-    print("=" * 100)
-    print("SUMMARY TABLE")
-    print("=" * 100)
-
-    all_hyperparams = sorted(set().union(*[results.keys() for results in anova_results.values()]))
-    responses_list = sorted(anova_results.keys())
-
-    # Main effects summary
-    print("\nHYPERPARAMETER MAIN EFFECTS:")
-    print(f"{'Hyperparameter':<30}", end="")
-    for response in responses_list:
-        print(f"{response[:10]:<12}", end="")
-    print()
-    print("-" * (30 + 12 * len(responses_list)))
-
-    for hyperparam in all_hyperparams:
-        print(f"{hyperparam[:29]:<30}", end="")
-        for response in responses_list:
-            if hyperparam in anova_results[response]:
-                results = anova_results[response][hyperparam]
-                # Find hyperparameter main effect
-                hyperparam_key = [k for k in results.keys() if ':' not in k and 'traffic' not in k.lower()]
-                if hyperparam_key:
-                    sig = results[hyperparam_key[0]]['significance']
-                    print(f"{sig:<12}", end="")
-                else:
-                    print(f"{'--':<12}", end="")
-            else:
-                print(f"{'--':<12}", end="")
-        print()
-
-    # Traffic effects summary
-    print(f"\nTRAFFIC CONFIGURATION MAIN EFFECTS:")
-    print(f"{'Hyperparameter Context':<30}", end="")
-    for response in responses_list:
-        print(f"{response[:10]:<12}", end="")
-    print()
-    print("-" * (30 + 12 * len(responses_list)))
-
-    for hyperparam in all_hyperparams:
-        print(f"{hyperparam[:29]:<30}", end="")
-        for response in responses_list:
-            if hyperparam in anova_results[response]:
-                results = anova_results[response][hyperparam]
-                traffic_key = "C(traffic_config_clean)"
-                if traffic_key in results:
-                    sig = results[traffic_key]['significance']
-                    print(f"{sig:<12}", end="")
-                else:
-                    print(f"{'--':<12}", end="")
-            else:
-                print(f"{'--':<12}", end="")
-        print()
-
-    # Interaction effects summary
-    print(f"\nINTERACTION EFFECTS (Hyperparameter x Traffic):")
-    print(f"{'Hyperparameter':<30}", end="")
-    for response in responses_list:
-        print(f"{response[:10]:<12}", end="")
-    print()
-    print("-" * (30 + 12 * len(responses_list)))
-
-    for hyperparam in all_hyperparams:
-        print(f"{hyperparam[:29]:<30}", end="")
-        for response in responses_list:
-            if hyperparam in anova_results[response]:
-                results = anova_results[response][hyperparam]
-                interaction_keys = [k for k in results.keys() if ':' in k]
-                if interaction_keys:
-                    sig = results[interaction_keys[0]]['significance']
-                    print(f"{sig:<12}", end="")
-                else:
-                    print(f"{'--':<12}", end="")
-            else:
-                print(f"{'--':<12}", end="")
-        print()
-
-    print("\nLegend: *** p<0.001, ** p<0.01, * p<0.05, NS = not significant")
-    print("\nInterpretation:")
-    print("• Significant interactions suggest hyperparameter effects depend on traffic type")
-    print("• Non-significant interactions suggest consistent hyperparameter effects across traffic")
-
-    return anova_results
-
-
-def main(phase=1):
-    """
-    Main function to run the appropriate statistical analysis
-    """
-    print("Loading results...")
-    df = load_results(phase)
-
-    print(f"Loaded {len(df)} total records")
-    print(f"Model types: {df['model_type'].value_counts().to_dict()}")
-
-    if phase == 1:
-        # Run simple factor effects analysis for hyperparameters
-        print("\nRunning hyperparameter effects analysis...")
-        simple_factor_effects_analysis(df, phase)
-        hyperparameter_traffic_anova_analysis(df)
-    elif phase == 2:
-        # Run two-way ANOVA for scenario parameters vs model types
-        print("\nRunning two-way ANOVA analysis...")
-        two_way_anova_analysis(df)
-
-    print("\n" + "=" * 80)
-    print("ANALYSIS COMPLETE")
-    print("=" * 80)
+def substitution_determinism_report(df: pd.DataFrame) -> pd.DataFrame:
+    tab = (
+        df.groupby(["butterfly_threshold_value_name"])["substitution_occurred"]
+        .agg(["count", "mean"])
+        .rename(columns={"count": "n_configs", "mean": "substitution_rate"})
+        .reset_index()
+        .sort_values("butterfly_threshold_value_name")
+    )
+    return tab
+
+
+def fit_anova_for_metric(
+    df: pd.DataFrame,
+    metric: str,
+    view: str,
+    hp_factors: List[str],
+    controls: List[str],
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    d = df.copy()
+    if view == "pp":
+        d = d[d["substitution_occurred"].astype(bool) == True].copy()  # noqa: E712
+    elif view == "itt":
+        pass
+    else:
+        raise ValueError("view must be 'itt' or 'pp'")
+
+    # Transform response
+    if metric == "execution_time_s":
+        d["_y"] = safe_log(d[metric])
+    elif metric == "wasserstein_distance":
+        d["_y"] = safe_log(d[metric], eps=1e-6)
+    elif metric == "nrmse_mean":
+        d["_y"] = safe_log(d[metric], eps=1e-9)
+    elif metric == "mean_in_one_sigma_interval":
+        d["_y"] = safe_logit(d[metric], eps=1e-6)
+    else:
+        raise ValueError(f"Unknown metric: {metric}")
+
+    terms = []
+    terms += [f"C({c})" for c in hp_factors]
+    terms += [f"C({c})" for c in controls]
+    if view == "itt":
+        terms += ["C(substitution_occurred)"]
+
+    formula = "_y ~ " + " + ".join(terms)
+
+    model = ols(formula, data=d).fit()
+    anova = anova_lm(model, typ=2)  # Type-II (order-invariant)
+
+    if "Residual" not in anova.index:
+        raise RuntimeError("ANOVA table missing Residual row; check data and formula.")
+    ss_error = float(anova.loc["Residual", "sum_sq"])
+    anova["partial_eta2"] = anova["sum_sq"] / (anova["sum_sq"] + ss_error)
+
+    coef = (
+        pd.DataFrame(
+            {
+                "term": model.params.index,
+                "coef": model.params.values,
+                "std_err": model.bse.values,
+                "t": model.tvalues.values,
+                "p": model.pvalues.values,
+            }
+        )
+        .reset_index(drop=True)
+        .sort_values("p")
+    )
+
+    return anova.reset_index().rename(columns={"index": "factor"}), coef
+
+
+def summarize_hyperparam_effects(
+    anova: pd.DataFrame,
+    hp_factors: List[str],
+) -> pd.DataFrame:
+    wanted = {f"C({c})": c for c in hp_factors}
+    sub = anova[anova["factor"].isin(list(wanted.keys()))].copy()
+    sub["hyperparameter"] = sub["factor"].map(wanted)
+
+    p_raw = {row["hyperparameter"]: float(row["PR(>F)"]) for _, row in sub.iterrows()}
+    sub["p"] = sub["hyperparameter"].map(p_raw)
+
+    keep = ["hyperparameter", "df", "F", "PR(>F)", "p", "partial_eta2"]
+    sub = sub[keep].sort_values("p")
+    return sub
+
+
+
+def main():
+    # --------- minimal change: choose phase here ----------
+    PHASE = 1  # set to 2 for Step 2
+
+    if PHASE == 1:
+        csv_path = Path('analysis_results/aggregated_results1.csv')
+        outdir = Path('analysis_results/statistic_analysis1')
+        outdir.mkdir(parents=True, exist_ok=True)
+
+        df = load_and_filter(csv_path, only_substitution_enabled=True)
+
+        print("=" * 80)
+        print("STEP 1 – REVISED STATISTICAL ANALYSIS")
+        print(f"CSV: {csv_path}")
+        print(f"Rows (meta-model, filtered): {len(df)}")
+        print(f"Substitution occurred: {df['substitution_occurred'].mean():.3f} (rate)")
+        print("=" * 80)
+
+        det = substitution_determinism_report(df)
+        print("\nSubstitution rate by butterfly threshold:")
+        print(det.to_string(index=False))
+        det.to_csv(outdir / "substitution_rate_by_butterfly_threshold.csv", index=False)
+
+        hp_factors = [
+            "cluster_distance_threshold_name",
+            "batch_size_ipupa_name",
+            "learning_rate_weighting_name",
+            "butterfly_threshold_value_name",
+            "substitution_priority_name",
+        ]
+        controls = ["network_type", "traffic_configuration", "test_train"]
+
+        metrics = [
+            "execution_time_s",
+            "nrmse_mean",
+            "wasserstein_distance",
+            "mean_in_one_sigma_interval",
+        ]
+
+        views = ["itt", "pp"]
+
+        all_summaries = []
+        for metric in metrics:
+            for view in views:
+                anova, coef = fit_anova_for_metric(
+                    df=df,
+                    metric=metric,
+                    view=view,
+                    hp_factors=hp_factors,
+                    controls=controls,
+                )
+                anova.to_csv(outdir / f"anova_{metric}_{view}.csv", index=False)
+                coef.to_csv(outdir / f"coef_{metric}_{view}.csv", index=False)
+
+                hp_sum = summarize_hyperparam_effects(anova, hp_factors=hp_factors)
+                hp_sum.insert(0, "metric", metric)
+                hp_sum.insert(1, "view", view)
+                all_summaries.append(hp_sum)
+
+                print("\n" + "-" * 80)
+                print(f"Metric: {metric} | View: {view.upper()}")
+                print(hp_sum.to_string(index=False))
+
+        summary = pd.concat(all_summaries, ignore_index=True)
+        summary.to_csv(outdir / "hyperparameter_effects_summary.csv", index=False)
+
+        print("\n" + "=" * 80)
+        print(f"Saved outputs to: {outdir.resolve()}")
+        print("Files:")
+        print(" - substitution_rate_by_butterfly_threshold.csv")
+        print(" - anova_<metric>_<view>.csv")
+        print(" - coef_<metric>_<view>.csv")
+        print(" - hyperparameter_effects_summary.csv")
+        print("=" * 80)
+
+
+    else:
+        raise ValueError("PHASE must be 1 or 2")
 
 
 if __name__ == "__main__":
-    main(phase=1)
+    main()
