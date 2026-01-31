@@ -1,3 +1,24 @@
+"""
+MANGO Agent Roles for Communication Simulation Scenarios.
+
+This module defines various agent roles used in communication simulation
+scenarios. These roles implement specific behaviors for generating,
+receiving, and recording network traffic patterns.
+
+Available Roles:
+    - ResultsRecorderRole: Records send/receive events for analysis
+    - ConstantBitrateSenderRole: Generates messages at fixed intervals
+    - ReceiverRole: Handles incoming message reception
+    - AggregatorAgentRole: Aggregates data with configurable time windows
+    - FlexAgentRole: Flexible power generation agents for DEER use case
+
+The roles follow the MANGO agent framework patterns and can be combined
+to create complex multi-agent simulation scenarios.
+
+Author: Malin Radtke (OFFIS)
+License: MIT
+"""
+
 import asyncio
 import logging
 import random
@@ -450,21 +471,30 @@ class PoissonSenderRole(Role):
         self._message_counter = 0
         self._running = False
         self._scheduled_tasks = []
+        self.simulation_duration_s = scenario_config.scenario_duration.value / 1000
+        self._keepalive_task = None
 
-        random.seed = 1
+        random_seed = self._get_random_seed_from_config()
+        random.seed(random_seed)
 
         # Configure lambda rate based on traffic configuration
         self.lambda_rate = self._get_lambda_rate_from_config()
 
+    def _get_random_seed_from_config(self) -> float:
+        if (self.scenario_configuration.traffic_configuration == TrafficConfig.poisson_broadcast_1_mps_1
+                or self.scenario_configuration.traffic_configuration == TrafficConfig.poisson_broadcast_1_mpm_1):
+            return 1
+        else:
+            return 2
+
     def _get_lambda_rate_from_config(self) -> float:
         """Map traffic configuration to Poisson rate parameter."""
-        # You can extend this mapping based on your TrafficConfig enum
-        if self.scenario_configuration.traffic_configuration == TrafficConfig.poisson_broadcast_1_mps:
+        if (self.scenario_configuration.traffic_configuration == TrafficConfig.poisson_broadcast_1_mps_1 or
+                self.scenario_configuration.traffic_configuration == TrafficConfig.poisson_broadcast_1_mps_2):
             return 1.0  # 1 message per second on average
-        elif self.scenario_configuration.traffic_configuration == TrafficConfig.poisson_broadcast_1_mpm:
+        elif (self.scenario_configuration.traffic_configuration == TrafficConfig.poisson_broadcast_1_mpm_1 or
+              self.scenario_configuration.traffic_configuration == TrafficConfig.poisson_broadcast_1_mpm_2):
             return 1.0 / 60.0  # 1 message per minute on average
-        elif self.scenario_configuration.traffic_configuration == TrafficConfig.poisson_broadcast_4_mph:
-            return 4.0 / 3600.0  # 4 messages per hour on average
         else:
             return 1.0  # Default: 1 message per second
 
@@ -477,19 +507,26 @@ class PoissonSenderRole(Role):
     def on_ready(self):
         self._running = True
         self._schedule_all_poisson_events()
+        # Add a dummy periodic task to keep simulation alive
+        self._keepalive_task = self.context.schedule_periodic_task(
+            self._keepalive_tick, 60  # Check every minute
+        )
 
     def _schedule_all_poisson_events(self):
-        """Schedule all Poisson-distributed message sending events."""
+        """Schedule all Poisson-distributed message sending events at startup."""
         current_time = self.context.current_timestamp
+        event_count = 0
 
-        # Schedule events for the entire simulation duration
-        # You may want to set a reasonable upper bound based on your simulation length
-        max_simulation_time = current_time + 3600  # Example: 1 hour from start
+        logger.debug(f"Scheduling Poisson events from {current_time} to {self.simulation_duration_s}")
 
-        while current_time < max_simulation_time and self._running:
+        while current_time < self.simulation_duration_s and self._running:
             # Generate exponentially distributed inter-arrival time
             inter_arrival_time = expovariate(self.lambda_rate)
             current_time += inter_arrival_time
+
+            # Only schedule if still within simulation bounds
+            if current_time >= self.simulation_duration_s:
+                break
 
             # Schedule the message sending task
             task = self.context.schedule_timestamp_task(
@@ -497,6 +534,11 @@ class PoissonSenderRole(Role):
                 coroutine=self._send_message_to_all_receivers()
             )
             self._scheduled_tasks.append(task)
+            event_count += 1
+
+        expected_events = self.lambda_rate * self.simulation_duration_s
+        logger.info(f"Scheduled {event_count} Poisson events (expected: {expected_events:.1f}) "
+                    f"for {len(self.receiver_addresses)} receivers each")
 
     async def _send_message_to_all_receivers(self):
         """Send message to all receivers with event recording."""
@@ -508,8 +550,11 @@ class PoissonSenderRole(Role):
         for receiver in self.receiver_addresses:
             msg_id = f'{self.context.addr.protocol_addr}_{self._message_counter}'
 
+            # Generate payload
+            payload = generate_payload_with_byte_size(self.scenario_configuration.payload_size.value)
+
             await self.context.send_message(
-                TrafficMessage(msg_id=msg_id, payload=self.scenario_configuration.payload_size.value),
+                TrafficMessage(msg_id=msg_id, payload=payload),
                 receiver_addr=receiver,
             )
 
@@ -523,20 +568,199 @@ class PoissonSenderRole(Role):
             self.context.emit_event(event=event, event_source=self)
             self._message_counter += 1
 
-        logger.debug(f'Sent Poisson message at time {self.context.current_timestamp}, '
-                     f'lambda rate: {self.lambda_rate}, message count: {self._message_counter}')
+        logger.debug(f'Sent Poisson message at time {self.context.current_timestamp:.2f}s, '
+                     f'lambda rate: {self.lambda_rate}, total messages sent: {self._message_counter}')
+
+    async def _keepalive_tick(self):
+        """Dummy periodic task to keep simulation alive."""
+        # Check if we've reached simulation end
+        if self.context.current_timestamp >= self.simulation_duration_s:
+            logger.debug(f"Poisson sender reached simulation end at {self.context.current_timestamp}")
+            return
+
+        logger.debug(f"Poisson sender keepalive at {self.context.current_timestamp:.1f}s")
 
     async def on_stop(self):
-        """Clean shutdown."""
+        """Clean shutdown - cancel all scheduled tasks."""
         self._running = False
+
+        # Cancel keepalive task
+        if self._keepalive_task and not self._keepalive_task.done():
+            self._keepalive_task.cancel()
+            try:
+                await self._keepalive_task
+            except asyncio.CancelledError:
+                pass
+
         # Cancel all scheduled tasks
+        cancelled_count = 0
         for task in self._scheduled_tasks:
             if not task.done():
                 task.cancel()
+                cancelled_count += 1
                 try:
                     await task
                 except asyncio.CancelledError:
                     pass
+
+        if cancelled_count > 0:
+            logger.debug(f"Cancelled {cancelled_count} pending Poisson tasks")
+
+    def get_scheduled_event_count(self) -> int:
+        """Get the number of scheduled events."""
+        return len(self._scheduled_tasks)
+
+    def get_expected_message_count(self) -> float:
+        """Calculate expected number of messages for verification."""
+        return self.lambda_rate * self.simulation_duration_s * len(self.receiver_addresses)
+
+    def get_actual_message_count(self) -> int:
+        """Get actual number of messages sent."""
+        return self._message_counter
+
+
+class LocalDSbRole(Role):
+    def __init__(self, control_address: AgentAddress, scenario_config: ScenarioConfiguration):
+        super().__init__()
+        self.control_address = control_address
+        self.scenario_configuration = scenario_config
+        self._message_counter = 0
+        self._periodic_task = None
+
+    def setup(self):
+        self.context.subscribe_message(self, self.handle_traffic_message,
+                                       lambda content, meta: isinstance(content, TrafficMessage))
+
+    def on_start(self):
+        pass
+
+    def on_ready(self):
+        if self.scenario_configuration.traffic_configuration == TrafficConfig.central_dsb_1mpm_5s_50p:
+            frequency = 60
+        elif self.scenario_configuration.traffic_configuration == TrafficConfig.central_dsb_5mpm_30s_75:
+            frequency = 60/5
+        elif self.scenario_configuration.traffic_configuration == TrafficConfig.central_dsb_10mph_60s_25p:
+            frequency = (60*60)/10
+        else:
+            frequency = 60 - 30
+        self._periodic_task = self.context.schedule_periodic_task(self._send_data_to_control_role, frequency)
+
+    def handle_traffic_message(self, content: TrafficMessage, meta):
+        logger.debug(f'Traffic Message received at time {self.context.current_timestamp}.')
+        # initialize event for results recording
+        event = ReceiveMessage(msg_id=content.msg_id,
+                               time_receive_ms=round(self.context.current_timestamp * 1000))
+        self.context.emit_event(event=event, event_source=self)
+
+    async def _send_data_to_control_role(self):
+        if self.context.current_timestamp == 0:
+            return  # skip the first iteration
+        time_send = round(self.context.current_timestamp * 1000)
+        msg_id = f'{self.context.addr.protocol_addr}_{self._message_counter}'
+
+        # Send message
+        payload = generate_payload_with_byte_size(self.scenario_configuration.payload_size.value)
+        await self.context.send_message(
+            TrafficMessage(msg_id=msg_id, payload=payload),
+            receiver_addr=self.control_address,
+        )
+
+        # Record the sending event
+        event = SendMessage(
+            sender=self.context.addr,
+            receiver=self.control_address,
+            msg_id=msg_id,
+            payload_size_B=self.scenario_configuration.payload_size.value,
+            time_send_ms=time_send
+        )
+        self.context.emit_event(event=event, event_source=self)
+
+        self._message_counter += 1
+        logger.debug(f'Sent data to {self.control_address} at time {self.context.current_timestamp}')
+
+    async def on_stop(self):
+        """Clean shutdown - cancel the periodic task."""
+        if self._periodic_task and not self._periodic_task.done():
+            self._periodic_task.cancel()
+            try:
+                await self._periodic_task
+            except asyncio.CancelledError:
+                pass
+
+
+class ControlDSbRole(Role):
+    def __init__(self, scenario_config: ScenarioConfiguration):
+        super().__init__()
+        self.local_agent_addresses = []
+        self.scenario_configuration = scenario_config
+        self._message_counter = 0
+        self._scheduled_tasks = []
+        self._running = False
+
+        # get duration of calculation between receiving message and response and local allocation probability
+        self.calc_duration_s = 0
+        self.alloc_percent = 0
+        if self.scenario_configuration.traffic_configuration == TrafficConfig.central_dsb_1mpm_5s_50p:
+            self.calc_duration_s = 5
+            self.alloc_percent = 50
+        elif self.scenario_configuration.traffic_configuration == TrafficConfig.central_dsb_5mpm_30s_75:
+            self.calc_duration_s = 30
+            self.alloc_percent = 75
+        elif self.scenario_configuration.traffic_configuration == TrafficConfig.central_dsb_10mph_60s_25p:
+            self.calc_duration_s = 60
+            self.alloc_percent = 25
+
+        random.seed(1)
+
+    def setup(self):
+        self.context.subscribe_message(self, self.handle_traffic_message,
+                                       lambda content, meta: isinstance(content, TrafficMessage))
+
+    def handle_traffic_message(self, content: TrafficMessage, meta):
+        logger.debug(f'Traffic Message received at time {self.context.current_timestamp}.')
+        # initialize event for results recording
+        event = ReceiveMessage(msg_id=content.msg_id,
+                               time_receive_ms=round(self.context.current_timestamp * 1000))
+        self.context.emit_event(event=event, event_source=self)
+
+        agent_addr = AgentAddress(meta['sender_addr'], meta['sender_id'])
+
+        if agent_addr not in self.local_agent_addresses:
+            self.local_agent_addresses.append(agent_addr)
+
+        if random.random() < (self.alloc_percent/100):
+            self.context.schedule_timestamp_task(self.send_allocation_messages(agent_addr),
+                                                 (self.context.current_timestamp + self.calc_duration_s))
+
+    async def send_allocation_messages(self, addr: AgentAddress):
+        time_send = round(self.context.current_timestamp * 1000)
+        msg_id = f'{self.context.addr.protocol_addr}_{self._message_counter}'
+
+        # Send message
+        payload = generate_payload_with_byte_size(self.scenario_configuration.payload_size.value)
+        await self.context.send_message(
+            TrafficMessage(msg_id=msg_id, payload=payload),
+            receiver_addr=addr,
+        )
+
+        # Record the sending event
+        event = SendMessage(
+            sender=self.context.addr,
+            receiver=addr,
+            msg_id=msg_id,
+            payload_size_B=self.scenario_configuration.payload_size.value,
+            time_send_ms=time_send
+        )
+        self.context.emit_event(event=event, event_source=self)
+
+        self._message_counter += 1
+        logger.debug(f'Sent data to {addr} at time {self.context.current_timestamp}')
+
+    def on_start(self):
+        pass
+
+    def on_ready(self):
+        pass
 
 
 class UnicastSenderRole(Role):

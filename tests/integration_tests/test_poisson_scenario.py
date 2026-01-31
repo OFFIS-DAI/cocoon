@@ -23,8 +23,8 @@ my_codec.add_serializer(*TrafficMessage.__serializer__())
 async def run_with_ideal_communication():
     scenario_configuration = ScenarioConfiguration(model_type=ModelType.ideal,
                                                    scenario_duration=ScenarioDuration.one_min,
-                                                   traffic_configuration=TrafficConfig.poisson_broadcast_1_mps,
-                                                   num_devices=NumDevices.two)
+                                                   traffic_configuration=TrafficConfig.poisson_broadcast_1_mps_1,
+                                                   num_devices=NumDevices.five)
     results_recorder = ResultsRecorder(scenario_configuration=scenario_configuration)
 
     clock = ExternalClock(start_time=0)

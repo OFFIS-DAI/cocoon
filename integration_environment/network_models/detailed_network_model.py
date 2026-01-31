@@ -1,19 +1,86 @@
+"""
+Detailed Network Model with OMNeT++ Integration.
+
+This module provides the interface between the Python-based MANGO agent
+simulation and the OMNeT++ network simulator. It enables detailed communication
+simulation by:
+
+1. Starting and managing the OMNeT++ simulation process
+2. Establishing TCP socket communication with the custom MangoScheduler
+3. Sending message dispatch requests to OMNeT++
+4. Receiving message delivery notifications from OMNeT++
+5. Synchronizing simulation time between Python and OMNeT++
+
+The communication protocol uses length-prefixed JSON messages over TCP.
+
+Classes:
+    MessageProtocol: Handles low-level message framing over TCP.
+    OmnetConnection: Manages the OMNeT++ process and socket connection.
+    DetailedNetworkModel: High-level interface for message simulation.
+
+Author: Malin Radtke (OFFIS)
+License: MIT
+"""
+
 import asyncio
 import json
+import math
 import signal
 import socket
+import struct
 import threading
 import time
 import queue
 import logging
 import os
 import subprocess
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict
 
 from mango.container.external_coupling import ExternalAgentMessage
 
 logger = logging.getLogger(__name__)
 
+
+class MessageProtocol:
+    def __init__(self, socket_obj):
+        self.socket = socket_obj
+
+    def send_message(self, message: str) -> bool:
+        try:
+            message_bytes = message.encode('utf-8')
+            length = len(message_bytes)
+            length_bytes = struct.pack('>I', length)
+
+            # Send length then message
+            self.socket.sendall(length_bytes + message_bytes)
+            return True
+        except Exception as e:
+            logger.error(f"Error sending message: {e}")
+            return False
+
+    def receive_message(self) -> str:
+        # Read length first (4 bytes)
+        length_bytes = self._receive_exactly(4)
+        if not length_bytes:
+            return None
+
+        length = struct.unpack('>I', length_bytes)[0]
+
+        # Read the actual message
+        message_bytes = self._receive_exactly(length)
+        if not message_bytes:
+            return None
+
+        return message_bytes.decode('utf-8')
+
+    def _receive_exactly(self, num_bytes: int):
+        data = b''
+        while len(data) < num_bytes:
+            chunk = self.socket.recv(num_bytes - len(data))
+            if not chunk:
+                return None
+            data += chunk
+        return data
 
 class OmnetConnection:
     def __init__(self,
@@ -66,6 +133,8 @@ class OmnetConnection:
         # Flag to track if termination was acknowledged
         self.termination_acknowledged = False
 
+        self.protocol = None
+
     def initialize(self):
         """Initialize the connection and start OMNeT++ simulation"""
         try:
@@ -94,7 +163,7 @@ class OmnetConnection:
     def build_omnet_project(self):
         """Build the OMNeT++ project from the root directory"""
         try:
-            print("Building OMNeT++ project...")
+            logger.info("Building OMNeT++ project...")
 
             # Now run the normal build
             build_command = "make MODE=release all"
@@ -107,15 +176,15 @@ class OmnetConnection:
                 stderr=subprocess.PIPE
             )
 
-            print("OMNeT++ project built successfully")
+            logger.info("OMNeT++ project built successfully")
             return True
         except subprocess.CalledProcessError as e:
-            print(f"Error building OMNeT++ project: {e}")
-            print(f"Build stdout: {e.stdout.decode('utf-8')}")
-            print(f"Build stderr: {e.stderr.decode('utf-8')}")
+            logger.error(f"Error building OMNeT++ project: {e}")
+            logger.error(f"Build stdout: {e.stdout.decode('utf-8')}")
+            logger.error(f"Build stderr: {e.stderr.decode('utf-8')}")
             raise Exception(f"Failed to build OMNeT++ project: {e}")
         except Exception as e:
-            print(f"Unexpected error during build: {e}")
+            logger.error(f"Unexpected error during build: {e}")
             raise
 
     def start_omnet_simulation(self):
@@ -137,8 +206,8 @@ class OmnetConnection:
         try:
             omnet_ini_path = self.omnet_project_path
 
-            print(f"Starting OMNeT++ simulation with command: {command}")
-            print(f"Working directory: {omnet_ini_path}")
+            logger.info(f"Starting OMNeT++ simulation with command: {command}")
+            logger.info(f"Working directory: {omnet_ini_path}")
 
             omnet_process = subprocess.Popen(command,
                                              preexec_fn=os.setsid,
@@ -152,10 +221,10 @@ class OmnetConnection:
                 stdout, stderr = omnet_process.communicate()
                 error_msg = (f"OMNeT++ process failed to start.\nStdout: {stdout.decode('utf-8') if stdout else None}"
                              f"\nStderr: {stderr.decode('utf-8') if stderr else None}")
-                print(error_msg)
+                logger.error(error_msg)
                 raise Exception(error_msg)
 
-            print(f"OMNeT++ simulation started with PID: {omnet_process.pid}")
+            logger.info(f"OMNeT++ simulation started with PID: {omnet_process.pid}")
 
             # Give the simulator time to initialize and start listening for connections
             time.sleep(5)
@@ -163,7 +232,7 @@ class OmnetConnection:
             return omnet_process
 
         except Exception as e:
-            print(f"Error starting OMNeT++ simulation: {e}")
+            logger.error(f"Error starting OMNeT++ simulation: {e}")
             raise
 
     def connect_socket(self) -> bool:
@@ -177,9 +246,16 @@ class OmnetConnection:
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket.settimeout(self.socket_timeout)
 
+            # Increase buffer sizes
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1024 * 1024)
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1024 * 1024)
+
             logger.info(f"Connecting to OMNeT++ simulator at {self.socket_host}:{self.socket_port}")
             self.socket.connect((self.socket_host, self.socket_port))
             logger.info("Connected to OMNeT++ simulator")
+
+            # Initialize protocol
+            self.protocol = MessageProtocol(self.socket)
 
             # Start listener thread
             self.socket_running = True
@@ -193,20 +269,12 @@ class OmnetConnection:
                 logger.error(f"Expected INIT message, received: {init_msg}")
                 self.disconnect_socket()
                 return False
-            # Send simulation configuration including duration
-            config_msg = {
-                "simulation_duration": self.simulation_duration_ms
-            }
+
+            # Send simulation configuration
+            config_msg = {"simulation_duration": self.simulation_duration_ms}
             self.send_message(f"CONFIG|{json.dumps(config_msg)}")
 
             return True
-        except socket.timeout:
-            logger.error(f"Connection timed out after {self.socket_timeout} seconds")
-            return False
-        except ConnectionRefusedError:
-            logger.error(
-                f"Connection refused. Is the OMNeT++ simulator ready and listening on {self.socket_host}:{self.socket_port}?")
-            return False
         except Exception as e:
             logger.error(f"Error connecting to OMNeT++ simulator: {e}")
             return False
@@ -231,54 +299,42 @@ class OmnetConnection:
         logger.info("Disconnected from OMNeT++ simulator socket")
 
     def _listen_for_messages(self) -> None:
-        """
-        Background thread to listen for incoming messages from OMNeT++
-        """
         if not self.socket:
             logger.error("Cannot listen for messages: Socket not connected")
             return
 
         self.socket.settimeout(0.1)
-        message_buffer = ""
 
         while self.socket_running:
             try:
-                buffer = bytearray(4096)
-                bytes_read = self.socket.recv_into(buffer)
+                # Use select to check if data is available
+                import select
+                ready, _, _ = select.select([self.socket], [], [], 0.1)
 
-                if bytes_read > 0:
-                    message_buffer += buffer[:bytes_read].decode('utf-8')
+                if ready:
+                    message = self.protocol.receive_message()
 
-                    # Split by newlines to get complete messages
-                    lines = message_buffer.split('\n')
+                    if message is not None:
+                        logger.debug(f"Received message: {message}")
 
-                    # Process all complete messages (all but the last if it's incomplete)
-                    for i in range(len(lines) - 1):
-                        message = lines[i].strip()
-                        if message:  # Skip empty lines
-                            logger.debug(f"Received message: {message}")
+                        # Handle special messages
+                        if message == "TERM":
+                            logger.info("Received termination message from OMNeT++")
+                            self.socket_running = False
+                            self.termination_acknowledged = True
+                            break
+                        elif message.startswith("TERM_ACK"):
+                            logger.info("Received termination acknowledgment from OMNeT++")
+                            self.termination_acknowledged = True
 
-                            # Handle special messages
-                            if message == "TERM":
-                                logger.info("Received termination message from OMNeT++")
-                                self.socket_running = False
-                                break
-                            elif message.startswith("TERM_ACK"):
-                                logger.info("Received termination acknowledgment from OMNeT++")
-                                self.termination_acknowledged = True
+                        # Add to queue
+                        self.message_queue.put(message)
+                    else:
+                        # Connection closed
+                        logger.info("OMNeT++ simulator closed the connection")
+                        self.socket_running = False
+                        break
 
-                            # Add to queue
-                            self.message_queue.put(message)
-
-                    # Keep the last incomplete line in the buffer
-                    message_buffer = lines[-1]
-
-                elif bytes_read == 0:
-                    logger.info("OMNeT++ simulator closed the connection")
-                    self.socket_running = False
-                    break
-            except socket.timeout:
-                pass
             except Exception as e:
                 if self.socket_running:
                     logger.error(f"Error receiving message: {e}")
@@ -288,14 +344,12 @@ class OmnetConnection:
             time.sleep(0.01)
 
     def send_message(self, message: str) -> bool:
-        if not self.socket:
-            logger.error("Cannot send message: Socket not connected")
+        if not hasattr(self, 'protocol') or not self.protocol:
+            logger.error("Cannot send message: Protocol not initialized")
             return False
 
         try:
-            self.socket.sendall(message.encode('utf-8'))
-            logger.debug(f"Sent message: {message}")
-            return True
+            return self.protocol.send_message(message)
         except Exception as e:
             logger.error(f"Error sending message: {e}")
             return False
@@ -420,12 +474,13 @@ class OmnetConnection:
 
                 # Wait for process to terminate
                 self.omnet_process.wait(timeout=5)
-            except:
+            except (ProcessLookupError, OSError) as e:
                 # If it doesn't terminate, try SIGKILL
+                logger.debug(f"SIGTERM failed, trying SIGKILL: {e}")
                 try:
                     os.killpg(os.getpgid(self.omnet_process.pid), subprocess.signal.SIGKILL)
-                except:
-                    pass
+                except (ProcessLookupError, OSError):
+                    pass  # Process already terminated
 
             self.running = False
             self.omnet_process = None
@@ -438,6 +493,14 @@ class OmnetConnection:
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit"""
         self.cleanup()
+
+
+def get_time_from_waiting_message(message):
+    if '|' not in message:
+        return None
+    message_parts = message.split('|')
+    sim_time_omnet_s = float(message_parts[1])
+    return math.ceil(sim_time_omnet_s * 1000)
 
 
 class DetailedNetworkModel:
@@ -501,6 +564,8 @@ class DetailedNetworkModel:
         return success
 
     def waiting_for_messages_from_omnet(self) -> bool:
+        if self.omnet_connection.termination_acknowledged or not self.omnet_connection.socket_running:
+            return False
         messages_sent_but_not_received = [m for m in self.omnet_connection.message_ids_sent
                                           if m not in self.omnet_connection.message_ids_received]
         return len(messages_sent_but_not_received) != 0
@@ -528,7 +593,6 @@ class DetailedNetworkModel:
                 elif msg_type == 'RECEIVED':
                     # This would be the actual received message from OMNeT++
                     # Parse the delivered message data
-                    import json
                     data = json.loads(payload)
 
                     delivery_time = data.get('time_received', 0) / 1000  # Convert to seconds
@@ -552,7 +616,7 @@ class DetailedNetworkModel:
 
         return time_receive_to_message
 
-    async def handle_waiting_with_omnet(self, max_advance_ms, timeout_seconds=120):
+    async def handle_waiting_with_omnet(self, max_advance_ms, timeout_seconds=100):
         logger.info(f'Handle waiting for max advance {max_advance_ms / 1000}.')
         if not self.omnet_connection.running:
             logger.error('Error when handling waiting. ')
@@ -564,7 +628,7 @@ class DetailedNetworkModel:
             if self.terminated:
                 return {}
             if retry_count > 0:
-                logger.warning(f"Retrying waiting message for max advance {max_advance_ms/1000} "
+                logger.warning(f"Retrying waiting message for max advance {max_advance_ms / 1000} "
                                f"(attempt {retry_count + 1}/{3})")
 
             success = self.omnet_connection.send_waiting_message_to_omnet(max_advance_ms=max_advance_ms)
@@ -593,18 +657,60 @@ class DetailedNetworkModel:
                     break
 
                 messages = self.omnet_connection.get_all_messages()
+
+                # Track if we received any actual message deliveries in this batch
+                received_message_deliveries = False
+
+                # Process ALL messages first
                 for message in messages:
                     if message.startswith("WAITING_ACK"):
                         waiting_ack_received = True
                         logger.info("Received WAITING_ACK from OMNeT++")
-                        break
+                        omnet_time = get_time_from_waiting_message(message)
+                        if omnet_time >= max_advance_ms:
+                            # OMNeT++ has already waited "enough"
+                            waiting_complete_received = True
+                    elif message.startswith("WAITING"):
+                        omnet_time = get_time_from_waiting_message(message)
+                        if omnet_time:
+                            if omnet_time >= max_advance_ms:
+                                # OMNeT++ has the same or advanced time, therefore continue with advancing in time
+                                waiting_complete_received = True
+                            # Note: We'll handle the < max_advance_ms case after processing all messages
+                    else:
+                        # Process any received messages during waiting
+                        time_receive_to_message_new = await self._process_single_message(message)
+
+                        # If we got actual message deliveries, mark the flag
+                        if time_receive_to_message_new:
+                            received_message_deliveries = True
+                            for delivery_time, msgs in time_receive_to_message_new.items():
+                                if delivery_time not in time_receive_to_message:
+                                    time_receive_to_message[delivery_time] = []
+                                time_receive_to_message[delivery_time].extend(msgs)
+
+                # Now handle WAITING logic AFTER processing all messages
+                # Only send additional waiting messages if we haven't received any message deliveries
+                if not received_message_deliveries:
+                    for message in messages:
+                        if message.startswith("WAITING"):
+                            omnet_time = get_time_from_waiting_message(message)
+                            if omnet_time and omnet_time < max_advance_ms:
+                                if len(time_receive_to_message) == 0:
+                                    # send new message
+                                    await asyncio.sleep(1)  # Small delay before checking again
+                                    self.omnet_connection.send_waiting_message_to_omnet(max_advance_ms=max_advance_ms)
+
+                if len(time_receive_to_message) > 0 or not self.omnet_connection.socket_running:
+                    self.waiting_for_omnet = False
+                    return time_receive_to_message
 
                 if not waiting_ack_received:
                     await asyncio.sleep(0.01)  # Small delay before checking again
 
             if not waiting_ack_received:
                 logger.warning(f"Did not receive WAITING_ACK from OMNeT++ (attempt {retry_count + 1})")
-                if retry_count < 3 - 1:  # Not the last attempt
+                if retry_count < 3 - 1 and self.omnet_connection.socket_running:  # Not the last attempt and still running
                     continue  # Retry
                 else:
                     logger.error("Failed to receive WAITING_ACK after all retries")
@@ -622,18 +728,56 @@ class DetailedNetworkModel:
                     break
 
                 messages = self.omnet_connection.get_all_messages()
+
+                # Track if we received any actual message deliveries in this batch
+                received_message_deliveries = False
+
+                # Process ALL messages first
                 for message in messages:
-                    if message.startswith("WAITING"):
-                        waiting_complete_received = True
-                        logger.info("Received WAITING_COMPLETE from OMNeT++")
-                        break
+                    if message.startswith("WAITING_COMPLETE"):
+                        omnet_time = get_time_from_waiting_message(message)
+                        if omnet_time and omnet_time < max_advance_ms:
+                            # Will handle this after processing all messages
+                            pass
+                        else:
+                            waiting_complete_received = True
+                            logger.info("Received WAITING_COMPLETE from OMNeT++")
+                    elif message.startswith("WAITING"):
+                        omnet_time = get_time_from_waiting_message(message)
+                        if omnet_time:
+                            if omnet_time >= max_advance_ms:
+                                # OMNeT++ has the same or advanced time, therefore continue with advancing in time
+                                waiting_complete_received = True
+                            # Note: We'll handle the < max_advance_ms case after processing all messages
                     else:
                         # Process any received messages during waiting
                         time_receive_to_message_new = await self._process_single_message(message)
-                        for delivery_time, msgs in time_receive_to_message_new.items():
-                            if delivery_time not in time_receive_to_message:
-                                time_receive_to_message[delivery_time] = []
-                            time_receive_to_message[delivery_time].extend(msgs)
+                        if time_receive_to_message_new:
+                            received_message_deliveries = True
+                            for delivery_time, msgs in time_receive_to_message_new.items():
+                                if delivery_time not in time_receive_to_message:
+                                    time_receive_to_message[delivery_time] = []
+                                time_receive_to_message[delivery_time].extend(msgs)
+
+                # Now handle WAITING logic AFTER processing all messages
+                # Only send additional waiting messages if we haven't received any message deliveries
+                if not received_message_deliveries:
+                    for message in messages:
+                        if message.startswith("WAITING_COMPLETE"):
+                            omnet_time = get_time_from_waiting_message(message)
+                            if omnet_time and omnet_time < max_advance_ms:
+                                await asyncio.sleep(1)
+                                self.omnet_connection.send_waiting_message_to_omnet(max_advance_ms=max_advance_ms)
+                        elif message.startswith("WAITING"):
+                            omnet_time = get_time_from_waiting_message(message)
+                            if omnet_time and omnet_time < max_advance_ms:
+                                await asyncio.sleep(2)  # Small delay before checking again
+                                # send new message
+                                self.omnet_connection.send_waiting_message_to_omnet(max_advance_ms=max_advance_ms)
+
+                if len(time_receive_to_message) > 0 or not self.omnet_connection.socket_running:
+                    self.waiting_for_omnet = False
+                    return time_receive_to_message
 
                 if not waiting_complete_received:
                     await asyncio.sleep(0.01)  # Small delay before checking again
@@ -644,6 +788,9 @@ class DetailedNetworkModel:
                 break
             else:
                 logger.warning(f"Did not receive WAITING_COMPLETE from OMNeT++ (attempt {retry_count + 1})")
+                if not self.omnet_connection.socket_running or self.omnet_connection.termination_acknowledged:
+                    self.waiting_for_omnet = False
+                    return time_receive_to_message
                 if retry_count < 3 - 1:  # Not the last attempt
                     # Reset state for retry
                     time_receive_to_message = {}
@@ -675,7 +822,6 @@ class DetailedNetworkModel:
             elif msg_type == 'RECEIVED':
                 # This would be the actual received message from OMNeT++
                 # Parse the delivered message data
-                import json
                 data = json.loads(payload)
 
                 delivery_time = data.get('time_received', 0) / 1000  # Convert to seconds

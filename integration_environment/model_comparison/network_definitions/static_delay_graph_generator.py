@@ -230,7 +230,7 @@ def main():
             # Extract unique nodes
             nodes = extract_unique_nodes(df)
             print(f"\nFound {len(nodes)} unique nodes: {sorted(nodes)}")
-            nodes = [f'node{i}' for i in range(100)]
+            nodes = [f'node{i}' for i in range(50)]
 
             # Calculate delays
             print(f"\nCalculating pairwise delays...")

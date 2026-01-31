@@ -172,6 +172,16 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.settings/
+
+# OMNeT++ build artifacts and IDE files
 /cocoon_omnet_project/out/
 /cocoon_omnet_project/results/
 /cocoon_omnet_project/.cproject
@@ -179,3 +189,28 @@ cython_debug/
 /cocoon_omnet_project/.oppbuildspec
 /cocoon_omnet_project/.qtenvrc
 /cocoon_omnet_project/build_script.sh
+/cocoon_omnet_project/.cmdenv-log
+/cocoon_omnet_project/omnet_stdout.log
+/cocoon_omnet_project/omnet_stderr.log
+
+# Generated message files (auto-generated from .msg files)
+/cocoon_omnet_project/messages/*_m.cc
+/cocoon_omnet_project/messages/*_m.h
+
+# Test results
+/tests/integration_tests/results/
+
+# Experiment results (large data files)
+/integration_environment/model_comparison/results/
+/integration_environment/model_comparison/analysis_results/
+/integration_environment/model_comparison/field_trial_data/
+/stand_alone/results/
+
+# Data files
+*.csv
+!integration_environment/model_comparison/cocoon_training_data/*.csv
+!integration_environment/model_comparison/network_definitions/*.csv
+
+# OS specific files
+.DS_Store
+Thumbs.db

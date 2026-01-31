@@ -1,0 +1,9 @@
+msg_id,sender,receiver,payload_size_B,time_send_ms,time_receive_ms,actual_delay_ms,online_predicted_delay_ms,cluster_predicted_delay_ms,weighted_predicted_delay_ms,sender_average_outgoing_delay_ms,sender_average_incoming_delay_ms,sender_num_messages_sent_simultaneously,receiver_average_outgoing_delay_ms,receiver_average_incoming_delay_ms,receiver_num_messages_sent_simultaneously,network_average_delay_ms,network_num_messages_in_transit,network_num_busy_links,network_num_network_nodes,network_num_messages_sent_simultaneously
+msg_0,node0,node1,315,900000,900019.0,19.0,,,,,,4,,,0,,4,4,5,4
+msg_1,node0,node2,315,900000,900019.0,19.0,,,,,,4,,,0,,4,4,5,4
+msg_2,node0,node3,315,900000,900019.0,19.0,,,,,,4,,,0,,4,4,5,4
+msg_3,node0,node4,315,900000,900019.0,19.0,,,,,,4,,,0,,4,4,5,4
+msg_4,node0,node1,315,1800000,,,,,,19.0,,4,,19.0,0,19.0,4,4,5,4
+msg_5,node0,node2,315,1800000,,,,,,19.0,,4,,19.0,0,19.0,4,4,5,4
+msg_6,node0,node3,315,1800000,,,,,,19.0,,4,,19.0,0,19.0,4,4,5,4
+msg_7,node0,node4,315,1800000,,,,,,19.0,,4,,19.0,0,19.0,4,4,5,4

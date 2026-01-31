@@ -15,7 +15,10 @@ from integration_environment.model_comparison.execute_comparison import get_trai
 from integration_environment.results_recorder import ResultsRecorder
 from integration_environment.roles import ConstantBitrateSenderRole, ReceiverRole, ResultsRecorderRole
 from integration_environment.scenario_configuration import *
-from tests.integration_tests.utils import setup_logging, visualize_channel_model_graph, visualize_static_graph
+from tests.integration_tests.utils import (
+    setup_logging, visualize_channel_model_graph, visualize_static_graph,
+    INET_INSTALLATION_PATH, SIMU5G_INSTALLATION_PATH, OMNET_PROJECT_PATH, omnet_configured
+)
 
 logger = setup_logging()
 
@@ -52,14 +55,11 @@ async def run_scenario_with_ideal_communication():
     assert len(cbr_receiver_role.received_messages) > 0
 
 
-async def run_scenario_with_simple_channel_model():
+@pytest.mark.asyncio
+async def test_run_scenario_with_simple_channel_model():
     scenario_configuration = ScenarioConfiguration(model_type=ModelType.channel)
     results_recorder = ResultsRecorder(scenario_configuration=scenario_configuration)
 
-    top_file = '../../integration_environment/model_comparison/network_definitions/channel_simbench_lte.json'
-    with open(top_file, 'r') as file:
-        data = json.load(file)
-        top_dict = data['topology']
     clock = ExternalClock(start_time=0)
 
     container1 = create_external_coupling(addr='node1', codec=my_codec, clock=clock)
@@ -74,9 +74,35 @@ async def run_scenario_with_simple_channel_model():
         ResultsRecorderRole(results_recorder))
     container2.register(cbr_sender_role_agent)
 
+    node_top_dict = {
+        'nodes':
+            [
+                {
+                    'node_id': 'node1',
+                    'position': [100, 100],
+                    'processing_delay_ms': 1.0,
+                    'network': 'NAN1'
+                },
+                {
+                    'node_id': 'node2',
+                    'position': [50, 50],
+                    'processing_delay_ms': 1.0,
+                    'network': 'NAN1'
+                }
+            ],
+        'networks':
+            [
+                {
+                    'network_id': 'NAN1',
+                    'transmission_rate_bps': 100000000,
+                    'propagation_speed_mps': 300000000
+                }
+            ]
+    }
+
     communication_network_entity = ChannelModelScheduler(container_mapping={'node1': container1,
                                                                             'node2': container2},
-                                                         topology_dict=top_dict)
+                                                         topology_dict=node_top_dict)
 
     async with activate(container1, container2) as _:
         results_recorder.start_scenario_recording()
@@ -138,7 +164,7 @@ async def run_scenario_with_static_graph_model():
 async def test_run_scenario_with_detailed_communication_simulation():
     for run in range(3):
         scenario_configuration = ScenarioConfiguration(payload_size=PayloadSizeConfig.small,
-                                                       num_devices=NumDevices.two,
+                                                       num_devices=NumDevices.five,
                                                        model_type=ModelType.detailed,
                                                        scenario_duration=ScenarioDuration.one_min,
                                                        traffic_configuration=TrafficConfig.cbr_broadcast_1_mps,
@@ -154,10 +180,10 @@ async def test_run_scenario_with_detailed_communication_simulation():
             clock=clock)
 
         communication_network_entity = DetailedModelScheduler(container_mapping=container_mapping,
-                                                              inet_installation_path='/home/malin/cocoon_omnet_workspace/inet4.5/src',
-                                                              simu5G_installation_path='/home/malin/PycharmProjects/trace/Simu5G-1.2.2/src',
+                                                              inet_installation_path=INET_INSTALLATION_PATH,
+                                                              simu5G_installation_path=SIMU5G_INSTALLATION_PATH,
                                                               config_name=scenario_configuration.network_type.value,
-                                                              omnet_project_path='/home/malin/PycharmProjects/cocoon_DAI/cocoon_omnet_project/',
+                                                              omnet_project_path=OMNET_PROJECT_PATH,
                                                               scenario_duration_ms=scenario_configuration.scenario_duration.value,
                                                               )
 
@@ -170,7 +196,7 @@ async def test_run_scenario_with_detailed_communication_simulation():
 @pytest.mark.asyncio
 async def test_run_scenario_with_meta_model():
     scenario_configuration = ScenarioConfiguration(payload_size=PayloadSizeConfig.small,
-                                                   num_devices=NumDevices.two,
+                                                   num_devices=NumDevices.five,
                                                    model_type=ModelType.meta_model,
                                                    scenario_duration=ScenarioDuration.one_min,
                                                    traffic_configuration=TrafficConfig.cbr_broadcast_1_mps,
@@ -191,10 +217,10 @@ async def test_run_scenario_with_meta_model():
 
     communication_network_entity = (
         MetaModelScheduler(container_mapping=container_mapping,
-                           inet_installation_path='/home/malin/cocoon_omnet_workspace/inet4.5/src',
-                           simu5G_installation_path='/home/malin/PycharmProjects/trace/Simu5G-1.2.2/src',
+                           inet_installation_path=INET_INSTALLATION_PATH,
+                           simu5G_installation_path=SIMU5G_INSTALLATION_PATH,
                            config_name=scenario_configuration.network_type.value,
-                           omnet_project_path='/home/malin/PycharmProjects/cocoon_DAI/cocoon_omnet_project/',
+                           omnet_project_path=OMNET_PROJECT_PATH,
                            in_training_mode=False,
                            training_df=training_df,
                            cluster_distance_threshold=scenario_configuration.cluster_distance_threshold.value,

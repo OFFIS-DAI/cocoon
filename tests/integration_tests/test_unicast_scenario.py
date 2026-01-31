@@ -12,7 +12,9 @@ from integration_environment.roles import ConstantBitrateSenderRole, ReceiverRol
     PoissonSenderRole, UnicastSenderRole
 from integration_environment.scenario_configuration import ScenarioConfiguration, ModelType, \
     ScenarioDuration, NumDevices, TrafficConfig, NetworkModelType
-from tests.integration_tests.utils import setup_logging
+from tests.integration_tests.utils import (
+    setup_logging, INET_INSTALLATION_PATH, SIMU5G_INSTALLATION_PATH, OMNET_PROJECT_PATH
+)
 
 logger = setup_logging()
 
@@ -99,10 +101,10 @@ async def run_with_detailed_communication():
                 agent.add_role(unicast_role)
 
             communication_network_entity = DetailedModelScheduler(container_mapping=container_mapping,
-                                                                  inet_installation_path='/home/malin/cocoon_omnet_workspace/inet4.5/src',
+                                                                  inet_installation_path=INET_INSTALLATION_PATH,
                                                                   config_name=scenario_configuration.network_type.value,
-                                                                  simu5G_installation_path='/home/malin/PycharmProjects/trace/Simu5G-1.2.2/src',
-                                                                  omnet_project_path='/home/malin/PycharmProjects/cocoon_DAI/cocoon_omnet_project/',
+                                                                  simu5G_installation_path=SIMU5G_INSTALLATION_PATH,
+                                                                  omnet_project_path=OMNET_PROJECT_PATH,
                                                                   scenario_duration_ms=110*1000)
 
             # Set start time for all containers

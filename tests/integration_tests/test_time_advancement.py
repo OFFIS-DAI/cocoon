@@ -14,7 +14,9 @@ from integration_environment.results_recorder import ResultsRecorder
 from integration_environment.roles import ResultsRecorderRole, \
     AggregatorAgentRole, FlexAgentRole
 from integration_environment.scenario_configuration import *
-from tests.integration_tests.utils import setup_logging
+from tests.integration_tests.utils import (
+    setup_logging, INET_INSTALLATION_PATH, SIMU5G_INSTALLATION_PATH, OMNET_PROJECT_PATH
+)
 
 logger = setup_logging()
 
@@ -108,10 +110,10 @@ async def test_run_deer_scenario_with_different_models():
 
     communication_network_entity = (
         MetaModelScheduler(container_mapping=container_mapping,
-                           inet_installation_path='/home/malin/cocoon_omnet_workspace/inet4.5/src',
-                           simu5G_installation_path='/home/malin/PycharmProjects/trace/Simu5G-1.2.2/src',
+                           inet_installation_path=INET_INSTALLATION_PATH,
+                           simu5G_installation_path=SIMU5G_INSTALLATION_PATH,
                            config_name=scenario_configuration.network_type.value,
-                           omnet_project_path='/home/malin/PycharmProjects/cocoon_DAI/cocoon_omnet_project/',
+                           omnet_project_path=OMNET_PROJECT_PATH,
                            in_training_mode=False,
                            training_df=training_df,
                            cluster_distance_threshold=scenario_configuration.cluster_distance_threshold.value,
@@ -239,10 +241,10 @@ async def test_run_deer_scenario_with_different_models():
     aggregator_role.flex_agent_addresses = agent_addresses
 
     communication_network_entity = DetailedModelScheduler(container_mapping=container_mapping,
-                                                          inet_installation_path='/home/malin/cocoon_omnet_workspace/inet4.5/src',
+                                                          inet_installation_path=INET_INSTALLATION_PATH,
                                                           config_name=scenario_configuration.network_type.value,
-                                                          simu5G_installation_path='/home/malin/PycharmProjects/trace/Simu5G-1.2.2/src',
-                                                          omnet_project_path='/home/malin/PycharmProjects/cocoon_DAI/cocoon_omnet_project/',
+                                                          simu5G_installation_path=SIMU5G_INSTALLATION_PATH,
+                                                          omnet_project_path=OMNET_PROJECT_PATH,
                                                           scenario_duration_ms=scenario_configuration.scenario_duration.value)
 
     results_recorder.set_scheduler(communication_network_entity)

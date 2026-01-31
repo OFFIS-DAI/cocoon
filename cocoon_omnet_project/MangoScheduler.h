@@ -56,6 +56,74 @@ public:
     int getReceiverPort() const { return receiverPort; }
 };
 
+class SimpleMessageProtocol {
+private:
+    int socket_fd;
+
+    bool receiveExactly(void* buffer, size_t bytes) {
+        char* data = static_cast<char*>(buffer);
+        size_t total_received = 0;
+
+        while (total_received < bytes) {
+            ssize_t received = recv(socket_fd, data + total_received, bytes - total_received, 0);
+            if (received <= 0) {
+                return false;
+            }
+            total_received += received;
+        }
+        return true;
+    }
+
+    bool sendExactly(const void* buffer, size_t bytes) {
+        const char* data = static_cast<const char*>(buffer);
+        size_t total_sent = 0;
+
+        while (total_sent < bytes) {
+            ssize_t sent = send(socket_fd, data + total_sent, bytes - total_sent, 0);
+            if (sent <= 0) {
+                return false;
+            }
+            total_sent += sent;
+        }
+        return true;
+    }
+
+public:
+    SimpleMessageProtocol(int fd) : socket_fd(fd) {}
+
+    bool sendMessage(const std::string& message) {
+        uint32_t length = htonl(message.length());
+
+        if (!sendExactly(&length, sizeof(length))) {
+            return false;
+        }
+
+        return sendExactly(message.c_str(), message.length());
+    }
+
+    bool receiveMessage(std::string& message) {
+        uint32_t length_network;
+        if (!receiveExactly(&length_network, sizeof(length_network))) {
+            return false;
+        }
+
+        uint32_t length = ntohl(length_network);
+
+        if (length > 100 * 1024 * 1024) { // 100MB limit
+            return false;
+        }
+
+        std::vector<char> buffer(length);
+
+        if (!receiveExactly(buffer.data(), length)) {
+            return false;
+        }
+
+        message = std::string(buffer.data(), length);
+        return true;
+    }
+};
+
 // Structure to hold pending event data from listener thread
 struct PendingEventData {
     std::string messageId;
@@ -111,6 +179,8 @@ private:
 
     // Module management
     std::vector<cModule*> modules;
+
+    SimpleMessageProtocol* protocol;
 
     // Helper methods
     void setupServerSocket();

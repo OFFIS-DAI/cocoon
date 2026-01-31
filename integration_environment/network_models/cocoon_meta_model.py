@@ -1,3 +1,46 @@
+"""
+COCOON Meta-Model for Communication Simulation Approximation.
+
+This module implements the COCOON (Coupled Communication simulation with an
+Online trained meta-model) approach for approximating detailed communication
+simulations in Cyber-Physical Energy Systems (CPES).
+
+The meta-model follows a four-phase methodology inspired by butterfly metamorphosis:
+
+1. **EGG Phase**: Pre-training using hierarchical clustering and decision tree/random
+   forest regressors on historical communication data.
+
+2. **LARVA Phase**: Runtime message assignment to the closest historical cluster
+   using centroid-based distance calculation.
+
+3. **PUPA Phase**: Online training of an additional regressor that combines with
+   cluster predictions using exponential weighted moving average (EWMA).
+
+4. **BUTTERFLY Phase**: Automatic substitution of the detailed simulation when
+   prediction accuracy meets the configured threshold.
+
+Example:
+    >>> from cocoon_meta_model import CocoonMetaModel
+    >>> import pandas as pd
+    >>>
+    >>> # Initialize meta-model
+    >>> model = CocoonMetaModel(
+    ...     output_file_name='results.csv',
+    ...     mode=CocoonMetaModel.Mode.PRODUCTION,
+    ...     cluster_distance_threshold=5.0
+    ... )
+    >>>
+    >>> # Pre-train with historical data (EGG phase)
+    >>> training_data = pd.read_csv('training_data.csv')
+    >>> model.execute_egg_phase(training_data)
+    >>>
+    >>> # Process messages during simulation
+    >>> await model.process_observations()
+
+Author: Malin Radtke (OFFIS)
+License: MIT
+"""
+
 import copy
 import logging
 import math
@@ -14,8 +57,7 @@ from scipy.cluster.hierarchy import linkage, fcluster
 from scipy.spatial.distance import pdist
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.base import clone
-from sklearn.model_selection import GridSearchCV
-from sklearn.metrics import mean_squared_error, make_scorer
+from sklearn.ensemble import RandomForestRegressor
 
 logger = logging.getLogger(__name__)
 
@@ -174,8 +216,9 @@ class CocoonNetworkNode:
         # Count simultaneous messages
         num_messages_sent_simultaneously = len([msg for msg in self.messages_sent if msg.time_send_ms == time_ms])
 
-        self.node_state = NodeState(average_incoming_delay_ms, average_outgoing_delay_ms,
-                                    num_messages_sent_simultaneously)
+        self.node_state = NodeState(average_incoming_delay_ms=average_incoming_delay_ms,
+                                    average_outgoing_delay_ms=average_outgoing_delay_ms,
+                                    num_messages_sent_simultaneously=num_messages_sent_simultaneously)
 
         return copy.deepcopy(self.node_state)
 
@@ -236,7 +279,7 @@ class CocoonNetworkGraph:
         """Mark a message as received using only msg_id and current time."""
         # Find the message in global tracking
         if msg_id not in self.all_messages_by_id:
-            print(f"Warning: Message {msg_id} not found in global tracking")
+            logger.warning(f"Message {msg_id} not found in global tracking")
             return False
 
         message = self.all_messages_by_id[msg_id]
@@ -277,21 +320,56 @@ class CocoonNetworkGraph:
 
 class CocoonMetaModel:
     """
-    Meta-model called cocoon which is supposed to approximate the detailed simulation.
+    COCOON Meta-Model for approximating detailed communication simulations.
+
+    This class implements the four-phase COCOON methodology (EGG, LARVA, PUPA,
+    BUTTERFLY) to progressively learn and predict message delays in communication
+    networks, eventually substituting the detailed simulation entirely.
+
+    The meta-model maintains an internal graph representation of the network,
+    tracking message flows and network state to make accurate delay predictions.
+
+    Attributes:
+        network_graph: Internal graph representation of network nodes and messages.
+        training_df: DataFrame containing pre-training data from EGG phase.
+        model_for_cluster_id: Dictionary mapping cluster IDs to trained regressors.
+        online_model: Online-trained regressor updated during PUPA phase.
+        message_observations: Dictionary tracking all processed message observations.
+        substitution_threshold_reached: Boolean indicating if BUTTERFLY phase is active.
     """
 
     class Mode(Enum):
-        TRAINING = 0
-        PRODUCTION = 1
+        """Operating mode for the meta-model."""
+        TRAINING = 0    # Collect training data without predictions
+        PRODUCTION = 1  # Active prediction and potential substitution
 
     def __init__(self, output_file_name: str, mode: Mode = Mode.TRAINING,
                  cluster_distance_threshold: float = 5,
                  i_pupa: int = 10,
                  alpha: float = 0.3,
                  butterfly_threshold_value: float = 0.8,
-                 substitution_priority: str = 'none'):
+                 substitution_priority: str = 'none',
+                 substitution_enabled: bool = True,
+                 use_random_forest: bool = False):
         """
-        Initialize cocoon model.
+        Initialize the COCOON meta-model.
+
+        Args:
+            output_file_name: Path for saving observation results to CSV.
+            mode: Operating mode (TRAINING or PRODUCTION).
+            cluster_distance_threshold: Distance threshold for hierarchical clustering
+                in the EGG phase. Lower values create more clusters.
+            i_pupa: Batch size for PUPA phase - number of messages between
+                online model retraining.
+            alpha: Smoothing parameter for EWMA error calculation (0 < alpha <= 1).
+                Higher values give more weight to recent errors.
+            butterfly_threshold_value: Confidence threshold (0-1) for triggering
+                simulation substitution in BUTTERFLY phase.
+            substitution_priority: Factor to prioritize in substitution decision.
+                Options: 'none', 'error_trend', 'error_level', 'cluster_distance',
+                'topology_stability'.
+            substitution_enabled: If False, never substitute even if threshold reached.
+            use_random_forest: Use Random Forest instead of Decision Tree regressors.
         """
 
         """
@@ -301,6 +379,7 @@ class CocoonMetaModel:
         self.mode = mode
         self.substitution_info = SubstitutionInfo()
         self.message_index = 0
+        self.substitution_enabled = substitution_enabled
 
         """
         Internal graph model 
@@ -314,11 +393,13 @@ class CocoonMetaModel:
         self.clustering_distance_threshold = cluster_distance_threshold
         self.cluster_centroids = {}  # {cluster_id: centroid_vector}
 
+        self.use_random_forest = use_random_forest
+
         # DataFrame containing training data for the regressors
         self.training_df = None
         # Dictionary containing all pre-trained regressors on historical data
         self.model_for_cluster_id = {}
-        self.online_models_for_cluster_id = {}
+        self.online_model = None
         # create empty dictionary in order track observations for prediction training
         self.message_observations: Dict[str, MessageObservation] = {}
         # define variables for learning
@@ -367,8 +448,21 @@ class CocoonMetaModel:
         training_df[self.object_variables] = training_df[self.object_variables].fillna(0)
 
         self.training_df = training_df
+
+        # make df smaller for clustering
+        reduced_df = training_df.copy()
+        reduced_df.drop_duplicates(inplace=True)
+        if len(reduced_df) > 1000:
+            reduced_df = reduced_df.sample(n=1000, random_state=42)
+
+        # Identify non-constant features
+        feature_vars = reduced_df[self.object_variables].var()
+        non_constant_features = feature_vars[feature_vars > 0].index.tolist()
+
+        logger.info(f"Removing constant features: {set(self.object_variables) - set(non_constant_features)}")
+
         # calculate pairwise distances with squared Euclidean distance metric
-        dis_matrix = pdist(training_df[self.object_variables], metric='seuclidean')
+        dis_matrix = pdist(reduced_df[non_constant_features], metric='seuclidean')
 
         # Calculate linkages with hierarchical clustering (centroid linkage)
         linkage_matrix_centroid = linkage(dis_matrix, method='centroid')  # centroid linkage
@@ -376,19 +470,30 @@ class CocoonMetaModel:
         label_cen = fcluster(linkage_matrix_centroid, t=self.clustering_distance_threshold, criterion='distance')
 
         # Add cluster labels to the dataframe
-        training_df['cluster_cen'] = label_cen.tolist()
+        reduced_df['cluster_cen'] = label_cen.tolist()
 
-        self.compute_cluster_centroids(training_df)
+        self.compute_cluster_centroids(reduced_df)
 
         # Train a regression model for each cluster
-        for cluster_id in training_df['cluster_cen'].unique():
+        for cluster_id in reduced_df['cluster_cen'].unique():
             # Select historical data for the current cluster
-            cluster_data = training_df[training_df['cluster_cen'] == cluster_id]
+            cluster_data = reduced_df[reduced_df['cluster_cen'] == cluster_id]
 
             # Extract features (X) and target (y) for the current cluster
             X = cluster_data[self.model_features]
             y = cluster_data['actual_delay_ms']
-            reg = DecisionTreeRegressor(random_state=42)
+            if self.use_random_forest:
+                reg = RandomForestRegressor(
+                    n_estimators=100,  # Number of trees in the forest
+                    max_depth=5,  # Prevent overfitting
+                    min_samples_split=5,  # Minimum samples required to split
+                    min_samples_leaf=2,  # Minimum samples in leaf nodes
+                    max_features='sqrt',  # Number of features to consider for splits
+                    random_state=42,
+                    n_jobs=-1  # Use all available cores
+                )
+            else:
+                reg = DecisionTreeRegressor(random_state=42)
 
             reg.fit(X, y)
 
@@ -490,18 +595,27 @@ class CocoonMetaModel:
                 # Extract features (X) and target (y)
                 X = message_observations_as_df[self.model_features]
                 y = message_observations_as_df['actual_delay_ms']
-                reg = clone(self.model_for_cluster_id[closest_cluster])
-                reg.fit(X, y)
-                self.online_models_for_cluster_id[closest_cluster] = reg
+                if self.use_random_forest:
+                    self.online_model = RandomForestRegressor(
+                        n_estimators=50,  # Fewer trees for faster online training
+                        max_depth=8,
+                        min_samples_split=3,
+                        min_samples_leaf=2,
+                        max_features='sqrt',
+                        random_state=42,
+                        n_jobs=-1
+                    )
+                else:
+                    self.online_model = clone(self.model_for_cluster_id[closest_cluster])
+                self.online_model.fit(X, y)
 
         # Make online prediction if model exists
-        if (closest_cluster in self.online_models_for_cluster_id and
-                self.online_models_for_cluster_id[closest_cluster] is not None):
+        if self.online_model is not None:
             # Create DataFrame correctly with feature values as a dictionary
             prediction_dict = {var: variables_dict[var] for var in self.model_features}
             prediction_data = pd.DataFrame([prediction_dict])
 
-            online_prediction = int(self.online_models_for_cluster_id[closest_cluster].predict(prediction_data)[0])
+            online_prediction = int(self.online_model.predict(prediction_data)[0])
             logger.info(f'Predicted delay time online: d_on_pred = {online_prediction}')
 
         weighted_pred = None
@@ -662,7 +776,7 @@ class CocoonMetaModel:
         self.substitution_threshold_reached = combined_score >= self.butterfly_threshold_value
 
         if self.substitution_threshold_reached and not self.substitution_info.occurred:
-            print('--------------SUBSTITUTION--------------')
+            logger.info('SUBSTITUTION THRESHOLD REACHED - Meta-model taking over')
             self.substitution_info = SubstitutionInfo(
                 occurred=True,
                 message_index=self.message_index,
@@ -809,7 +923,7 @@ class CocoonMetaModel:
                                                                            online_predicted_delay_ms=d_on_pred,
                                                                            weighted_predicted_delay_ms=d_w_pred)
 
-        if self.mode == self.Mode.PRODUCTION and self.message_index >= self.i_pupa:
+        if self.mode == self.Mode.PRODUCTION and self.message_index >= self.i_pupa and self.substitution_enabled:
             if self.substitution_threshold_reached:
                 # threshold has already been reached -> return True
                 return True
@@ -828,7 +942,9 @@ class CocoonMetaModel:
                 'time_send_ms': msg_obs.time_send_ms,
                 'time_receive_ms': msg_obs.time_receive_ms if msg_obs.time_receive_ms != math.inf else None,
                 'actual_delay_ms': msg_obs.actual_delay_ms if msg_obs.actual_delay_ms != math.inf else None,
-                'predicted_delay_ms': msg_obs.weighted_predicted_delay_ms if msg_obs.weighted_predicted_delay_ms != math.inf else None
+                'online_predicted_delay_ms': msg_obs.online_predicted_delay_ms if msg_obs.online_predicted_delay_ms != math.inf else None,
+                'cluster_predicted_delay_ms': msg_obs.cluster_predicted_delay_ms if msg_obs.cluster_predicted_delay_ms != math.inf else None,
+                'weighted_predicted_delay_ms': msg_obs.weighted_predicted_delay_ms if msg_obs.weighted_predicted_delay_ms != math.inf else None
             }
             obs_dict.update(msg_obs.sender_node_state.get_as_sender_node_dict())
             obs_dict.update(msg_obs.receiver_node_state.get_as_receiver_node_dict())
@@ -848,7 +964,9 @@ class CocoonMetaModel:
                 'time_send_ms': msg_obs.time_send_ms,
                 'time_receive_ms': msg_obs.time_receive_ms if msg_obs.time_receive_ms != math.inf else None,
                 'actual_delay_ms': msg_obs.actual_delay_ms if msg_obs.actual_delay_ms != math.inf else None,
-                'predicted_delay_ms': msg_obs.weighted_predicted_delay_ms if msg_obs.weighted_predicted_delay_ms != math.inf else None
+                'online_predicted_delay_ms': msg_obs.online_predicted_delay_ms if msg_obs.online_predicted_delay_ms != math.inf else None,
+                'cluster_predicted_delay_ms': msg_obs.cluster_predicted_delay_ms if msg_obs.cluster_predicted_delay_ms != math.inf else None,
+                'weighted_predicted_delay_ms': msg_obs.weighted_predicted_delay_ms if msg_obs.weighted_predicted_delay_ms != math.inf else None
             }
             obs_dict.update(msg_obs.sender_node_state.get_as_sender_node_dict())
             obs_dict.update(msg_obs.receiver_node_state.get_as_receiver_node_dict())
@@ -858,4 +976,4 @@ class CocoonMetaModel:
         df = pd.DataFrame(observations_data)
         df.to_csv(self.output_file_name, index=False)
 
-        print(f"📊 Observations saved to CSV: {self.output_file_name}")
+        logger.info(f"Observations saved to CSV: {self.output_file_name}")

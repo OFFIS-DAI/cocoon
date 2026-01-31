@@ -11,7 +11,9 @@ from integration_environment.results_recorder import ResultsRecorder
 from integration_environment.roles import ConstantBitrateSenderRole, ReceiverRole, ResultsRecorderRole
 from integration_environment.scenario_configuration import ScenarioConfiguration, ModelType, \
     ScenarioDuration, NumDevices, TrafficConfig
-from tests.integration_tests.utils import setup_logging
+from tests.integration_tests.utils import (
+    setup_logging, INET_INSTALLATION_PATH, SIMU5G_INSTALLATION_PATH, OMNET_PROJECT_PATH
+)
 
 logger = setup_logging()
 
@@ -24,7 +26,7 @@ async def run_with_different_configs():
         scenario_configuration = ScenarioConfiguration(model_type=ModelType.detailed,
                                                        scenario_duration=ScenarioDuration.one_min,
                                                        traffic_configuration=TrafficConfig.cbr_broadcast_1_mpm,
-                                                       num_devices=NumDevices.two)
+                                                       num_devices=NumDevices.five)
         results_recorder = ResultsRecorder(scenario_configuration=scenario_configuration)
 
         clock = ExternalClock(start_time=0)
@@ -34,10 +36,10 @@ async def run_with_different_configs():
 
         communication_network_entity = DetailedModelScheduler(container_mapping={'node1': container1,
                                                                                  'node2': container2},
-                                                              inet_installation_path='/home/malin/cocoon_omnet_workspace/inet4.5/src',
-                                                              simu5G_installation_path='/home/malin/PycharmProjects/trace/Simu5G-1.2.2/src',
+                                                              inet_installation_path=INET_INSTALLATION_PATH,
+                                                              simu5G_installation_path=SIMU5G_INSTALLATION_PATH,
                                                               config_name=config,
-                                                              omnet_project_path='/home/malin/PycharmProjects/cocoon_DAI/cocoon_omnet_project/',
+                                                              omnet_project_path=OMNET_PROJECT_PATH,
                                                               scenario_duration_ms=60*1000 + 100)
 
         cbr_receiver_role = ReceiverRole()
