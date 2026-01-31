@@ -121,9 +121,10 @@ def boxplot_metrics_combined_seaborn(
         kind="box",
         col_wrap=4,
         sharey=False,
-        height=3.2,
-        aspect=0.9,
-        showfliers=True
+        height=3.5,
+        aspect=0.8,
+        showfliers=True,
+        palette='YlOrBr'
     )
 
     # Replace facet titles and y-labels with symbolic names
