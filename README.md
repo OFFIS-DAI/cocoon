@@ -181,10 +181,6 @@ The meta-model supports various configuration parameters:
 pytest tests/unit_tests/ -v
 ```
 
-## Contributing
-
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
 ## Citation
 
 If you use COCOON in your research, please cite:
@@ -210,4 +206,3 @@ This work was developed at [OFFIS - Institute for Information Technology](https:
 ## Contact
 
 - **Malin Radtke** - [malin.radtke@offis.de](mailto:malin.radtke@offis.de)
-- **OFFIS DAI** - [https://www.2112.1.2.3e/dai/](https://www.2112.1.2.3e/dai/)
