@@ -6,7 +6,6 @@ Key changes vs. the original script:
 - Uses transformations suited for skewed / bounded metrics (log, logit).
 - Separates substitution effects (ITT vs. PP) and reports substitution determinism.
 - Uses Type-II ANOVA (order-invariant) and reports partial eta^2 as effect size.
-- Applies Holm correction across hyper-parameters per metric.
 
 ADDON (Step 2):
 - Scenario-blocked paired model comparisons (best vs rest) per scenario group using sign-flip permutation tests.
