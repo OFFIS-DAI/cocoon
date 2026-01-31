@@ -109,7 +109,8 @@ def find_matching_detailed_simulations(config: ScenarioConfiguration, detailed_r
         model_type=ModelType.detailed,
         scenario_duration=config.scenario_duration,
         traffic_configuration=config.traffic_configuration,
-        network_type=config.network_type
+        network_type=config.network_type,
+        prediction_model_type=PredictionModelType.none
     )
     matching_results = []
     run = 0
@@ -536,7 +537,7 @@ def analyze_results(results_folder: str) -> List[EvaluationResult]:
             print(f"Error processing {base_scenario_id}: {e}")
             continue
 
-    if phase == 1:
+    if phase == 1 or phase == 3:
         # Calculate hyperparameter scores
         calculate_hyperparameter_scores(evaluation_results)
 
