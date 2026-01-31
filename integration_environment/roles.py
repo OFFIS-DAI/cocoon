@@ -1,3 +1,24 @@
+"""
+MANGO Agent Roles for Communication Simulation Scenarios.
+
+This module defines various agent roles used in communication simulation
+scenarios. These roles implement specific behaviors for generating,
+receiving, and recording network traffic patterns.
+
+Available Roles:
+    - ResultsRecorderRole: Records send/receive events for analysis
+    - ConstantBitrateSenderRole: Generates messages at fixed intervals
+    - ReceiverRole: Handles incoming message reception
+    - AggregatorAgentRole: Aggregates data with configurable time windows
+    - FlexAgentRole: Flexible power generation agents for DEER use case
+
+The roles follow the MANGO agent framework patterns and can be combined
+to create complex multi-agent simulation scenarios.
+
+Author: Malin Radtke (OFFIS)
+License: MIT
+"""
+
 import asyncio
 import logging
 import random

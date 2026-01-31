@@ -1,3 +1,20 @@
+"""
+Model Comparison and Evaluation Framework.
+
+This module provides functionality for running and comparing different
+communication model schedulers (Ideal, Channel, Static Graph, Detailed, Meta-Model).
+
+Environment Variables:
+    INET_INSTALLATION_PATH: Path to INET framework src directory
+    SIMU5G_INSTALLATION_PATH: Path to Simu5G src directory
+    OMNET_PROJECT_PATH: Path to the cocoon_omnet_project directory
+
+Example:
+    export INET_INSTALLATION_PATH=/path/to/inet4.5/src
+    export SIMU5G_INSTALLATION_PATH=/path/to/Simu5G/src
+    export OMNET_PROJECT_PATH=/path/to/cocoon_omnet_project
+"""
+
 import logging
 import os
 import random
@@ -33,6 +50,35 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+# OMNeT++ path configuration from environment variables
+# Set these environment variables or modify the defaults below for your system
+INET_INSTALLATION_PATH = os.environ.get(
+    'INET_INSTALLATION_PATH',
+    '/home/malin/cocoon_omnet_workspace/inet4.5/src'
+)
+SIMU5G_INSTALLATION_PATH = os.environ.get(
+    'SIMU5G_INSTALLATION_PATH',
+    '/home/malin/PycharmProjects/trace/Simu5G-1.2.2/src'
+)
+OMNET_PROJECT_PATH = os.environ.get(
+    'OMNET_PROJECT_PATH',
+    os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                 'cocoon_omnet_project')
+)
+
+
+def check_omnet_paths():
+    """Check if OMNeT++ paths are configured and raise error if not."""
+    if not INET_INSTALLATION_PATH:
+        raise EnvironmentError(
+            "INET_INSTALLATION_PATH environment variable is not set. "
+            "Please set it to your INET framework src directory path."
+        )
+    if not os.path.exists(INET_INSTALLATION_PATH):
+        raise EnvironmentError(
+            f"INET_INSTALLATION_PATH does not exist: {INET_INSTALLATION_PATH}"
+        )
 
 
 def get_training_df(scenario_configuration: ScenarioConfiguration):
@@ -392,16 +438,16 @@ def get_scheduler(scenario_configuration: ScenarioConfiguration,
         return DetailedModelScheduler(container_mapping=container_mapping,
                                       scenario_duration_ms=scenario_configuration.scenario_duration.value,
                                       config_name=scenario_configuration.omnet_config,
-                                      inet_installation_path='/home/malin/cocoon_omnet_workspace/inet4.5/src',
-                                      simu5G_installation_path='/home/malin/PycharmProjects/trace/Simu5G-1.2.2/src',
-                                      omnet_project_path='/home/malin/PycharmProjects/cocoon_DAI/cocoon_omnet_project/')
+                                      inet_installation_path=INET_INSTALLATION_PATH,
+                                      simu5G_installation_path=SIMU5G_INSTALLATION_PATH,
+                                      omnet_project_path=OMNET_PROJECT_PATH)
     elif scenario_configuration.model_type == ModelType.meta_model:
         return MetaModelScheduler(container_mapping=container_mapping,
                                   scenario_duration_ms=scenario_configuration.scenario_duration.value,
                                   config_name=scenario_configuration.omnet_config,
-                                  inet_installation_path='/home/malin/cocoon_omnet_workspace/inet4.5/src',
-                                  simu5G_installation_path='/home/malin/PycharmProjects/trace/Simu5G-1.2.2/src',
-                                  omnet_project_path='/home/malin/PycharmProjects/cocoon_DAI/cocoon_omnet_project/',
+                                  inet_installation_path=INET_INSTALLATION_PATH,
+                                  simu5G_installation_path=SIMU5G_INSTALLATION_PATH,
+                                  omnet_project_path=OMNET_PROJECT_PATH,
                                   training_df=get_training_df(scenario_configuration),
                                   in_training_mode=False,
                                   output_file_name=f'results/phase{phase}/cocoon_{scenario_configuration.scenario_id}.csv'
@@ -421,9 +467,9 @@ def get_scheduler(scenario_configuration: ScenarioConfiguration,
         return MetaModelScheduler(container_mapping=container_mapping,
                                   scenario_duration_ms=scenario_configuration.scenario_duration.value,
                                   config_name=scenario_configuration.omnet_config,
-                                  inet_installation_path='/home/malin/cocoon_omnet_workspace/inet4.5/src',
-                                  simu5G_installation_path='/home/malin/PycharmProjects/trace/Simu5G-1.2.2/src',
-                                  omnet_project_path='/home/malin/PycharmProjects/cocoon_DAI/cocoon_omnet_project/',
+                                  inet_installation_path=INET_INSTALLATION_PATH,
+                                  simu5G_installation_path=SIMU5G_INSTALLATION_PATH,
+                                  omnet_project_path=OMNET_PROJECT_PATH,
                                   in_training_mode=True,
                                   output_file_name=f'cocoon_training_data/{scenario_configuration.scenario_id}.csv'
                                   )

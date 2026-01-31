@@ -1,3 +1,46 @@
+"""
+COCOON Meta-Model for Communication Simulation Approximation.
+
+This module implements the COCOON (Coupled Communication simulation with an
+Online trained meta-model) approach for approximating detailed communication
+simulations in Cyber-Physical Energy Systems (CPES).
+
+The meta-model follows a four-phase methodology inspired by butterfly metamorphosis:
+
+1. **EGG Phase**: Pre-training using hierarchical clustering and decision tree/random
+   forest regressors on historical communication data.
+
+2. **LARVA Phase**: Runtime message assignment to the closest historical cluster
+   using centroid-based distance calculation.
+
+3. **PUPA Phase**: Online training of an additional regressor that combines with
+   cluster predictions using exponential weighted moving average (EWMA).
+
+4. **BUTTERFLY Phase**: Automatic substitution of the detailed simulation when
+   prediction accuracy meets the configured threshold.
+
+Example:
+    >>> from cocoon_meta_model import CocoonMetaModel
+    >>> import pandas as pd
+    >>>
+    >>> # Initialize meta-model
+    >>> model = CocoonMetaModel(
+    ...     output_file_name='results.csv',
+    ...     mode=CocoonMetaModel.Mode.PRODUCTION,
+    ...     cluster_distance_threshold=5.0
+    ... )
+    >>>
+    >>> # Pre-train with historical data (EGG phase)
+    >>> training_data = pd.read_csv('training_data.csv')
+    >>> model.execute_egg_phase(training_data)
+    >>>
+    >>> # Process messages during simulation
+    >>> await model.process_observations()
+
+Author: Malin Radtke (OFFIS)
+License: MIT
+"""
+
 import copy
 import logging
 import math
@@ -236,7 +279,7 @@ class CocoonNetworkGraph:
         """Mark a message as received using only msg_id and current time."""
         # Find the message in global tracking
         if msg_id not in self.all_messages_by_id:
-            print(f"Warning: Message {msg_id} not found in global tracking")
+            logger.warning(f"Message {msg_id} not found in global tracking")
             return False
 
         message = self.all_messages_by_id[msg_id]
@@ -277,12 +320,28 @@ class CocoonNetworkGraph:
 
 class CocoonMetaModel:
     """
-    Meta-model called cocoon which is supposed to approximate the detailed simulation.
+    COCOON Meta-Model for approximating detailed communication simulations.
+
+    This class implements the four-phase COCOON methodology (EGG, LARVA, PUPA,
+    BUTTERFLY) to progressively learn and predict message delays in communication
+    networks, eventually substituting the detailed simulation entirely.
+
+    The meta-model maintains an internal graph representation of the network,
+    tracking message flows and network state to make accurate delay predictions.
+
+    Attributes:
+        network_graph: Internal graph representation of network nodes and messages.
+        training_df: DataFrame containing pre-training data from EGG phase.
+        model_for_cluster_id: Dictionary mapping cluster IDs to trained regressors.
+        online_model: Online-trained regressor updated during PUPA phase.
+        message_observations: Dictionary tracking all processed message observations.
+        substitution_threshold_reached: Boolean indicating if BUTTERFLY phase is active.
     """
 
     class Mode(Enum):
-        TRAINING = 0
-        PRODUCTION = 1
+        """Operating mode for the meta-model."""
+        TRAINING = 0    # Collect training data without predictions
+        PRODUCTION = 1  # Active prediction and potential substitution
 
     def __init__(self, output_file_name: str, mode: Mode = Mode.TRAINING,
                  cluster_distance_threshold: float = 5,
@@ -293,7 +352,24 @@ class CocoonMetaModel:
                  substitution_enabled: bool = True,
                  use_random_forest: bool = False):
         """
-        Initialize cocoon model.
+        Initialize the COCOON meta-model.
+
+        Args:
+            output_file_name: Path for saving observation results to CSV.
+            mode: Operating mode (TRAINING or PRODUCTION).
+            cluster_distance_threshold: Distance threshold for hierarchical clustering
+                in the EGG phase. Lower values create more clusters.
+            i_pupa: Batch size for PUPA phase - number of messages between
+                online model retraining.
+            alpha: Smoothing parameter for EWMA error calculation (0 < alpha <= 1).
+                Higher values give more weight to recent errors.
+            butterfly_threshold_value: Confidence threshold (0-1) for triggering
+                simulation substitution in BUTTERFLY phase.
+            substitution_priority: Factor to prioritize in substitution decision.
+                Options: 'none', 'error_trend', 'error_level', 'cluster_distance',
+                'topology_stability'.
+            substitution_enabled: If False, never substitute even if threshold reached.
+            use_random_forest: Use Random Forest instead of Decision Tree regressors.
         """
 
         """
@@ -383,7 +459,7 @@ class CocoonMetaModel:
         feature_vars = reduced_df[self.object_variables].var()
         non_constant_features = feature_vars[feature_vars > 0].index.tolist()
 
-        print(f"Removing constant features: {set(self.object_variables) - set(non_constant_features)}")
+        logger.info(f"Removing constant features: {set(self.object_variables) - set(non_constant_features)}")
 
         # calculate pairwise distances with squared Euclidean distance metric
         dis_matrix = pdist(reduced_df[non_constant_features], metric='seuclidean')
@@ -700,7 +776,7 @@ class CocoonMetaModel:
         self.substitution_threshold_reached = combined_score >= self.butterfly_threshold_value
 
         if self.substitution_threshold_reached and not self.substitution_info.occurred:
-            print('--------------SUBSTITUTION--------------')
+            logger.info('SUBSTITUTION THRESHOLD REACHED - Meta-model taking over')
             self.substitution_info = SubstitutionInfo(
                 occurred=True,
                 message_index=self.message_index,
@@ -900,4 +976,4 @@ class CocoonMetaModel:
         df = pd.DataFrame(observations_data)
         df.to_csv(self.output_file_name, index=False)
 
-        print(f"📊 Observations saved to CSV: {self.output_file_name}")
+        logger.info(f"Observations saved to CSV: {self.output_file_name}")

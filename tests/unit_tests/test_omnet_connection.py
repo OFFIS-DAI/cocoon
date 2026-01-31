@@ -1,3 +1,13 @@
+"""
+Unit tests for OMNeT++ connection handling.
+
+These tests require OMNeT++ and INET to be installed and configured.
+Set the following environment variables:
+    INET_INSTALLATION_PATH: Path to INET framework src directory
+    OMNET_PROJECT_PATH: Path to the cocoon_omnet_project directory
+"""
+
+import os
 import time
 import unittest
 import logging
@@ -7,15 +17,30 @@ from integration_environment.network_models.detailed_network_model import OmnetC
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
+# Path configuration from environment variables
+INET_INSTALLATION_PATH = os.environ.get(
+    'INET_INSTALLATION_PATH',
+    '/home/malin/cocoon_omnet_workspace/inet4.5/src'
+)
+OMNET_PROJECT_PATH = os.environ.get(
+    'OMNET_PROJECT_PATH',
+    os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                 'cocoon_omnet_project')
+)
 
+# Skip tests if OMNeT++ paths don't exist
+SKIP_OMNET_TESTS = not os.path.exists(INET_INSTALLATION_PATH)
+
+
+@unittest.skipIf(SKIP_OMNET_TESTS, "OMNeT++ not configured - set INET_INSTALLATION_PATH environment variable")
 class TestOmnetSocketConnection(unittest.TestCase):
     """Test the OMNeT++ socket connection"""
 
     def test_message_dispatch(self):
         # Create a connection
-        connection = OmnetConnection(inet_installation_path='/home/malin/cocoon_omnet_workspace/inet4.5/src',
+        connection = OmnetConnection(inet_installation_path=INET_INSTALLATION_PATH,
                                      config_name='General',
-                                     omnet_project_path='/home/malin/PycharmProjects/cocoon_DAI/cocoon_omnet_project/')
+                                     omnet_project_path=OMNET_PROJECT_PATH)
         # Start OMNeT++ and connect socket
         connection.initialize()
 
@@ -51,9 +76,9 @@ class TestOmnetSocketConnection(unittest.TestCase):
         """Test that OMNeT++ respects max advance limits"""
         # Create a connection
         connection = OmnetConnection(
-            inet_installation_path='/home/malin/cocoon_omnet_workspace/inet4.5/src',
+            inet_installation_path=INET_INSTALLATION_PATH,
             config_name='General',
-            omnet_project_path='/home/malin/PycharmProjects/cocoon_DAI/cocoon_omnet_project/'
+            omnet_project_path=OMNET_PROJECT_PATH
         )
 
         try:

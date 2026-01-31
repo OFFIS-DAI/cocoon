@@ -1,8 +1,41 @@
+"""
+Test Utilities for COCOON Integration Tests.
+
+This module provides common utilities for integration tests including
+logging setup, path configuration, and visualization helpers.
+
+Environment Variables (required for OMNeT++ integration tests):
+    INET_INSTALLATION_PATH: Path to INET framework src directory
+    SIMU5G_INSTALLATION_PATH: Path to Simu5G src directory
+    OMNET_PROJECT_PATH: Path to the cocoon_omnet_project directory
+"""
+
 import logging
 import os
 
 import networkx as nx
 from matplotlib import pyplot as plt
+
+# OMNeT++ path configuration from environment variables
+# Modify the defaults below for your system
+INET_INSTALLATION_PATH = os.environ.get(
+    'INET_INSTALLATION_PATH',
+    '/home/malin/cocoon_omnet_workspace/inet4.5/src'
+)
+SIMU5G_INSTALLATION_PATH = os.environ.get(
+    'SIMU5G_INSTALLATION_PATH',
+    '/home/malin/PycharmProjects/trace/Simu5G-1.2.2/src'
+)
+OMNET_PROJECT_PATH = os.environ.get(
+    'OMNET_PROJECT_PATH',
+    os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                 'cocoon_omnet_project')
+)
+
+
+def omnet_configured() -> bool:
+    """Check if OMNeT++ paths are configured and exist."""
+    return os.path.exists(INET_INSTALLATION_PATH)
 
 
 def initialize_results_dir():

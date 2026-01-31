@@ -1,3 +1,27 @@
+"""
+Detailed Network Model with OMNeT++ Integration.
+
+This module provides the interface between the Python-based MANGO agent
+simulation and the OMNeT++ network simulator. It enables detailed communication
+simulation by:
+
+1. Starting and managing the OMNeT++ simulation process
+2. Establishing TCP socket communication with the custom MangoScheduler
+3. Sending message dispatch requests to OMNeT++
+4. Receiving message delivery notifications from OMNeT++
+5. Synchronizing simulation time between Python and OMNeT++
+
+The communication protocol uses length-prefixed JSON messages over TCP.
+
+Classes:
+    MessageProtocol: Handles low-level message framing over TCP.
+    OmnetConnection: Manages the OMNeT++ process and socket connection.
+    DetailedNetworkModel: High-level interface for message simulation.
+
+Author: Malin Radtke (OFFIS)
+License: MIT
+"""
+
 import asyncio
 import json
 import math
@@ -10,7 +34,7 @@ import queue
 import logging
 import os
 import subprocess
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict
 
 from mango.container.external_coupling import ExternalAgentMessage
 
@@ -139,7 +163,7 @@ class OmnetConnection:
     def build_omnet_project(self):
         """Build the OMNeT++ project from the root directory"""
         try:
-            print("Building OMNeT++ project...")
+            logger.info("Building OMNeT++ project...")
 
             # Now run the normal build
             build_command = "make MODE=release all"
@@ -152,15 +176,15 @@ class OmnetConnection:
                 stderr=subprocess.PIPE
             )
 
-            print("OMNeT++ project built successfully")
+            logger.info("OMNeT++ project built successfully")
             return True
         except subprocess.CalledProcessError as e:
-            print(f"Error building OMNeT++ project: {e}")
-            print(f"Build stdout: {e.stdout.decode('utf-8')}")
-            print(f"Build stderr: {e.stderr.decode('utf-8')}")
+            logger.error(f"Error building OMNeT++ project: {e}")
+            logger.error(f"Build stdout: {e.stdout.decode('utf-8')}")
+            logger.error(f"Build stderr: {e.stderr.decode('utf-8')}")
             raise Exception(f"Failed to build OMNeT++ project: {e}")
         except Exception as e:
-            print(f"Unexpected error during build: {e}")
+            logger.error(f"Unexpected error during build: {e}")
             raise
 
     def start_omnet_simulation(self):
@@ -182,8 +206,8 @@ class OmnetConnection:
         try:
             omnet_ini_path = self.omnet_project_path
 
-            print(f"Starting OMNeT++ simulation with command: {command}")
-            print(f"Working directory: {omnet_ini_path}")
+            logger.info(f"Starting OMNeT++ simulation with command: {command}")
+            logger.info(f"Working directory: {omnet_ini_path}")
 
             omnet_process = subprocess.Popen(command,
                                              preexec_fn=os.setsid,
@@ -197,10 +221,10 @@ class OmnetConnection:
                 stdout, stderr = omnet_process.communicate()
                 error_msg = (f"OMNeT++ process failed to start.\nStdout: {stdout.decode('utf-8') if stdout else None}"
                              f"\nStderr: {stderr.decode('utf-8') if stderr else None}")
-                print(error_msg)
+                logger.error(error_msg)
                 raise Exception(error_msg)
 
-            print(f"OMNeT++ simulation started with PID: {omnet_process.pid}")
+            logger.info(f"OMNeT++ simulation started with PID: {omnet_process.pid}")
 
             # Give the simulator time to initialize and start listening for connections
             time.sleep(5)
@@ -208,7 +232,7 @@ class OmnetConnection:
             return omnet_process
 
         except Exception as e:
-            print(f"Error starting OMNeT++ simulation: {e}")
+            logger.error(f"Error starting OMNeT++ simulation: {e}")
             raise
 
     def connect_socket(self) -> bool:
@@ -450,12 +474,13 @@ class OmnetConnection:
 
                 # Wait for process to terminate
                 self.omnet_process.wait(timeout=5)
-            except:
+            except (ProcessLookupError, OSError) as e:
                 # If it doesn't terminate, try SIGKILL
+                logger.debug(f"SIGTERM failed, trying SIGKILL: {e}")
                 try:
                     os.killpg(os.getpgid(self.omnet_process.pid), subprocess.signal.SIGKILL)
-                except:
-                    pass
+                except (ProcessLookupError, OSError):
+                    pass  # Process already terminated
 
             self.running = False
             self.omnet_process = None
@@ -568,7 +593,6 @@ class DetailedNetworkModel:
                 elif msg_type == 'RECEIVED':
                     # This would be the actual received message from OMNeT++
                     # Parse the delivered message data
-                    import json
                     data = json.loads(payload)
 
                     delivery_time = data.get('time_received', 0) / 1000  # Convert to seconds
@@ -798,7 +822,6 @@ class DetailedNetworkModel:
             elif msg_type == 'RECEIVED':
                 # This would be the actual received message from OMNeT++
                 # Parse the delivered message data
-                import json
                 data = json.loads(payload)
 
                 delivery_time = data.get('time_received', 0) / 1000  # Convert to seconds

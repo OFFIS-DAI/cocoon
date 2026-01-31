@@ -1,3 +1,25 @@
+"""
+Communication Model Schedulers for Multi-Agent Simulations.
+
+This module provides various scheduler implementations for managing message
+dispatch in multi-agent simulations with different communication modeling
+approaches. Each scheduler handles time advancement, message routing, and
+synchronization between agent containers.
+
+Available Schedulers:
+    - IdealCommunicationScheduler: Zero-delay message delivery (baseline)
+    - ChannelModelScheduler: Uses ChannelNetworkModel for delay calculations
+    - StaticDelayGraphModelScheduler: Uses StaticGraphModel for fixed delays
+    - DetailedModelScheduler: Integrates with OMNeT++ for detailed simulation
+    - MetaModelScheduler: Extends DetailedModelScheduler with COCOON meta-model
+
+The schedulers work with the MANGO agent framework's ExternalSchedulingContainer
+to provide synchronized discrete-event simulation.
+
+Author: Malin Radtke (OFFIS)
+License: MIT
+"""
+
 import asyncio
 import logging
 import math

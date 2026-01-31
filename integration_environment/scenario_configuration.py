@@ -173,12 +173,22 @@ class ScenarioConfiguration:
 
     @property
     def scenario_id(self):
-        """Create a scenario ID that includes all configuration parameters."""
-        return (f"{self.model_type.name}-{self.num_devices.name}-{self.payload_size.name}-{self.scenario_duration.name}"
-                f"-{self.traffic_configuration.name}-{self.network_type.name}-{self.cluster_distance_threshold.name}-"
-                f"{self.substitution.name}-{self.amount_of_scenarios_in_training_data.name}-{self.test_train_split.name}-"
-                f"{self.i_pupa.name}-{self.learning_rate_weighting.name}-{self.butterfly_threshold_value.name}"
-                f"-{self.substitution_priority.name}-{self.prediction_model_type.name}-{self.run}")
+        """Create a scenario ID that includes all configuration parameters.
+
+        For backwards compatibility with existing training data files,
+        prediction_model_type is only included if it's not 'none'.
+        """
+        base_id = (f"{self.model_type.name}-{self.num_devices.name}-{self.payload_size.name}-{self.scenario_duration.name}"
+                   f"-{self.traffic_configuration.name}-{self.network_type.name}-{self.cluster_distance_threshold.name}-"
+                   f"{self.substitution.name}-{self.amount_of_scenarios_in_training_data.name}-{self.test_train_split.name}-"
+                   f"{self.i_pupa.name}-{self.learning_rate_weighting.name}-{self.butterfly_threshold_value.name}"
+                   f"-{self.substitution_priority.name}")
+
+        # Only include prediction_model_type if it's not 'none' (for backwards compatibility)
+        if self.prediction_model_type != PredictionModelType.none:
+            return f"{base_id}-{self.prediction_model_type.name}-{self.run}"
+        else:
+            return f"{base_id}-{self.run}"
 
     @property
     def omnet_config(self):

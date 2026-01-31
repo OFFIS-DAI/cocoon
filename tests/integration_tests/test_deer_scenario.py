@@ -17,7 +17,9 @@ from integration_environment.roles import ConstantBitrateSenderRole, ReceiverRol
     AggregatorAgentRole, FlexAgentRole
 from integration_environment.scenario_configuration import ScenarioConfiguration, PayloadSizeConfig, ModelType, \
     ScenarioDuration, TrafficConfig, NumDevices, NetworkModelType
-from tests.integration_tests.utils import setup_logging
+from tests.integration_tests.utils import (
+    setup_logging, INET_INSTALLATION_PATH, SIMU5G_INSTALLATION_PATH, OMNET_PROJECT_PATH
+)
 
 logger = setup_logging()
 
@@ -76,10 +78,10 @@ async def test_run_deer_scenario_with_detailed_model():
     aggregator_role.flex_agent_addresses = agent_addresses
 
     communication_network_entity = DetailedModelScheduler(container_mapping=container_mapping,
-                                                          inet_installation_path='/home/malin/cocoon_omnet_workspace/inet4.5/src',
+                                                          inet_installation_path=INET_INSTALLATION_PATH,
                                                           config_name=scenario_configuration.network_type.value,
-                                                          simu5G_installation_path='/home/malin/PycharmProjects/trace/Simu5G-1.2.2/src',
-                                                          omnet_project_path='/home/malin/PycharmProjects/cocoon_DAI/cocoon_omnet_project/',
+                                                          simu5G_installation_path=SIMU5G_INSTALLATION_PATH,
+                                                          omnet_project_path=OMNET_PROJECT_PATH,
                                                           scenario_duration_ms=scenario_configuration.scenario_duration.value)
 
     async with activate([c for c in container_mapping.values()]) as _:
