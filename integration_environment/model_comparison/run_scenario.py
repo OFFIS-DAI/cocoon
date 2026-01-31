@@ -22,12 +22,13 @@ if __name__ == "__main__":
 
     config = ScenarioConfiguration(payload_size=PayloadSizeConfig.medium,
                                    num_devices=NumDevices.five,
-                                   model_type=ModelType.detailed,
-                                   scenario_duration=ScenarioDuration.one_min,
-                                   traffic_configuration=TrafficConfig.central_dsb_5mpm_30s_75,
-                                   network_type=NetworkModelType.simbench_5g,
+                                   model_type=ModelType.meta_model,
+                                   scenario_duration=ScenarioDuration.five_min,
+                                   traffic_configuration=TrafficConfig.poisson_broadcast_1_mpm_1,
+                                   network_type=NetworkModelType.evaluation_ethernet,
                                    # specific for meta-model
-                                   test_train_split=TestTrainSplit.parametrization_split,
+                                   test_train_split=TestTrainSplit.none,
+                                   amount_of_scenarios_in_training_data=AmountOfScenariosTrainingData.all,
                                    i_pupa=BatchSizeIPupa.hundred_fifty,
                                    cluster_distance_threshold=ClusterDistanceThreshold.three,
                                    learning_rate_weighting=LearningRateWeighting.small,
