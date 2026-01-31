@@ -159,7 +159,7 @@ def main():
 
     # merge for error plots
     long_df = long_df.merge(cfg_df, on="scenario", how="left")
-
+    long_df = long_df[long_df['split'] == 'parametrization_split']
     # lineplots for different categories of hyper params
     cat_cols = ["cluster_dist", "ipupa", "lr_weight", "amount of training data", "split"]
 

@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 # --- Styling: seaborn + serif font ---
 sns.set_theme(style="white", font="serif", palette='Set2')
 
-# --- Parameters (from your example) ---
-t_quant = 1.96
+# --- Parameters ---
+t_quant = 2.015
 sigma_real_ms = 25.0
 sigma_cocoon_ms = 25.0
 t_det_s = 120.0
@@ -37,6 +37,7 @@ T_critical = (
     / eps_cocoon_ms
 ) ** 2
 
+print('T critical = ', T_critical)
 # --- Plot: runs (left axis) + achievable error (right axis) ---
 fig, ax_runs = plt.subplots(figsize=(7.6, 4.4))
 

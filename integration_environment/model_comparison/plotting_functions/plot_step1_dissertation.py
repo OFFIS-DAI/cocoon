@@ -235,6 +235,18 @@ def summarize_step1(file_path: str) -> None:
                     cbar_kws={"label": cbar_label},
                     ax=ax
                 )
+                from matplotlib.patches import Rectangle
+
+                def highlight_rows(ax, row_indices, n_cols, color="tab:red", lw=2):
+                    for r in row_indices:
+                        ax.add_patch(
+                            Rectangle((0, r), n_cols, 1,
+                                      fill=False, edgecolor=color, linewidth=lw)
+                        )
+
+                rows_to_box = [1, 4, 7, 10, 14]  # indices in abs_table / abs_table_std order
+                highlight_rows(ax, rows_to_box, data.shape[1])
+
                 ax.set_xticklabels(col_labels, rotation=0)
                 ax.set_yticklabels(row_labels, rotation=0)
 
@@ -258,7 +270,7 @@ def summarize_step1(file_path: str) -> None:
                 abs_table_std,
                 cbar_label="(inverted) z-score",
                 fname="step1_hyperparam_metric_std_values.pdf",
-                vmin=-2.5, vmax=2.5, center=0, cmap="BuGn"
+                vmin=-2.5, vmax=2.5, center=0, cmap="GnBu"
             )
         else:
             print("Absolute/standardized heatmaps: no recognized hyper-parameter columns found.")

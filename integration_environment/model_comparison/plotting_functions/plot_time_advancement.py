@@ -49,8 +49,8 @@ def plot_comparison(csv1, csv2, label1="Run 1", label2="Run 2", save_path=None):
     colors = [sns.color_palette("crest", as_cmap=True)(0.1),
               sns.color_palette("crest", as_cmap=True)(0.9)]
 
-    sns.set(style="whitegrid", font_scale=1.2)
-    plt.figure(figsize=(7, 6))
+    sns.set(style="whitegrid", font_scale=1.2, font="serif")
+    plt.figure(figsize=(7, 4))
     sns.lineplot(
         data=df,
         x="Real Time (seconds)",
@@ -59,6 +59,19 @@ def plot_comparison(csv1, csv2, label1="Run 1", label2="Run 2", save_path=None):
         marker="o",
         palette=colors
     )
+    plt.annotate(
+        "Substitution",
+        xy=(8, 8),
+        xytext=(10, 3),
+        arrowprops=dict(
+            arrowstyle="->",
+            linewidth=2.5,
+            color="black",
+            shrinkA=0,
+            shrinkB=0
+        ),
+    )
+
     plt.tight_layout()
 
     if save_path:
@@ -69,8 +82,8 @@ def plot_comparison(csv1, csv2, label1="Run 1", label2="Run 2", save_path=None):
 
 if __name__ == "__main__":
 
-    csv1 = 'results/phase1_vm_06_09/time_advancement_detailed-five-medium-one_min-cbr_broadcast_1_mps-simbench_5g-none-none-none-none-none-none-1.csv'
-    csv2 = 'results/phase1_vm_06_09/time_advancement_meta_model-five-medium-one_min-cbr_broadcast_1_mps-simbench_5g-three-scale_split-hundred-center-center-none-0.csv'
+    csv1 = '../results/phase1/time_advancement_meta_model-five-medium-one_min-cbr_broadcast_1_mps-evaluation_5g-five-enabled-all-technology_split-fifty-large-small-error_level-0.csv'
+    csv2 = '../results/phase1/time_advancement_detailed-five-medium-one_min-cbr_broadcast_1_mps-evaluation_5g-none-disabled-all-none-none-none-none-none-0.csv'
 
     plot_comparison(csv1, csv2, 'Detailed Model', 'Meta-Model',
-                    'analysis_results/plots_phase1/time_advancement.png')
+                    '../analysis_results/plots_phase1/time_advancement.pdf')

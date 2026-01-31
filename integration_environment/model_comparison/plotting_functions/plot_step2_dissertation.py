@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from typing import Dict, List, Tuple
+import os
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -307,6 +308,12 @@ def plot_accuracy_by_network_model(
             ax.set_ylabel(METRIC_LABELS.get(metric, metric))
             ax.set_xlabel("")
             ax.tick_params(axis="x", rotation=60)
+            if 'nrmse' in metric:
+                ax.set_ylim([0, 1])
+            if 'sigma' in metric:
+                ax.set_ylim([0, 1])
+            if 'wasserstein' in metric:
+                ax.set_ylim([0, 40])
 
     g_net.set_titles(col_template="{col_name}", row_template="")
 
@@ -779,7 +786,7 @@ def plot_num_devices_influence(
                 ax.set_title("Static Graph Model")
             if n_r == 0:
                 # NRMSE
-                ax.set_ylim([0, 2])
+                ax.set_ylim([0, 1])
             if n_r == 1:
                 # C sigma
                 ax.set_ylim([0, 1])
